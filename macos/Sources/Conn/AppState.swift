@@ -2,6 +2,7 @@ import SwiftUI
 
 struct Chip: Identifiable, Equatable {
     let id: String
+    let name: String
     let preview: String
     let status: String
 
@@ -52,6 +53,7 @@ final class AppState: ObservableObject {
             if let ledger = msg["ledger"] as? [[String: Any]] {
                 chips = ledger.map {
                     Chip(id: $0["call_id"] as? String ?? "",
+                         name: $0["name"] as? String ?? "",
                          preview: $0["preview"] as? String ?? "",
                          status: $0["status"] as? String ?? "")
                 }

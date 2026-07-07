@@ -76,6 +76,39 @@ class TestGateDecisions:
         assert call.gate is Gate.BLOCKED
 
 
+class TestPreviewBudget:
+    """Chip previews fit the island whole: bounded lambdas at the source, a
+    hard clamp in the harness as the safety net, never a mid-word cut."""
+
+    def test_clipboard_preview_is_fixed_copy(self, harness):
+        call = gate(harness, "clipboard_set", {"text": "x" * 500})
+        assert call.preview == "Copy to clipboard"
+
+    def test_long_query_clamps_at_a_word_boundary(self, harness):
+        from conn.tools.harness import PREVIEW_BUDGET
+
+        query = "transformer paper attention notes " * 20
+        call = gate(harness, "browser_search", {"query": query})
+        full = f"Search the web: {query}".strip()
+        assert len(call.preview) <= PREVIEW_BUDGET
+        assert call.preview.endswith("…")
+        stem = call.preview[:-1]
+        assert full.startswith(stem)
+        assert full[len(stem)] == " ", "clamp cut mid-word"
+
+    def test_unbroken_token_still_bounded(self):
+        from conn.tools.harness import PREVIEW_BUDGET, clamp_preview
+
+        clamped = clamp_preview("x" * 500)
+        assert len(clamped) <= PREVIEW_BUDGET
+        assert clamped.endswith("…")
+
+    def test_within_budget_passes_through(self):
+        from conn.tools.harness import clamp_preview
+
+        assert clamp_preview("Open app: Obsidian") == "Open app: Obsidian"
+
+
 class TestOverrides:
     def test_config_can_escalate_to_confirm(self, harness, cfg):
         cfg.risk_overrides["clipboard_set"] = "confirm"

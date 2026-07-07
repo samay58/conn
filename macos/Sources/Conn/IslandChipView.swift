@@ -26,7 +26,9 @@ struct IslandChipView: View {
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(DesignTokens.islandText)
                 .lineLimit(1)
-                .truncationMode(.middle)
+                // The daemon budgets previews to fit whole; if this ever
+                // fires it clips the end, never mid-word in the middle.
+                .truncationMode(.tail)
             Spacer(minLength: 12)
             HStack(spacing: 12) {
                 denyButton

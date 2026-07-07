@@ -135,7 +135,7 @@ def build_registry() -> dict[str, ToolSpec]:
             description="Copy text to the clipboard.",
             parameters=_obj({"text": {"type": "string"}}, ["text"]),
             risk=RiskLevel.ACT_LOW,
-            preview=lambda a: f"Copy {len(str(a.get('text', '')))} characters to clipboard",
+            preview=lambda a: "Copy to clipboard",
             executor=mac.clipboard_set,
             good_examples=('{"name": "clipboard_set", "arguments": {"text": "qmd search ..."}}',),
         ),
@@ -180,7 +180,7 @@ def build_registry() -> dict[str, ToolSpec]:
                 ["snapshot_id", "ref", "text"],
             ),
             risk=RiskLevel.ACT_CONFIRM,
-            preview=lambda a: f"Type {len(str(a.get('text', '')))} characters",
+            preview=lambda a: "Type text",
             executor=type_text,
         ),
         ToolSpec(

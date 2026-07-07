@@ -17,6 +17,23 @@ from .base import ExecutionContext, ToolError
 from .registry import ToolSpec
 from .risk import gate_for
 
+PREVIEW_BUDGET = 32
+
+
+def clamp_preview(text: str, budget: int = PREVIEW_BUDGET) -> str:
+    """Chip previews are composed to fit the island; this is the safety net.
+    Over-budget text truncates at a word boundary with a trailing ellipsis,
+    never mid-word (a single unbroken token longer than the budget has no
+    boundary and cuts hard, the only option left)."""
+    text = text.strip()
+    if len(text) <= budget:
+        return text
+    head = text[: budget - 1]
+    if " " in head:
+        head = head.rsplit(" ", 1)[0].rstrip()
+    return head + "…"
+
+
 _TYPE_MAP = {
     "string": str,
     "integer": int,
@@ -59,10 +76,10 @@ class ToolHarness:
 
     def _safe_preview(self, spec: ToolSpec, args: dict) -> str:
         try:
-            return spec.preview(args)
+            return clamp_preview(spec.preview(args))
         except Exception:
             try:
-                return spec.preview({})
+                return clamp_preview(spec.preview({}))
             except Exception:
                 return f"Use tool: {spec.name}"
 
@@ -112,7 +129,10 @@ class ToolHarness:
             elif reason == str(e) and type(e).__name__ not in {"StaleRef", "ToolError"} and ":" not in reason:
                 reason = f"gating_failed: {type(e).__name__}: {reason}"
             preview_override = None
-        return ToolCall(call_id=call_id, name=name, arguments=args, gate=gate, preview=preview_override or self._safe_preview(spec, args), block_reason=reason)
+        # The clamp covers both preview sources: the registry lambdas and the
+        # grounded-resolution overrides from risk.py, whose element titles are
+        # unbounded.
+        return ToolCall(call_id=call_id, name=name, arguments=args, gate=gate, preview=clamp_preview(preview_override or self._safe_preview(spec, args)), block_reason=reason)
 
     def block_reason(self, call: ToolCall) -> str:
         return call.block_reason or "blocked_by_policy"

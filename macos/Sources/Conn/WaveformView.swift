@@ -30,7 +30,8 @@ struct IslandWaveform: View {
         switch phase {
         case "listening": return DesignTokens.islandAccent
         case "speaking": return DesignTokens.islandText
-        case "failed", "budget_hold": return DesignTokens.islandRed
+        case "failed": return DesignTokens.islandRed
+        case "budget_hold": return DesignTokens.islandGold
         case "awaiting_approval": return DesignTokens.islandAmber.opacity(0.5)
         case "done": return DesignTokens.islandGreen
         default: return DesignTokens.islandTextSecondary

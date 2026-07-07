@@ -17,6 +17,8 @@ enum DesignTokens {
     static let belaySnapDuration = 0.12
     static let contentStaggerDelay = 0.08
     static let toastDuration = 3.0
+    static let thinkingEllipsisPeriod = 1.2
+    static let thinkingDotOpacityFloor = 0.25
     // personality
     static let aliveness = 1.0
     static let breathAmplitude = 0.015
@@ -49,10 +51,15 @@ enum DesignTokens {
     static let islandBg = Color.black
     static let islandText = Color.white.opacity(0.92)
     static let islandTextSecondary = Color.white.opacity(0.58)
-    static let islandAccent = Color(red: 0.48, green: 0.65, blue: 0.88)
+    // lilac #C3B1E1: the signature color (listening waveform and ring, the
+    // thinking word). Clears 4.5:1 on black by a wide margin (about 10.7:1).
+    static let islandAccent = Color(red: 0.765, green: 0.694, blue: 0.882)
     static let islandAmber = Color(red: 0.91, green: 0.63, blue: 0.24)
     static let islandGreen = Color(red: 0.30, green: 0.76, blue: 0.54)
     static let islandRed = Color(red: 0.88, green: 0.32, blue: 0.32)
+    // gold #E0C060: budget hold only. Money and caution without failure;
+    // lighter and yellower than the amber approval dot. About 11.9:1 on black.
+    static let islandGold = Color(red: 0.878, green: 0.753, blue: 0.376)
     // frozen panel surface (non-notch fallback; values preserved verbatim
     // from the panel era when WaveformView rejoined the guard at I7)
     static let panelBarSpring = Spring(response: 0.15, dampingRatio: 0.75)
@@ -64,4 +71,10 @@ enum DesignTokens {
     static let chipRowHeight: CGFloat = 40
     static let chipButtonMinHeight: CGFloat = 24
     static let chipButtonCornerRadius: CGFloat = 6
+    static let toolChipHeight: CGFloat = 20
+    static let toolChipPaddingH: CGFloat = 8
+    static let toolChipBgOpacity = 0.10
+    // Just under half the button height: at exactly height/2 (a true capsule)
+    // the stroke path renders seam ticks at the ends; 10pt reads identically.
+    static let overrideCornerRadius: CGFloat = 10
 }

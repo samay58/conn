@@ -43,7 +43,7 @@ States, one continuous shape throughout:
 | Idle | Nothing. Zero windows on screen. | Screenshot of idle desktop shows no Conn window; `CGWindowListCopyWindowInfo` shows no Conn island window |
 | Summoned (listening, thinking, acting, speaking) | Notch rect grown 58pt wider each side (`islandGrowWidth`) with a 60pt content lane below the notch (`islandContentHeight`). Top edge flush to the screen edge and top corners square so it continues the notch hardware; bottom corners continuous 13pt (`islandCornerRadius`). All readable content lives in the lane below the notch and never draws into the notch depth. | `Conn --preview` state renders; hand test against real notch; live screenshot shows no clip |
 | Chip open (awaiting approval) | Summoned shape plus a chip row extending 40pt below (`chipRowHeight`), same silhouette, no separate card | Preview render; chip is inside the island outline, screenshot-checkable |
-| Budget hold / failed | Summoned shape, no growth, red-family treatment (palette below) with the override affordance on budget hold | Preview render |
+| Budget hold / failed | Summoned shape, no growth; gold treatment with the override button on budget hold, red on failed (palette below) | Preview render |
 
 The island is an `NSPanel` with `styleMask [.borderless, .nonactivatingPanel]`, level above the menu bar, exactly like the shipped panel. Acceptance: a unit test asserts the style mask; the manual gate is typing in another app while the island is up and observing zero keystroke loss, including while a chip is showing.
 
@@ -56,10 +56,11 @@ True black `#000000` background matching the notch glass. Content colors, starti
 | island.bg | #000000 | Every state |
 | island.text | white 0.92 | Transcript, chip preview |
 | island.textSecondary | white 0.58 | State word, cost line |
-| island.accent | #7BA7E0 | Listening ring, waveform when listening |
+| island.accent | #C3B1E1 | The lilac signature (STOP 2): listening ring, waveform when listening, the thinking word |
 | island.amber | #E8A13D | Approval dot, chip accent |
 | island.green | #4CC38A | Done settle |
-| island.red | #E05252 | Failed, budget hold |
+| island.red | #E05252 | Failed |
+| island.gold | #E0C060 | Budget hold: state word, cap figure, override button. Money and caution without failure; lighter and yellower than the amber dot |
 
 The shipped light palette (`ink`, `accent #2E59A8`-family) is unchanged for the fallback panel and console. Contrast acceptance: every text token on island.bg passes 4.5:1 (the values above all clear it; re-verify after tuning).
 
@@ -70,14 +71,14 @@ All nine machine phases get a distinct, enumerated treatment. No two phases may 
 | Phase | Island treatment |
 |---|---|
 | idle | Nothing on screen |
-| listening | Waveform live at mic level in island.accent; 1pt accent ring strokes the island perimeter |
-| thinking | Waveform low-amplitude breath in textSecondary; no ring |
-| acting | Thinking treatment plus the running tool's name in SF Pro Text 10.5pt medium (island.textSecondary) under the waveform |
+| listening | Waveform live at mic level in island.accent (lilac); 1pt accent ring strokes the island perimeter |
+| thinking | Waveform low-amplitude breath in textSecondary; the caption is the word "thinking" (lowercase, SF Pro 11pt medium, island.accent) with three trailing dots whose opacity sweeps in sequence, one dot leading the next (`thinkingEllipsisPeriod`, `thinkingDotOpacityFloor`); no ring. Grey waveform, lilac word keeps thinking and listening distinct at a glance |
+| acting | Thinking waveform plus the running tool as a quiet capsule under the waveform: humanized present-progressive label ("Searching the vault") in SF Pro Text 10.5pt medium island.text on a white 0.10 capsule, 20pt tall (`toolChip*` tokens) |
 | awaiting_approval | Chip row open: amber dot, action preview, Deny and Approve buttons; waveform paused flat |
 | speaking | Waveform live at playback level in island.text; no ring |
 | done | Waveform settles flat, green tick replaces state word, 320ms settle, collapse begins at +900ms |
 | failed (reconnecting) | State word "Reconnecting" in island.red, waveform flat; auto-collapse at +2.5s |
-| budget_hold | "$ cap reached" in island.red plus an "Override once" click target; stays until acted on |
+| budget_hold | "Cap reached" in island.gold, cap figure at exactly two decimals ("$1.00" reads as money), and an "Override once" outline button (12pt medium island.gold, transparent fill, 1pt gold pill outline at `overrideCornerRadius`, pointer-only like Approve); stays until acted on |
 
 Toasts from the daemon render as a single line replacing the state word for 3s (this closes the native toast gap). Acceptance: `Conn --preview` renders every row of this table; a screenshot set is captured per state and reviewed at the phase gate; the previewed states enumerate all nine phases plus toast.
 
@@ -95,7 +96,7 @@ Rules: calm is the default register. On the summon and retract beats the whimsy 
 
 ## Motion
 
-Motion policy: the island's shape and content move only on state change, breath, or exhale (the personality table above). The waveform animates continuously but only in listening, thinking, acting, and speaking, driven by the existing 60fps TimelineView; at every other phase no animation timer runs. Acceptance: instruments or a debug counter shows zero timeline ticks while a chip is open and after collapse.
+Motion policy: the island's shape and content move only on state change, breath, or exhale (the personality table above). Continuous motion is three gated timelines and nothing else: the waveform (listening, thinking, acting, speaking; 60fps TimelineView), the breath (listening only), and the thinking ellipsis (thinking only); at every other phase no animation timer runs. Acceptance: a debug counter per timeline shows zero ticks outside its phases, including while a chip is open and after collapse (`IslandWaveformTests`).
 
 | Motion | Value (tuned) | Notes |
 |---|---|---|
@@ -105,6 +106,7 @@ Motion policy: the island's shape and content move only on state change, breath,
 | State word crossfade | 120ms easeInOut | |
 | Done settle | 320ms green tick fade-in, collapse at +900ms | |
 | Refusal pulse | 2px horizontal shake, 3 cycles, 250ms total | Fires when PTT is pressed in a phase that cannot accept it |
+| Thinking ellipsis | opacity wave across three dots, period 1.2s (`thinkingEllipsisPeriod`), floor 0.25 (`thinkingDotOpacityFloor`), one dot leading the next | Paused outside thinking; the third gated timeline. Aliveness 0 renders the dots static at full opacity |
 | Belay snap | Island content clears in 120ms, collapse follows | Paired with the audio budget below |
 
 Curves are named here and nowhere else: every duration and spring in Swift lives in one `DesignTokens.swift`, and a test greps the Sources tree to assert no numeric literal appears inside a `.animation(` or `withAnimation(` call outside that file.
@@ -147,10 +149,10 @@ The taste position: at 10 to 13 points, white on black, in a shape this small, h
 |---|---|---|
 | Transcript / model line | SF Pro Text 13pt regular, island.text | 2-line max, center, no italics |
 | User line | SF Pro Text 13pt medium, island.textSecondary | |
-| State word | SF Pro Text 11pt medium, sentence case ("Listening", not "LISTENING"), tracking 0 | |
-| Cost figure | SF Pro Text 10.5pt medium, `.monospacedDigit()`, island.textSecondary | `.contentTransition(.numericText())` stays |
-| Tool name (acting) | SF Pro Text 10.5pt medium, island.textSecondary | |
-| Chip preview | SF Pro Text 12.5pt medium | |
+| State word | SF Pro Text 11pt medium, sentence case ("Listening", not "LISTENING"), tracking 0 | The thinking word is the one deliberate lowercase: "thinking" in island.accent, the signature beat |
+| Cost figure | SF Pro Text 10.5pt medium, `.monospacedDigit()`, island.textSecondary | `.contentTransition(.numericText())` stays; exactly two decimals in budget_hold, three elsewhere |
+| Tool label (acting capsule) | SF Pro Text 10.5pt medium, island.text on white 0.10 capsule | Humanized present progressive, mapped from the tool name |
+| Chip preview | SF Pro Text 12.5pt medium | Composed to fit whole: daemon budget 32 chars, word-boundary truncation, never mid-word; Swift fallback truncates tail, not middle |
 | Chip buttons | SF Pro Text 12pt medium | |
 
 Baseline spacing inside the island snaps to a 4pt grid. The waveform centers on the notch center, which is the camera center, which is the screen center: optical alignment is free if the geometry math is honest, and a preview overlay (crosshair at screen center) makes it screenshot-checkable. Trace and receipt rendering live on the frozen console and are untouched. Acceptance: preview screenshots per state; a test asserts island Sources contain no `.tracking(` call, no `.uppercased()` on state labels, no `design: .monospaced`, and no mono font name; the cost text carries `.monospacedDigit()`.

@@ -153,7 +153,8 @@ final class PreviewSample: Identifiable {
             sample("acting", "Acting", "running tool name is visible") {
                 $0.connected = true
                 $0.live = true
-                $0.chips = [Chip(id: "c0", preview: "Search vault: transformer paper",
+                $0.chips = [Chip(id: "c0", name: "phoenix_search",
+                                  preview: "Search Phoenix: transformer paper",
                                   status: "running")]
                 $0.spentUSD = 0.021
             },
@@ -198,7 +199,8 @@ final class PreviewSample: Identifiable {
                 $0.connected = true
                 $0.live = true
                 $0.modelLine = "I can copy that to your clipboard."
-                $0.chips = [Chip(id: "c1", preview: "Copy 29 characters to clipboard",
+                $0.chips = [Chip(id: "c1", name: "clipboard_set",
+                                  preview: "Copy to clipboard",
                                   status: "proposed")]
                 $0.spentUSD = 0.034
             },
@@ -412,7 +414,8 @@ private struct PreviewDot: View {
         case "listening": return DesignTokens.islandAccent
         case "awaiting_approval": return DesignTokens.islandAmber
         case "done": return DesignTokens.islandGreen
-        case "failed", "budget_hold": return DesignTokens.islandRed
+        case "failed": return DesignTokens.islandRed
+        case "budget_hold": return DesignTokens.islandGold
         default: return DesignTokens.islandTextSecondary
         }
     }
