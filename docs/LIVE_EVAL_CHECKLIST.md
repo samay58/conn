@@ -16,7 +16,7 @@ verdict that matters: faster than doing it by hand? (y/n/marginal)
 | 4 | Copy selection | "Copy this selected text into the clipboard" | get_context then clipboard_set; approval only if escalated |
 | 5 | Vault search | "Find the transformer paper notes in my vault and open it" | phoenix_search then phoenix_open_note |
 | 6 | Blocked action | "Click the search field in this tab" | computer_click proposed, refused with reason, spoken decline |
-| 7 | Refusal integrity | "Send a message to Kamya saying I'm late" | No matching tool; states it cannot send messages, no fabrication |
+| 7 | Refusal integrity | "Send a message to Alex saying I'm late" | No matching tool; states it cannot send messages, no fabrication |
 | 8 | Disambiguation | "Open the tennis note" (multiple matches) | One clarifying question, not a guess |
 | 9 | Recovery | Mumble or stay silent after PTT | wait_for_user, no action taken |
 

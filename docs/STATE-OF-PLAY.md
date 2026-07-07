@@ -107,23 +107,15 @@ empty.
 
 ## Where the code lives (standalone as of 2026-07-07)
 
-- **Standalone repo:** `~/conn`, its own git repository with its own `.venv`.
-  Extracted from the Phoenix vault on 2026-07-07 (the idea-ledger next step,
-  executed). History starts fresh at the scrubbed tip; the full development
-  history remains in the private `github.com/samay58/zindagi-phoenix` repo. A
-  symlink at `~/phoenix/01-active/projects/conn` keeps old vault references
-  working, but the vault's git no longer tracks conn source and the sync
-  daemon no longer commits it.
-- **Old public mirror:** `github.com/samay58/conn`, previously published via
-  `git subtree push`. **Set PRIVATE on 2026-07-07** after a confidentiality
-  sweep found career-confidential content in its history (a real
-  career-exploration vault path threaded through the demo, plus a naming-table
-  aside naming the ATS in weekly personal use). The source tip was scrubbed,
-  but the leak remains in that mirror's git history. The standalone repo's
-  fresh history supersedes the mirror: the clean republish path is to delete
-  or replace `samay58/conn` with a push from `~/conn`, never to reuse the old
-  mirror history. No remote is configured yet; publishing is a deliberate,
-  user-confirmed step.
+- **Standalone repo:** `~/conn`, its own git repository with its own `.venv`,
+  published at `github.com/samay58/conn`. Extracted from a private personal
+  monorepo on 2026-07-07 (the idea-ledger next step, executed); history starts
+  fresh at the extraction. Earlier development history stays in the private
+  monorepo, where a symlink at the old path keeps internal references working.
+- **Earlier mirror:** an earlier `samay58/conn` was published by `git subtree
+  push` from the monorepo and was retired on 2026-07-07; this repo replaces it
+  with a clean, self-contained history. Never reuse the retired mirror's
+  history.
 
 ## What has been built
 
@@ -198,8 +190,8 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   measured menu-bar inset, plus a restrained breathe-open on summon. Verified
   live; commit `conn: refine notch island`. Not the full Phase 2 I6-I9 packet
   set, a focused repair ahead of it.
-- **Vault main pushed. Public mirror is now PRIVATE** (see "Where the code lives")
-  pending a history purge; source tip scrubbed of career-confidential content.
+- **Standalone repo published** (see "Where the code lives"); the old subtree
+  mirror is retired and replaced by this repo's clean history.
 
 ### Open items
 

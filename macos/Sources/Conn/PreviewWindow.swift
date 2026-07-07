@@ -70,7 +70,7 @@ private struct PreviewSample: Identifiable {
             sample("thinking", "Thinking", "quiet breath while the model works") {
                 $0.connected = true
                 $0.live = true
-                $0.userLine = "send Kamya the address"
+                $0.userLine = "send Alex the address"
                 $0.spentUSD = 0.014
             },
             sample("acting", "Acting", "tool name is visible") {
