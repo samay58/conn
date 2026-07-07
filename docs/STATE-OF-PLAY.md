@@ -212,10 +212,15 @@ The app is installed to /Applications with the brass speaking-trumpet icon
 
 ### Open items
 
-- **STOP 1 (Phase 0 hands-on reliability drill): deferred** by Samay's
-  skip-and-proceed call; returns before the project closes (drill script:
-  docs/STOP1-manual-drill.md). Fresh build, five real commands, wifi-kill
-  mid-turn, PTT during thinking, `--latency-report` on a live trace.
+- **STOP 1 (Phase 0 hands-on reliability drill): done 2026-07-07 with
+  findings.** Samay drove real commands live. Verdict: latency and
+  snappiness strong, clipboard lane worked. Findings, all fixed same day
+  in `14d1d83`: phoenix_search dead under the app-spawned daemon's minimal
+  PATH (qmd/node resolution), frontmost gate falsely refusing apps outside
+  the alias map ("Terminal not frontmost"), bare `--latency-report`
+  rejecting its own drill instruction. Residue: the wifi-kill and
+  PTT-during-thinking steps of the scripted drill were not explicitly
+  exercised; fold into the next live session rather than a dedicated redo.
 - **STOP-G (capability round taste review): pending.** Gate G mechanical and
   adversarial checks are green; the Fable taste review of
   docs/2026-07-06-gate-g-fable-brief.md has not run. Per the ledger, X1, the
