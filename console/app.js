@@ -121,8 +121,19 @@ function liveChip(entry) {
   const actions = el("div", "chip-actions");
   const approve = el("button", "approve", "Approve");
   const deny = el("button", "", "Deny");
-  approve.onclick = () => sendTimed({ type: "approval", call_id: entry.call_id, approved: true });
-  deny.onclick = () => sendTimed({ type: "approval", call_id: entry.call_id, approved: false });
+  // Approvals are pointer-only on every surface: no tab focus, and
+  // keyboard-synthesized clicks (event.detail === 0) are ignored, so Return
+  // or Space can never approve an action.
+  approve.tabIndex = -1;
+  deny.tabIndex = -1;
+  approve.onclick = (e) => {
+    if (e.detail === 0) return;
+    sendTimed({ type: "approval", call_id: entry.call_id, approved: true });
+  };
+  deny.onclick = (e) => {
+    if (e.detail === 0) return;
+    sendTimed({ type: "approval", call_id: entry.call_id, approved: false });
+  };
   actions.append(approve, deny);
   chip.append(preview, actions);
   return chip;

@@ -62,7 +62,20 @@ final class IslandController: ConnSurface {
         orderOutTimer?.invalidate()
         orderOutTimer = nil
         let wasHidden = !panel.isVisible
-        panel.setFrame(geometry.expandedFrame(chipOpen: chipOpen), display: false)
+        let target = geometry.expandedFrame(chipOpen: chipOpen)
+        reveal.collapsedScale = geometry.collapsedScale(chipOpen: chipOpen)
+        if !wasHidden && !isCollapsing && panel.frame != target {
+            // Mid-session frame change: the chip row opening or closing. The
+            // shape grows and retreats on the chip-open curve, matching the
+            // row's SwiftUI layout animation inside IslandView.
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = DesignTokens.chipOpenDuration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(target, display: true)
+            }
+        } else {
+            panel.setFrame(target, display: false)
+        }
         panel.orderFrontRegardless()
         // Replay the breathe-open only when the island arrives from the notch
         // (or was mid-retreat), not on every in-session phase tick.

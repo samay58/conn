@@ -74,6 +74,22 @@ def find_violations(text: str) -> list[str]:
     if ".uppercased()" in text:
         hits.append("uppercased")
 
+    # (f) keyboard reachability: approvals are pointer-only, so no island
+    # source may register a keyboard shortcut, focus machinery, key handling,
+    # or default-button treatment.
+    if ".keyboardShortcut(" in text:
+        hits.append("keyboard-shortcut")
+    if ".borderedProminent" in text:
+        hits.append("default-button-styling")
+    if ".focusable(" in text:
+        hits.append("focusable")
+    if ".onKeyPress(" in text:
+        hits.append("on-key-press")
+    if "@FocusState" in text:
+        hits.append("focus-state")
+    if "defaultAction" in text or "cancelAction" in text:
+        hits.append("default-action-role")
+
     return hits
 
 
@@ -92,6 +108,12 @@ BAD_SNIPPETS = [
     ("monospace-font-name", 'Text(x).font(.custom("SF Mono", size: 12))'),
     ("tracking", "Text(x).tracking(1.2)"),
     ("uppercased", "let s = title.uppercased()"),
+    ("keyboard-shortcut", "Button(\"Approve\") {}.keyboardShortcut(.escape)"),
+    ("default-button-styling", "Button(\"Approve\") {}.buttonStyle(.borderedProminent)"),
+    ("focusable", "Text(x).focusable(true)"),
+    ("on-key-press", "content.onKeyPress(.return) { .handled }"),
+    ("focus-state", "@FocusState private var focused: Bool"),
+    ("default-action-role", "Button(role: .none) {}.keyboardShortcut(.defaultAction)"),
 ]
 
 

@@ -5,14 +5,17 @@ import SwiftUI
 // screen edge (it continues the notch hardware), the bottom corners are
 // rounded, and every readable row lives below the physical notch so nothing
 // clips into it. Nine machine phases render distinctly per the UX-craft spec.
-// Every motion and palette value comes from DesignTokens. The interactive
-// approve/deny buttons land in packet I8; this renders the approval preview
-// with no keyboard-reachable controls.
+// Every motion and palette value comes from DesignTokens. Approvals render
+// as IslandChipView, whose buttons are pointer-only by construction.
 
 @MainActor
 final class IslandReveal: ObservableObject {
     @Published var token = 0
     @Published var collapseToken = 0
+    // The scale that maps the current panel frame back onto the bare notch.
+    // IslandController updates it on every summon (the chip frame is taller,
+    // so its collapsed scale differs); nil falls back to the view's default.
+    var collapsedScale: (x: CGFloat, y: CGFloat)?
 }
 
 @MainActor
@@ -70,6 +73,10 @@ struct IslandView: View {
 
     // MARK: below-notch content
 
+    private var chipShowing: Bool {
+        state.phase == "awaiting_approval" && state.pendingChip != nil
+    }
+
     private var belowNotch: some View {
         VStack(spacing: 7) {
             VStack(spacing: 6) {
@@ -78,13 +85,16 @@ struct IslandView: View {
             }
             .frame(maxHeight: .infinity)
             if state.phase == "awaiting_approval", let chip = state.pendingChip {
-                approvalRow(chip)
+                IslandChipView(chip: chip, client: client)
+                    .id(chip.id)
+                    .transition(.opacity)
             }
         }
         .padding(.horizontal, 18)
         .padding(.top, 7)
         .padding(.bottom, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: DesignTokens.chipOpenDuration), value: chipShowing)
     }
 
     // A single caption line: primary text plus a compact meta trailing group.
@@ -122,18 +132,6 @@ struct IslandView: View {
                 }
                 .buttonStyle(.plain)
             }
-        }
-        .frame(maxWidth: 280)
-    }
-
-    private func approvalRow(_ chip: Chip) -> some View {
-        HStack(spacing: 8) {
-            Circle().fill(DesignTokens.islandAmber).frame(width: 5, height: 5)
-            Text(chip.preview)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(DesignTokens.islandText)
-                .lineLimit(1)
-                .truncationMode(.middle)
         }
         .frame(maxWidth: 280)
     }
@@ -192,12 +190,16 @@ struct IslandView: View {
     // drops in one lead behind it, and each axis rides a spring whose overshoot
     // is set by its token, so the island arrives with mass instead of fading
     // in. Content lags the shape as before.
+    private var activeCollapsedScale: (x: CGFloat, y: CGFloat) {
+        reveal.collapsedScale ?? collapsedScale
+    }
+
     private func breatheOpen() {
         var reset = Transaction()
         reset.disablesAnimations = true
         withTransaction(reset) {
-            shapeScaleX = collapsedScale.x
-            shapeScaleY = collapsedScale.y
+            shapeScaleX = activeCollapsedScale.x
+            shapeScaleY = activeCollapsedScale.y
             contentOpacity = 0
             exhaleScale = 1
         }
@@ -217,11 +219,11 @@ struct IslandView: View {
     // lead behind it.
     private func breatheClosed() {
         withAnimation(.spring(DesignTokens.collapseSpring)) {
-            shapeScaleY = collapsedScale.y
+            shapeScaleY = activeCollapsedScale.y
             contentOpacity = 0
         }
         withAnimation(.spring(DesignTokens.collapseSpring).delay(DesignTokens.squashWidthLead)) {
-            shapeScaleX = collapsedScale.x
+            shapeScaleX = activeCollapsedScale.x
         }
     }
 

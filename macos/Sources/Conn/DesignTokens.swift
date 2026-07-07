@@ -6,6 +6,7 @@ enum DesignTokens {
     static let collapseSpring = Spring(response: 0.22, dampingRatio: 0.90)
     static let chipOpenDuration = 0.16
     static let chipButtonsFadeDelay = 0.06
+    static let chipConfirmSettleDuration = 0.12
     static let stateWordCrossfade = 0.12
     static let doneSettleDuration = 0.32
     static let doneCollapseDelay = 0.90
@@ -57,4 +58,6 @@ enum DesignTokens {
     static let islandContentHeight: CGFloat = 60
     static let islandCornerRadius: CGFloat = 13
     static let chipRowHeight: CGFloat = 40
+    static let chipButtonMinHeight: CGFloat = 24
+    static let chipButtonCornerRadius: CGFloat = 6
 }

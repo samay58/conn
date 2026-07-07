@@ -101,7 +101,7 @@ Motion policy: the island's shape and content move only on state change, breath,
 |---|---|---|
 | Summon morph | per-axis springs at response 0.28, damping derived from the personality overshoot tokens (width 2%, height 4%); width leads height by the 40ms lead; content opacity staggered +80ms behind shape | Overshoot per the Personality table; the biomimetic beat |
 | Collapse | spring(response 0.22, damping 0.90); height retreats first with content, width trails by the same 40ms lead; the panel orders out only after the trailing spring settles | Faster and more damped than summon; exits should feel certain; the summon played backward |
-| Chip open/close | 160ms easeOut on shape growth, buttons fade +60ms | Replaces the unimplemented 140ms and shipped 180ms |
+| Chip open/close | 160ms easeOut on shape growth, buttons fade +60ms; approve renders a 120ms confirm settle (`chipConfirmSettleDuration`) before the decision is sent and the row closes | Replaces the unimplemented 140ms and shipped 180ms |
 | State word crossfade | 120ms easeInOut | |
 | Done settle | 320ms green tick fade-in, collapse at +900ms | |
 | Refusal pulse | 2px horizontal shake, 3 cycles, 250ms total | Fires when PTT is pressed in a phase that cannot accept it |
