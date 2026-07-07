@@ -53,6 +53,10 @@ enum DesignTokens {
     static let islandAmber = Color(red: 0.91, green: 0.63, blue: 0.24)
     static let islandGreen = Color(red: 0.30, green: 0.76, blue: 0.54)
     static let islandRed = Color(red: 0.88, green: 0.32, blue: 0.32)
+    // frozen panel surface (non-notch fallback; values preserved verbatim
+    // from the panel era when WaveformView rejoined the guard at I7)
+    static let panelBarSpring = Spring(response: 0.15, dampingRatio: 0.75)
+    static let panelPhaseCrossfade = 0.25
     // geometry
     static let islandGrowWidth: CGFloat = 58
     static let islandContentHeight: CGFloat = 60

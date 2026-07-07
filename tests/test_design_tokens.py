@@ -8,9 +8,8 @@ list.
 
 Exclusions (not scanned):
 - DesignTokens.swift: holds the numbers by design.
-- PanelView.swift, WaveformView.swift: frozen panel-era surfaces carrying
-  legacy pre-island style. WaveformView rejoins the guard at packet I7 in
-  Phase 2 -- do not forget to remove it from EXCLUDED_FILES then.
+- PanelView.swift: the frozen panel-era fallback surface carrying legacy
+  pre-island style. WaveformView rejoined the guard at packet I7.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONN_SOURCES = REPO_ROOT / "macos" / "Sources" / "Conn"
 
-EXCLUDED_FILES = {"DesignTokens.swift", "PanelView.swift", "WaveformView.swift"}
+EXCLUDED_FILES = {"DesignTokens.swift", "PanelView.swift"}
 
 MONOSPACE_FONT_NAMES = ("Menlo", "Monaco", "SFMono", "SF Mono", "Courier")
 
