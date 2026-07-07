@@ -23,6 +23,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests -q -m hardware                  
 PYTHONPATH=src .venv/bin/python -m conn --demo --simulate-tools   # scripted model, canned tools, zero side effects
 PYTHONPATH=src .venv/bin/python -m conn --demo                    # scripted model, REAL executors (apps actually open)
 PYTHONPATH=src .venv/bin/python -m conn                           # live; needs OPENAI_API_KEY in the environment
+PYTHONPATH=src .venv/bin/python -m conn --no-audio --no-hotkey    # live with typed input only, no mic/speaker/global key
 PYTHONPATH=src .venv/bin/python -m conn --doctor                  # environment + TCC permission checks
 PYTHONPATH=src .venv/bin/python -m conn --eval                    # 12 harness evals (evals/tasks.json), writes artifacts to data/
 PYTHONPATH=src .venv/bin/python -m conn --latency-report          # latency spans + budget pass/fail on the newest trace
@@ -31,6 +32,7 @@ PYTHONPATH=src .venv/bin/python -m conn --latency-report          # latency span
 cd macos && ./make-app.sh              # release build, ad-hoc signed → Conn.app
 cd macos && ./make-app.sh install      # also copies to /Applications
 cd macos && swift test                 # Swift unit tests (ConnTests)
+cd macos && swift test --filter NAME   # one Swift test class/method
 ./Conn.app/Contents/MacOS/Conn --preview   # renders key island states for design iteration
 ```
 
