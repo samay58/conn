@@ -91,7 +91,7 @@ The island is a living thing rendered entirely through physics. Three behaviors,
 | Breath while listening | Height oscillates ±1.5%, period 3.2s, eased sine | Quiet pulsing: attentive, calm, alive |
 | Exhale on done | One 220ms contraction of 2% before the green settle | Release of attention; the turn is over |
 
-Rules: calm is the default register and whimsy never exceeds subtle; the island shape moves only on state change, breath, or exhale; nothing anthropomorphic in this round. The three behaviors share a single aliveness scalar in the tokens file (0 disables all three), which is the mount point for any future character. Acceptance: playground sliders drive all parameters live; aliveness 0 renders a fully static island; the hand gate is Samay holding the key and judging calm versus fidget.
+Rules: calm is the default register. On the summon and retract beats the whimsy ceiling is raised from subtle to delightful and alive (Samay's directive, 2026-07-07); every frequent in-session transition stays immediate and every other beat stays subtle. The island shape moves only on state change, breath, or exhale; nothing anthropomorphic in this round. The three behaviors share a single aliveness scalar in the tokens file (0 disables all three), which is the mount point for any future character. Acceptance: playground sliders drive all parameters live; aliveness 0 renders a fully static island; the hand gate is Samay holding the key and judging calm versus fidget.
 
 ## Motion
 

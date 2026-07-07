@@ -81,8 +81,10 @@ final class IslandController: ConnSurface {
         guard panel.isVisible, !isCollapsing else { return }
         isCollapsing = true
         reveal.collapseToken &+= 1
+        // The retreat is staggered (height first, width one lead behind), so
+        // the panel stays up until the trailing width spring has settled too.
         orderOutTimer = Timer.scheduledTimer(
-            withTimeInterval: DesignTokens.collapseSpring.settlingDuration,
+            withTimeInterval: DesignTokens.collapseSpring.settlingDuration + DesignTokens.squashWidthLead,
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor in

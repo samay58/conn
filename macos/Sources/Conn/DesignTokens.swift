@@ -20,11 +20,30 @@ enum DesignTokens {
     static let aliveness = 1.0
     static let breathAmplitude = 0.015
     static let breathPeriod = 3.2
+    static let breathFrameInterval = 1.0 / 30.0
     static let squashHeightOvershoot = 0.04
     static let squashWidthOvershoot = 0.02
     static let squashWidthLeadMs = 40.0
     static let exhaleContraction = 0.02
     static let exhaleDuration = 0.22
+    // derived personality values. aliveness scales every behavior: at 0 the
+    // summon springs go critically damped, the width lead vanishes, and breath
+    // and exhale render flat, leaving a fully static island.
+    static let squashWidthLead = squashWidthLeadMs / 1000.0 * aliveness
+    static let summonWidthSpring = springOvershooting(
+        squashWidthOvershoot * aliveness, response: summonSpring.response)
+    static let summonHeightSpring = springOvershooting(
+        squashHeightOvershoot * aliveness, response: summonSpring.response)
+
+    // A spring whose first peak overshoots its target by `overshoot` (a 0...1
+    // fraction). An underdamped spring overshoots by exp(-z * pi / sqrt(1 - z^2))
+    // for damping ratio z; inverting that lands the peak exactly on the token.
+    static func springOvershooting(_ overshoot: Double, response: Double) -> Spring {
+        guard overshoot > 0 else { return Spring(response: response, dampingRatio: 1.0) }
+        let k = -log(overshoot)
+        let zeta = k / (k * k + Double.pi * Double.pi).squareRoot()
+        return Spring(response: response, dampingRatio: zeta)
+    }
     // palette (island, on black)
     static let islandBg = Color.black
     static let islandText = Color.white.opacity(0.92)

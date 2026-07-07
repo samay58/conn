@@ -27,6 +27,7 @@ struct IslandView: View {
     @State private var shapeScaleX: CGFloat = 1
     @State private var shapeScaleY: CGFloat = 1
     @State private var contentOpacity: Double = 1
+    @State private var exhaleScale: CGFloat = 1
 
     private var islandShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
@@ -55,9 +56,14 @@ struct IslandView: View {
         )
         .clipShape(islandShape)
         .scaleEffect(x: shapeScaleX, y: shapeScaleY, anchor: .top)
+        .scaleEffect(exhaleScale, anchor: .top)
+        .modifier(IslandBreath(isListening: state.phase == "listening"))
         .animation(.easeInOut(duration: DesignTokens.stateWordCrossfade), value: state.stateLabel)
         .task(id: state.toast) { await autoClearToast() }
         .onChange(of: state.rejectPulse) { _, _ in refusalPulse() }
+        .onChange(of: state.phase) { _, phase in
+            if phase == "done" { exhale() }
+        }
         .onChange(of: reveal.token) { _, _ in breatheOpen() }
         .onChange(of: reveal.collapseToken) { _, _ in breatheClosed() }
     }
@@ -182,7 +188,10 @@ struct IslandView: View {
 
     // MARK: effects
 
-    // Summon: the shape grows out of the notch rect; content lags the shape.
+    // Summon: squash and stretch out of the notch. Width spreads first, height
+    // drops in one lead behind it, and each axis rides a spring whose overshoot
+    // is set by its token, so the island arrives with mass instead of fading
+    // in. Content lags the shape as before.
     private func breatheOpen() {
         var reset = Transaction()
         reset.disablesAnimations = true
@@ -190,9 +199,12 @@ struct IslandView: View {
             shapeScaleX = collapsedScale.x
             shapeScaleY = collapsedScale.y
             contentOpacity = 0
+            exhaleScale = 1
         }
-        withAnimation(.spring(DesignTokens.summonSpring)) {
+        withAnimation(.spring(DesignTokens.summonWidthSpring)) {
             shapeScaleX = 1
+        }
+        withAnimation(.spring(DesignTokens.summonHeightSpring).delay(DesignTokens.squashWidthLead)) {
             shapeScaleY = 1
         }
         withAnimation(.spring(DesignTokens.summonSpring).delay(DesignTokens.contentStaggerDelay)) {
@@ -200,12 +212,33 @@ struct IslandView: View {
         }
     }
 
-    // Collapse: content clears first, the shape retreats into the notch.
+    // Collapse: the summon played backward. Height retreats into the notch
+    // first with the content, width narrows back onto the notch rect the same
+    // lead behind it.
     private func breatheClosed() {
         withAnimation(.spring(DesignTokens.collapseSpring)) {
-            shapeScaleX = collapsedScale.x
             shapeScaleY = collapsedScale.y
             contentOpacity = 0
+        }
+        withAnimation(.spring(DesignTokens.collapseSpring).delay(DesignTokens.squashWidthLead)) {
+            shapeScaleX = collapsedScale.x
+        }
+    }
+
+    // Exhale on done: one soft contraction, released before the green settle
+    // finishes. The island lets the turn go.
+    private func exhale() {
+        let contraction = DesignTokens.exhaleContraction * DesignTokens.aliveness
+        guard contraction > 0 else { return }
+        let half = DesignTokens.exhaleDuration / 2
+        withAnimation(.easeIn(duration: half)) {
+            exhaleScale = 1 - contraction
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(half))
+            withAnimation(.easeOut(duration: half)) {
+                exhaleScale = 1
+            }
         }
     }
 
@@ -225,6 +258,33 @@ struct IslandView: View {
         guard state.toast != nil else { return }
         try? await Task.sleep(for: .seconds(DesignTokens.toastDuration))
         if !Task.isCancelled { state.toast = nil }
+    }
+}
+
+// Breath while listening: the island's height oscillates on an eased sine,
+// anchored to the notch edge, so it pulses quietly while it waits. The
+// timeline is paused in every other phase (and whenever aliveness disables
+// the amplitude), so no animation timer runs while a chip is open or after
+// collapse; the paused flag is the motion-policy guarantee.
+private struct IslandBreath: ViewModifier {
+    var isListening: Bool
+
+    private var isBreathing: Bool {
+        isListening && DesignTokens.breathAmplitude * DesignTokens.aliveness > 0
+    }
+
+    func body(content: Content) -> some View {
+        TimelineView(.animation(minimumInterval: DesignTokens.breathFrameInterval, paused: !isBreathing)) { context in
+            content
+                .scaleEffect(x: 1, y: scale(at: context.date.timeIntervalSinceReferenceDate), anchor: .top)
+                .animation(.easeOut(duration: DesignTokens.stateWordCrossfade), value: isBreathing)
+        }
+    }
+
+    private func scale(at t: Double) -> CGFloat {
+        guard isBreathing else { return 1 }
+        let angle = t / DesignTokens.breathPeriod * 2 * Double.pi
+        return 1 + DesignTokens.breathAmplitude * DesignTokens.aliveness * sin(angle)
     }
 }
 
