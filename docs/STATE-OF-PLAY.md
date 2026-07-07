@@ -193,8 +193,7 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   the approve click sends after a 120ms confirm settle so the daemon phase
   change never clips the acknowledgment), and I9 retargeted PreviewWindow at
   the canonical IslandView and added the `--shoot` screenshot rig. STOP 2
-  (Samay reviews the eleven-state screenshot set and drives the cycler) is
-  the open gate.
+  ran 2026-07-07: pass, with four refinements ordered (see Open items).
 - **Notch-island refine (2026-07-07):** the built-in-display island was
   repaired from an oversized clipped pill to a notch-flush surface, synthetic
   geometry adopts the measured menu-bar inset, and summon gained a restrained
@@ -230,20 +229,25 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   M packets, and P1 stay blocked behind it.
 - **Personality hand gate: pending.** Samay drives the hotkey and judges
   cute versus fidget; `aliveness` and the overshoot tokens are the knobs.
-- **STOP 2 (Phase 2 screenshot review): pending with Samay.** I7, I8, and
-  I9 landed 2026-07-07 and were reviewed and consolidated the same day
-  (gates green: 256 Python, 19 Swift, 12/12 evals; `--shoot` writes 11/11
-  PNGs). The open gate is Samay's own review of the screenshot set and a
-  hands-on drive of the preview cycler.
+- **STOP 2 (Phase 2 screenshot review): done 2026-07-07, pass with four
+  refinements.** Samay reviewed the 11-PNG set and drove the cycler. The
+  summon animation sets the bar ("absolutely gorgeous"); typography and
+  state vocabulary pass. Four changes ordered, all Phase 2 scope, no
+  re-review round (the gates plus a fresh screenshot set verify): lilac
+  becomes the signature accent (listening waveform and ring) with a
+  distinct "thinking" treatment in it; the running tool name renders as a
+  quiet capsule with a humanized label; chip previews must fit whole with
+  no mid-word truncation ("Copy 2...lipboard" is the named defect); budget
+  hold gets its own color, a two-decimal cap figure, and Override as a
+  real outline button. Full implementation contract: `docs/NEXT-SESSION.md`.
 
 ## What's next
 
 Canonical forward sequence: `docs/2026-07-07-roadmap.md` (blocks A through
 E, with rationale and exit criteria). Summary as of the stock-take:
 
-- **STOP 2:** Samay reviews the eleven-state screenshot set (`--shoot` writes
-  them) and drives the preview cycler. I7, I8, and I9 have landed; this is
-  the gate that closes Phase 2.
+- **STOP 2 refinements:** the four ordered changes above land as one commit
+  (contract in `docs/NEXT-SESSION.md`); this closes Phase 2.
 - **Phase 3 remainder:** I12 (tuning playground with write-back) and the
   STOP 3 tuning sessions. The morph and personality behaviors themselves
   already shipped (see above); STOP 3 is where their values get tuned by
