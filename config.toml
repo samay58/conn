@@ -1,0 +1,50 @@
+# Conn user config. Secrets never live here; OPENAI_API_KEY comes from the environment.
+
+[hotkey]
+ptt = "alt_r"            # pynput key name for global push-to-talk; "none" disables the global hotkey
+
+[realtime]
+model = "gpt-realtime-2"
+voice = "marin"
+reasoning_effort = "low"
+
+[budget]
+session_cap_usd = 1.00
+warn_at_usd = 0.50
+hard_stop = true          # false downgrades the cap to warn-only
+
+[session]
+idle_timeout_s = 300      # close the upstream session after this long in IDLE
+done_flash_ms = 1500      # how long the "done" state lingers before returning to idle
+tap_threshold_ms = 300    # a press shorter than this is an accidental tap: discarded, zero spend
+
+[apps]
+allowlist = ["Obsidian", "Google Chrome", "Safari", "Finder", "Notes", "Terminal"]
+
+[browser]
+search_url = "https://www.google.com/search?q={q}"
+
+[phoenix]
+vault_root = "/Users/samaydhawan/phoenix"
+qmd_bin = "/Users/samaydhawan/.nvm/versions/node/v22.15.0/bin/qmd"
+obsidian_vault = "phoenix"
+
+[screenshots]
+keep = false              # raw screenshots are deleted at session end unless true
+
+[server]
+host = "127.0.0.1"
+port = 8787
+
+# Per-tool risk escalation. Example: make clipboard writes require approval.
+[risk_overrides]
+# "clipboard_set" = "confirm"
+
+# Prices per 1M tokens, kept in config so a price change never needs a code edit.
+[pricing]
+text_in = 4.00
+text_out = 24.00
+audio_in = 32.00
+audio_out = 64.00
+cached_in = 0.40
+image_in = 5.00

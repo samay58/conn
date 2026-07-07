@@ -1,0 +1,41 @@
+{
+  "id": "find-transformer-notes",
+  "default": true,
+  "spoken": "find the transformer paper notes in my vault and open it",
+  "match": ["transformer", "paper", "vault", "find"],
+  "segments": [
+    {
+      "say": "Searching the vault for the transformer paper.",
+      "tools": [
+        {"name": "phoenix_search", "arguments": {"query": "transformer paper", "limit": 5}}
+      ],
+      "usage": {
+        "input_tokens": 640, "output_tokens": 62,
+        "input_token_details": {"text_tokens": 480, "audio_tokens": 160, "cached_tokens": 320,
+                                "cached_tokens_details": {"text_tokens": 320, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 22, "audio_tokens": 40}
+      }
+    },
+    {
+      "say": "Top hit is the Attention Is All You Need notes. Opening it in Obsidian.",
+      "tools": [
+        {"name": "phoenix_open_note", "arguments": {"path": "04-knowledge-base/reading-notes/transformer-paper-2017.md"}}
+      ],
+      "usage": {
+        "input_tokens": 910, "output_tokens": 88,
+        "input_token_details": {"text_tokens": 750, "audio_tokens": 160, "cached_tokens": 600,
+                                "cached_tokens_details": {"text_tokens": 600, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 30, "audio_tokens": 58}
+      }
+    },
+    {
+      "say": "Done. The note is open.",
+      "usage": {
+        "input_tokens": 1010, "output_tokens": 34,
+        "input_token_details": {"text_tokens": 850, "audio_tokens": 160, "cached_tokens": 780,
+                                "cached_tokens_details": {"text_tokens": 780, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 10, "audio_tokens": 24}
+      }
+    }
+  ]
+}

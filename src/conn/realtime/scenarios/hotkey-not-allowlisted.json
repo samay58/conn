@@ -1,0 +1,28 @@
+{
+  "id": "hotkey-not-allowlisted",
+  "spoken": "press command shift p",
+  "match": ["press", "command shift p", "hotkey"],
+  "segments": [
+    {
+      "say": "Trying that hotkey.",
+      "tools": [
+        {"name": "computer_hotkey", "arguments": {"combo": "cmd+shift+p"}}
+      ],
+      "usage": {
+        "input_tokens": 580, "output_tokens": 38,
+        "input_token_details": {"text_tokens": 420, "audio_tokens": 160, "cached_tokens": 300,
+                                  "cached_tokens_details": {"text_tokens": 300, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 12, "audio_tokens": 26}
+      }
+    },
+    {
+      "say": "That hotkey is not allowlisted.",
+      "usage": {
+        "input_tokens": 640, "output_tokens": 32,
+        "input_token_details": {"text_tokens": 480, "audio_tokens": 160, "cached_tokens": 380,
+                                  "cached_tokens_details": {"text_tokens": 380, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 10, "audio_tokens": 22}
+      }
+    }
+  ]
+}

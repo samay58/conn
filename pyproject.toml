@@ -1,0 +1,33 @@
+[project]
+name = "conn"
+version = "0.1.0"
+description = "Conn: push-to-talk voice command surface for the Mac, built on the OpenAI Realtime API"
+requires-python = ">=3.12"
+dependencies = [
+    "websockets>=14",
+    "starlette>=0.40",
+    "uvicorn>=0.30",
+    "pydantic>=2",
+    "sounddevice>=0.5",
+    "pynput>=1.8",
+    "pyobjc-framework-ApplicationServices>=11",
+    "pyobjc-framework-Cocoa>=11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+conn = "conn.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["hardware: needs a live audio device or TCC grants; skipped by default"]
+addopts = "-m 'not hardware'"

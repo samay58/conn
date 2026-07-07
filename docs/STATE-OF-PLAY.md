@@ -1,0 +1,277 @@
+# Conn: state of play
+
+Written 2026-07-06. A single "where we are" document for Conn, separate from the
+design specs (intent) and the orchestration ledger (token accounting and gate
+results). Read this first to reload the project; then go to the specs for the
+why and the plan for the packet-by-packet how.
+
+## What Conn is, in one paragraph
+
+Conn is a push-to-talk voice command surface for the Mac, built on the OpenAI
+Realtime API (gpt-realtime-2). You hold a key, say a command, release. Conn
+understands the target, takes the smallest safe action through a local tool
+harness, shows an approval chip for anything risky, and leaves a trace and a
+cost receipt for every session. No always-on mic, no ambient screen watching,
+no chatbot. The name is the naval handoff of steering authority: "you have the
+conn" is spoken, bounded, revocable command. Push-to-talk is taking the conn;
+the stop button is "belay that."
+
+## Why it exists (the product thesis)
+
+Voice is worth using only where it beats the keyboard. Conn bets on three spots
+first: app switching while your hands are mid-task, vault search without
+breaking focus, and read-back of current context. The safety model is the whole
+point: the model proposes, the harness disposes. Low-risk actions run at once;
+risky actions wait behind a crisp approval chip stating exactly what will
+happen; disabled actions return structured refusals so the model learns the
+boundary. Every session is traced and priced, so you can prove where voice
+actually beat the keyboard rather than demo it once.
+
+The north star, recorded for scope honesty: Conn is meant to become a general,
+flexible computer tool. The current rounds build the surface, the speed
+discipline, and the reliability spine that generality will ride on. Capability
+breadth (arbitrary UI control, per-app profiles, a write lane into Phoenix)
+stays deliberately out until traces show the need.
+
+## The three hard safety invariants
+
+These are never traded away, in any packet:
+
+1. **The harness owns permissions; the model only proposes.** Risk levels map
+   to gates: `read` and `act_low` run immediately, `act_confirm` shows a chip
+   and waits (30s then denied), `blocked` returns a structured refusal. Config
+   can escalate any tool but can never unblock a v0-disabled tool.
+2. **Continuations are withheld until tool results are real.** The model cannot
+   speak about a tool outcome until the daemon sends the function result and
+   issues the next `response.create`. A pending-call ledger enforces
+   all-calls-resolved-before-continuation. This is the anti-hallucination
+   invariant: there is no window where the model can claim something happened
+   before it did.
+3. **The budget cap is a hard stop.** `response.create` is the only spend
+   trigger and the daemon owns every one, so the budget gate is one function in
+   one place. Default $1.00/session hard cap, warn at $0.50.
+
+Two more rules earned from incidents: **approvals are pointer-only** (a stray
+Return keystroke once silently approved a real action, so the panel/island
+never takes keyboard focus), and as of the July 5 round, **the loop never lies
+about being alive** (any death of the transport, upstream session, or daemon
+becomes user-visible state within one second, and no surface reports health it
+has not verified).
+
+## Architecture
+
+One Python daemon owns everything; thin views render it.
+
+- **The daemon** (Phoenix `.venv`, single asyncio loop) holds the WebSocket to
+  OpenAI, the API key, PTT-gated mic capture, audio playback, the tool harness,
+  approvals, traces, and the cost meter. A native process owning raw audio is
+  the documented WebSocket case, so there is no ephemeral-token dance and no
+  client that could leak the key. Sideband by construction.
+- **The web console** (vanilla HTML/CSS/JS at 127.0.0.1:8787) is a pure view
+  and approval surface. It never talks to OpenAI. It is now frozen as the
+  engineer's debug surface.
+- **The native macOS app** (`macos/`, SwiftUI + AppKit menu-bar app) is the
+  primary surface. It speaks the daemon's WebSocket protocol, autolaunches the
+  daemon if none is running, owns the Right Option hold-to-talk through its own
+  Accessibility grant, and installs to /Applications via `make-app.sh install`.
+- **Push-to-talk is dual**: hold Space in the console (zero TCC grants, always
+  works) or hold Right Option globally via the app's hotkey. Console PTT is the
+  foundation; the global hotkey is the upgrade.
+- **Typed input is a peer of voice**, not scaffolding: the same conversation-
+  item path drives live sessions, giving a free degraded mode when audio breaks.
+- **Demo mode swaps one adapter**: a scripted fake plays scenario files through
+  the identical machine, harness, trace, and cost paths, with zero credentials
+  and (with `--simulate-tools`) zero side effects.
+
+### The state machine
+
+Nine phases: idle, listening, thinking, acting, awaiting_approval, speaking,
+done, failed, budget_hold. The machine is pure (no I/O) and exhaustively tested,
+including barge-in, sub-300ms tap abort (zero spend), denial and timeout paths,
+budget hold, reconnect, reject-input, and any-phase watchdog.
+
+### Tool contract (v0 surface)
+
+Executable now: `computer_get_context` (frontmost app, window title, selected
+text via AX), `computer_screenshot` (local, deleted at session end),
+`app_open`/`app_switch` (allowlisted), `browser_search`, `phoenix_search` (qmd
+BM25), `phoenix_open_note` (obsidian:// URL, must resolve inside the vault),
+`clipboard_set`, `wait_for_user`.
+
+Specced and **blocked** in v0, schemas exported so the refusal path teaches the
+model: `computer_click`, `computer_type_text`, `computer_hotkey`,
+`computer_ax_tree`. These are the road to the general-tool north star and need
+per-app profiles with named, validated targets before they open. Zero
+`osascript` anywhere means zero Automation prompts. The shell allowlist ships
+empty.
+
+## Where the code lives (two repos)
+
+- **Working copy (private):** `~/phoenix/01-active/projects/conn`, inside the
+  Phoenix vault, whose git remote is `github.com/samay58/zindagi-phoenix`
+  (private). This is the active development home. All the vault's sync-daemon
+  commits land here.
+- **Public mirror:** `github.com/samay58/conn`, previously published via `git
+  subtree push` of the conn subtree only. **Set PRIVATE on 2026-07-07** after a
+  confidentiality sweep found career-confidential content live in its history:
+  a real career-exploration vault path (`operator-roles/every/...`) threaded
+  through the demo, and a naming-table aside naming the ATS in weekly personal
+  use. The believed-neutralized items were still present. The source tip is now
+  scrubbed (demo re-themed to a transformer-paper note; the ATS aside
+  neutralized), but the leak remains in the mirror's git history. Pending
+  deliberate follow-up: rewrite/purge the mirror history and republish clean
+  before it goes public again. Do not `subtree push` to it until then. The
+  private vault origin is never touched by the mirror push.
+- **Filed next step (idea ledger):** extract conn into a true standalone repo
+  outside the vault, to end mirror drift. It touches config paths, the
+  hardcoded DaemonLauncher paths (now partly resolved by C3), the daemon sync,
+  and TCC grants, so it is a deliberate dedicated-session job, good to pair with
+  the notch-app conceptual reframe.
+
+## What has been built
+
+### v0, shipped 2026-07-02
+
+The full daemon spine, harness, adapters, audio, hotkey, console, demo mode,
+cost model, receipts, traces, six harness evals, and the native menu-bar app
+with a floating voice panel, all in one day. Design captured in
+`docs/gpt-realtime-2-computer-agent-spec.md`. This is the reference the later
+rounds renegotiate from, not replace.
+
+### The July 5 UX-craft round (specs + Phases 0 and 1 executed)
+
+After a live test drive surfaced a two-day daemon wedge (stuck in `thinking`,
+healthz lying, PTT dead silently), the project opened a craft-and-reliability
+round. Two design docs govern it:
+
+- `docs/2026-07-05-ux-craft-spec.md`: the notch island becomes the primary
+  surface on the built-in display; the panel is demoted to non-notch fallback.
+  Every value is verifiable (a latency number a trace computes, an enumerated
+  state, a motion token, or a screenshot-checkable rule). Adds the reliability
+  invariant and a defect ledger of 8 verified `file:line` defects.
+- `docs/plans/2026-07-05-ux-craft-plan.md`: 19 packets across 6 phases, each
+  dispatched to a model tier, TDD-enforced, with mechanical + adversarial +
+  taste gates at every phase boundary.
+
+**Phase 0 (measure and stop lying, daemon) is complete.** Trace schema v2 with
+client timestamps, upstream-close honesty, state-machine effects (reject-input,
+any-phase watchdog), reliability wiring (healthz staleness fields, incremental
+receipts, send-failure disconnect path), latency spans and `--latency-report`,
+plus the launcher log file / zombie-adoption policy / toolchain probe. All 8
+reliability defects from the ledger addressed on the daemon side. Adversarial
+review caught a watchdog false-positive and non-atomic receipt writes, both
+remediated.
+
+**Phase 1 (island structure, Swift) is complete.** DesignTokens.swift plus a
+magic-number guard test, IslandGeometry derived from notch metrics (unit-tested,
+returns nil on non-notch screens), the IslandController nonactivating shell,
+client timing acks, and surface routing (island on notch displays, panel
+elsewhere, `CONN_FORCE_PANEL=1` forces the old panel). Adversarial review caught
+an invisible-island cgcolor bug (`Color.cgColor` is Optional and could no-op to
+black on a transparent panel), fixed inline.
+
+### The July 5 cleanup pass (C1 to C4, executed same evening)
+
+A narrow tightening pass before Phase 2, governed by
+`docs/2026-07-05-cleanup-execution-spec.md` and its adversarial review:
+
+- **C1:** a `ConnSurface` protocol; `AppDelegate` picks one `primarySurface` at
+  launch; the fallback panel is constructed lazily only when its debug action is
+  used or no island geometry exists. Removes the extra live surface on the
+  island path.
+- **C2:** `Conn --preview` rewritten around the island, not the old panel, so
+  the tuning loop optimizes the right surface.
+- **C3:** a daemon-launch path resolver (env override, then the known Phoenix
+  path, then clear failure) so a second machine no longer requires editing
+  source.
+- **C4:** the `events.py` boundary named (wire/protocol dataclasses only; no
+  behavior, timers, or policy) with a drift-visibility test.
+
+The app is installed to /Applications with the brass speaking-trumpet icon
+(Samay's pick) and pinned to the Dock.
+
+## Current state (as of 2026-07-07)
+
+- **Tests: 247 passing** (Python suite), grown through the capability round; Swift
+  `ConnTests` green; design-token guard and 12 demo evals green.
+- **Phases 0 and 1: done and gate-green.** Cleanup C1 to C4: done.
+- **Notch-island refine (2026-07-07):** the built-in-display island was repaired
+  from an oversized clipped pill to a notch-flush surface (square top under the
+  notch, content in a lane below it, no clip), synthetic geometry now adopts the
+  measured menu-bar inset, plus a restrained breathe-open on summon. Verified
+  live; commit `conn: refine notch island`. Not the full Phase 2 I6-I9 packet
+  set, a focused repair ahead of it.
+- **Vault main pushed. Public mirror is now PRIVATE** (see "Where the code lives")
+  pending a history purge; source tip scrubbed of career-confidential content.
+
+### Open items
+
+- **STOP 1 (Phase 0 hands-on reliability drill) is still deferred** by Samay's
+  skip-and-proceed call. It returns before the project closes: fresh build, five
+  real commands, wifi-kill mid-turn (Reconnecting visible within 1s), PTT during
+  thinking (reject pulse in the trace), and a `--latency-report` read on a live
+  session trace.
+- **Phase 2 (state vocabulary and typography) has not started.** It is the next
+  product work.
+
+## What's next: Phase 2
+
+Order I6 then I7 then I8 (shared visual language settles in sequence), I9
+parallel after I6:
+
+- **I6 [opus, ADV]:** `IslandView` rendering all nine machine phases distinctly
+  (the shipped panel's thinking/acting collision is a defect this fixes), plus
+  the toast line, budget-hold override target, and refusal pulse. Every literal
+  from DesignTokens.
+- **I7 [opus]:** the island waveform, state-gated (the 60fps TimelineView runs
+  only in listening/thinking/acting/speaking, static bars otherwise) and
+  re-paletted for black.
+- **I8 [opus, ADV]:** the chip row and approve beat inside the island silhouette
+  (island grows by chipRowHeight, no separate card), adversarially attacked for
+  focus-stealing and any path where Return could reach the panel.
+- **I9 [sonnet]:** the preview state cycler and `--shoot` screenshot rig (11
+  PNGs: nine phases plus toast and chip).
+
+Then **STOP 2**: Samay reviews the screenshot set and drives the preview cycler.
+Typography and state vocabulary must feel calm and non-AI before Phase 3 motion
+work begins.
+
+Phases 3 to 5 after that: the summon morph and personality physics with a live
+tuning playground (the signature round), then sound and the AX-via-app
+migration, then the full live-eval proof run.
+
+## Key files
+
+| File | What it is |
+|---|---|
+| `README.md` | Run instructions, permissions, environment contract, layout |
+| `docs/gpt-realtime-2-computer-agent-spec.md` | The v0 design spec (product thesis, architecture, tool contract, safety, cost, evals) |
+| `docs/2026-07-05-ux-craft-spec.md` | The island round: surface, latency budgets, motion, typography, sound, reliability invariant |
+| `docs/plans/2026-07-05-ux-craft-plan.md` | 19-packet execution plan with phase gates |
+| `docs/orchestration-ledger.md` | Token accounting and gate results per phase (Fable doctrine) |
+| `docs/idea-ledger.md` | Rejected and deferred ideas with concrete revisit triggers |
+| `docs/DEPLOYMENT.md` | Running Conn on a second Mac |
+| `docs/LIVE_EVAL_CHECKLIST.md` | Manual model-quality checklist (nine tasks) |
+| `src/conn/` | The daemon: state machine, harness, adapters, audio, hotkey, server |
+| `macos/Sources/Conn/` | The native app: island, panel, tokens, geometry, hotkey, daemon client |
+| `console/` | The frozen web debug console |
+
+## How to run it
+
+```bash
+# Native app (primary surface)
+cd macos && ./make-app.sh && open Conn.app
+
+# Demo, no credentials
+cd /Users/samaydhawan/phoenix/01-active/projects/conn
+PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --demo --simulate-tools
+
+# Live (key daemon-side only, never seen by the browser)
+export OPENAI_API_KEY=...
+PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn
+
+# Tests and evals
+PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m pytest tests -q   # 166 tests
+PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --eval       # harness evals
+PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --doctor     # TCC/grant check
+```

@@ -1,0 +1,52 @@
+{
+  "id": "stale-ref-round-trip",
+  "spoken": "re-snapshot and click the Search field in this window",
+  "match": ["re-snapshot", "search field", "this window"],
+  "segments": [
+    {
+      "say": "Taking a snapshot.",
+      "tools": [
+        {"name": "computer_ax_snapshot", "arguments": {"query": "Search"}}
+      ],
+      "usage": {
+        "input_tokens": 600, "output_tokens": 48,
+        "input_token_details": {"text_tokens": 440, "audio_tokens": 160, "cached_tokens": 320,
+                                  "cached_tokens_details": {"text_tokens": 320, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 16, "audio_tokens": 32}
+      }
+    },
+    {
+      "say": "Trying that ref.",
+      "tools": [
+        {"name": "computer_click", "arguments": {"snapshot_id": "__SNAPSHOT_ID__", "ref": "e2"}}
+      ],
+      "usage": {
+        "input_tokens": 700, "output_tokens": 42,
+        "input_token_details": {"text_tokens": 540, "audio_tokens": 160, "cached_tokens": 420,
+                                  "cached_tokens_details": {"text_tokens": 420, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 28}
+      }
+    },
+    {
+      "say": "That ref went stale. Taking one new snapshot.",
+      "tools": [
+        {"name": "computer_ax_snapshot", "arguments": {"query": "Search"}}
+      ],
+      "usage": {
+        "input_tokens": 800, "output_tokens": 58,
+        "input_token_details": {"text_tokens": 640, "audio_tokens": 160, "cached_tokens": 520,
+                                  "cached_tokens_details": {"text_tokens": 520, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 20, "audio_tokens": 38}
+      }
+    },
+    {
+      "say": "I re-read the window. Tell me which Search field now.",
+      "usage": {
+        "input_tokens": 860, "output_tokens": 40,
+        "input_token_details": {"text_tokens": 700, "audio_tokens": 160, "cached_tokens": 600,
+                                  "cached_tokens_details": {"text_tokens": 600, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 26}
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "focus-tab-ambiguity",
+  "spoken": "switch to the Alpha tab",
+  "match": ["switch", "alpha", "tab"],
+  "segments": [
+    {
+      "say": "Trying the tab title.",
+      "tools": [
+        {"name": "app_focus_tab", "arguments": {"title": "Alpha"}}
+      ],
+      "usage": {
+        "input_tokens": 590, "output_tokens": 40,
+        "input_token_details": {"text_tokens": 430, "audio_tokens": 160, "cached_tokens": 310,
+                                  "cached_tokens_details": {"text_tokens": 310, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 26}
+      }
+    },
+    {
+      "say": "I found multiple matching tabs. Say Alpha or Alphas.",
+      "usage": {
+        "input_tokens": 650, "output_tokens": 40,
+        "input_token_details": {"text_tokens": 490, "audio_tokens": 160, "cached_tokens": 390,
+                                  "cached_tokens_details": {"text_tokens": 390, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 26}
+      }
+    }
+  ]
+}

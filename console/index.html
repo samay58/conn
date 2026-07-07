@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conn</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="surface">
+  <header class="bar">
+    <div class="ident">
+      <span class="dot" id="conn-dot"></span>
+      <h1>Conn</h1>
+      <span class="mode" id="mode-label">demo</span>
+    </div>
+    <div class="bar-actions">
+      <button id="new-session" class="ghost" title="Fresh session, fresh context">New session</button>
+      <button id="stop" class="stop" title="Belay: cancel everything now">Stop</button>
+    </div>
+  </header>
+
+  <section class="transcript" id="transcript" aria-live="polite">
+    <p class="hint" id="hint">Hold <kbd>Space</kbd> and speak, or type a command below.
+    Low-risk actions run immediately; anything risky shows a chip first.</p>
+  </section>
+
+  <section class="chips" id="chips"></section>
+
+  <section class="command">
+    <button id="ptt" class="ptt" data-phase="idle">
+      <span class="ptt-state" id="ptt-state">Idle</span>
+      <span class="ptt-sub" id="ptt-sub">hold to talk</span>
+    </button>
+    <form id="text-form" autocomplete="off">
+      <input id="text-input" type="text" placeholder="Type a command instead"
+             spellcheck="false" maxlength="500">
+    </form>
+  </section>
+
+  <footer class="meter">
+    <details id="trace-panel">
+      <summary>
+        <span id="trace-count">0 events</span>
+        <span class="meter-cost" id="cost-line">$0.0000</span>
+      </summary>
+      <ol id="trace-list"></ol>
+      <div class="receipt" id="receipt"></div>
+    </details>
+  </footer>
+</main>
+
+<div class="toasts" id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "id": "copy-to-clipboard",
+  "spoken": "copy the qmd search command to my clipboard",
+  "match": ["copy", "clipboard"],
+  "segments": [
+    {
+      "say": "I will copy that to your clipboard. Approve to proceed.",
+      "tools": [
+        {"name": "clipboard_set", "arguments": {"text": "qmd search \"transformer paper\""}}
+      ],
+      "usage": {
+        "input_tokens": 700, "output_tokens": 70,
+        "input_token_details": {"text_tokens": 540, "audio_tokens": 160, "cached_tokens": 400,
+                                "cached_tokens_details": {"text_tokens": 400, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 24, "audio_tokens": 46}
+      }
+    },
+    {
+      "say": "Copied. Paste when ready.",
+      "usage": {
+        "input_tokens": 820, "output_tokens": 30,
+        "input_token_details": {"text_tokens": 660, "audio_tokens": 160, "cached_tokens": 620,
+                                "cached_tokens_details": {"text_tokens": 620, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 10, "audio_tokens": 20}
+      }
+    }
+  ]
+}

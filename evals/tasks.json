@@ -1,0 +1,83 @@
+{
+  "note": "Demo-mode eval cases. These verify the HARNESS: gating, approvals, refusals, continuation discipline, traces, receipts. Model quality (clarifying questions, disambiguation, recovery) is judged in live sessions with docs/LIVE_EVAL_CHECKLIST.md.",
+  "cases": [
+    {
+      "id": "open-app",
+      "input": "open obsidian",
+      "expect": {
+        "tools": ["app_open"],
+        "gates": {"app_open": "auto"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 0
+      }
+    },
+    {
+      "id": "vault-search-then-open",
+      "input": "find the transformer paper notes in my vault and open it",
+      "expect": {
+        "tools": ["phoenix_search", "phoenix_open_note"],
+        "gates": {"phoenix_search": "auto", "phoenix_open_note": "auto"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 0
+      }
+    },
+    {
+      "id": "context-read",
+      "input": "what app am I in right now",
+      "expect": {
+        "tools": ["computer_get_context"],
+        "gates": {"computer_get_context": "auto"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 0
+      }
+    },
+    {
+      "id": "clipboard-needs-approval-approve",
+      "input": "copy the qmd search command to my clipboard",
+      "risk_overrides": {"clipboard_set": "confirm"},
+      "approve": true,
+      "expect": {
+        "tools": ["clipboard_set"],
+        "gates": {"clipboard_set": "confirm"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 1,
+        "tool_ok": {"clipboard_set": true}
+      }
+    },
+    {
+      "id": "clipboard-needs-approval-deny",
+      "input": "copy the qmd search command to my clipboard",
+      "risk_overrides": {"clipboard_set": "confirm"},
+      "approve": false,
+      "expect": {
+        "tools": ["clipboard_set"],
+        "gates": {"clipboard_set": "confirm"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 1,
+        "tool_ok": {"clipboard_set": false}
+      }
+    },
+    {
+      "id": "blocked-ui-click-refused",
+      "input": "click the search field in this window",
+      "expect": {
+        "tools": ["computer_click"],
+        "gates": {"computer_click": "blocked"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 0,
+        "tool_ok": {"computer_click": false}
+      }
+    },
+    {
+      "id": "latency-v2-kinds-present",
+      "input": "open obsidian",
+      "expect": {
+        "tools": ["app_open"],
+        "gates": {"app_open": "auto"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 0,
+        "trace_kinds": ["phase_change", "model_delta", "audio_silent"]
+      }
+    }
+  ]
+}

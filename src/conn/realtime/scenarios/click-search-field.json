@@ -1,0 +1,28 @@
+{
+  "id": "click-search-field",
+  "spoken": "click the search field in this window",
+  "match": ["click", "press the", "type into"],
+  "segments": [
+    {
+      "say": "Trying the click.",
+      "tools": [
+        {"name": "computer_click", "arguments": {"selector": "Search field"}}
+      ],
+      "usage": {
+        "input_tokens": 540, "output_tokens": 32,
+        "input_token_details": {"text_tokens": 380, "audio_tokens": 160, "cached_tokens": 260,
+                                "cached_tokens_details": {"text_tokens": 260, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 10, "audio_tokens": 22}
+      }
+    },
+    {
+      "say": "Direct clicks are disabled in this version. I can open apps, search, or copy text instead.",
+      "usage": {
+        "input_tokens": 640, "output_tokens": 52,
+        "input_token_details": {"text_tokens": 480, "audio_tokens": 160, "cached_tokens": 440,
+                                "cached_tokens_details": {"text_tokens": 440, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 18, "audio_tokens": 34}
+      }
+    }
+  ]
+}

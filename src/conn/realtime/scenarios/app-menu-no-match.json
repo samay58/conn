@@ -1,0 +1,28 @@
+{
+  "id": "app-menu-no-match",
+  "spoken": "use the Preferences menu",
+  "match": ["preferences", "menu"],
+  "segments": [
+    {
+      "say": "Checking the menu bar.",
+      "tools": [
+        {"name": "app_menu", "arguments": {"path": ["Preferences"]}}
+      ],
+      "usage": {
+        "input_tokens": 600, "output_tokens": 42,
+        "input_token_details": {"text_tokens": 440, "audio_tokens": 160, "cached_tokens": 320,
+                                  "cached_tokens_details": {"text_tokens": 320, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 28}
+      }
+    },
+    {
+      "say": "I did not find that title. I found File, Edit, and View.",
+      "usage": {
+        "input_tokens": 670, "output_tokens": 42,
+        "input_token_details": {"text_tokens": 510, "audio_tokens": 160, "cached_tokens": 410,
+                                  "cached_tokens_details": {"text_tokens": 410, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 28}
+      }
+    }
+  ]
+}
