@@ -181,17 +181,20 @@ The app is installed to /Applications with the brass speaking-trumpet icon
 
 ## Current state (as of 2026-07-07, post stock-take)
 
-- **Tests: 247 Python + 17 Swift** (`ConnTests`, including the geometry and
-  island-motion suites); design-token guard 12/12 and demo evals 12/12 green.
+- **Tests: 256 Python + 19 Swift** (`ConnTests`, including the geometry,
+  island-motion, panel-focus, and waveform-tick suites); design-token guard
+  12/12 and demo evals 12/12 green.
 - **Phases 0 and 1: done and gate-green.** Cleanup C1 to C4: done.
-- **Phase 2 is partially done, not unstarted** (this corrects the earlier
-  draft of this file): packet I6, IslandView rendering all nine phases plus
-  toast, budget-hold override, and refusal pulse, executed 2026-07-06 in the
-  monorepo era and gate-green per the plan's execution record. I7 (waveform
-  rework), I8 (interactive chip beat), and I9 (preview retarget and
-  screenshot rig) remain open; IslandView carries a private interim waveform
-  until I7, and approvals on the island path render as a preview row with
-  the console still carrying the clicks until I8.
+- **Phase 2 is complete.** Packet I6 (IslandView rendering all nine phases
+  plus toast, budget-hold override, and refusal pulse) landed 2026-07-06.
+  The remainder landed 2026-07-07: I7 promoted the state-gated island
+  waveform into WaveformView.swift under the token guard, I8 put the
+  interactive approve/deny chip inside the island silhouette (pointer-only,
+  the approve click sends after a 120ms confirm settle so the daemon phase
+  change never clips the acknowledgment), and I9 retargeted PreviewWindow at
+  the canonical IslandView and added the `--shoot` screenshot rig. STOP 2
+  (Samay reviews the eleven-state screenshot set and drives the cycler) is
+  the open gate.
 - **Notch-island refine (2026-07-07):** the built-in-display island was
   repaired from an oversized clipped pill to a notch-flush surface, synthetic
   geometry adopts the measured menu-bar inset, and summon gained a restrained
@@ -227,23 +230,20 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   M packets, and P1 stay blocked behind it.
 - **Personality hand gate: pending.** Samay drives the hotkey and judges
   cute versus fidget; `aliveness` and the overshoot tokens are the knobs.
-- **Phase 2 remainder (I7, I8, I9) and STOP 2: not started.**
+- **STOP 2 (Phase 2 screenshot review): pending with Samay.** I7, I8, and
+  I9 landed 2026-07-07 and were reviewed and consolidated the same day
+  (gates green: 256 Python, 19 Swift, 12/12 evals; `--shoot` writes 11/11
+  PNGs). The open gate is Samay's own review of the screenshot set and a
+  hands-on drive of the preview cycler.
 
 ## What's next
 
 Canonical forward sequence: `docs/2026-07-07-roadmap.md` (blocks A through
 E, with rationale and exit criteria). Summary as of the stock-take:
 
-- **I7 [opus]:** the island waveform, state-gated (the 60fps TimelineView
-  runs only in listening/thinking/acting/speaking) and re-paletted for
-  black; WaveformView rejoins the token guard here.
-- **I8 [opus, ADV]:** the chip row and approve beat inside the island
-  silhouette, adversarially attacked for focus-stealing and any path where
-  Return could reach an approval.
-- **I9 [sonnet]:** the preview state cycler and `--shoot` screenshot rig;
-  must retarget PreviewWindow's forked island at the canonical IslandView.
-- **STOP 2:** Samay reviews the screenshot set and drives the preview
-  cycler.
+- **STOP 2:** Samay reviews the eleven-state screenshot set (`--shoot` writes
+  them) and drives the preview cycler. I7, I8, and I9 have landed; this is
+  the gate that closes Phase 2.
 - **Phase 3 remainder:** I12 (tuning playground with write-back) and the
   STOP 3 tuning sessions. The morph and personality behaviors themselves
   already shipped (see above); STOP 3 is where their values get tuned by
