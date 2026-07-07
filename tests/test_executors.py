@@ -54,14 +54,25 @@ class TestArgv:
 
 
 class TestPhoenixExecutors:
-    def test_qmd_search_argv_and_cwd(self, ctx):
-        with patch("conn.tools.phoenix.subprocess.run",
+    def test_qmd_search_argv_cwd_and_env(self, ctx):
+        with patch("conn.tools.phoenix.shutil.which", return_value="/fake/bin/qmd"), \
+             patch("conn.tools.phoenix.subprocess.run",
                    return_value=ok_proc(stdout="")) as run:
             run.return_value.stdout = ""
             phoenix.phoenix_search({"query": "transformer paper"}, ctx)
         argv = run.call_args.args[0]
-        assert argv == [ctx.cfg.phoenix.qmd_bin, "search", "transformer paper"]
+        assert argv == ["/fake/bin/qmd", "search", "transformer paper"]
         assert run.call_args.kwargs["cwd"] == ctx.cfg.phoenix.vault_root
+        # qmd's launcher script needs `node` beside it even when the daemon
+        # was spawned by the app with a minimal PATH.
+        assert run.call_args.kwargs["env"]["PATH"].startswith("/fake/bin")
+
+    def test_qmd_missing_raises_clear_error(self, ctx, tmp_path):
+        with patch("conn.tools.phoenix.shutil.which", return_value=None), \
+             patch("conn.tools.phoenix.Path.home", return_value=tmp_path), \
+             patch("conn.tools.phoenix.Path.exists", return_value=False):
+            with pytest.raises(ToolError, match="qmd_not_found"):
+                phoenix.phoenix_search({"query": "x"}, ctx)
 
     def test_open_note_builds_obsidian_url(self, ctx, tmp_path):
         note = tmp_path / "vault" / "01-active" / "tasks.md"

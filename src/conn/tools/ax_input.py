@@ -526,6 +526,12 @@ def _require_named_app_frontmost(args: dict, bundle_id: str) -> None:
         return
     if app == bundle_id or bundle_id in APP_BUNDLE_ALIASES.get(app, set()):
         return
+    # The model names apps the human way ("Terminal", "Kaku"); the alias map
+    # cannot enumerate every app, so fall back to matching the bundle id's
+    # last component against the normalized name.
+    tail = bundle_id.rsplit(".", 1)[-1].lower()
+    if tail and tail == app.lower().replace(" ", ""):
+        return
     raise ToolError(f"app_not_frontmost: {app}")
 
 

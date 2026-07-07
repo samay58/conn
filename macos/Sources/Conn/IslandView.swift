@@ -302,7 +302,6 @@ private struct IslandWaveform: View {
         let x = (Double(i) - Double(bars - 1) / 2) / (Double(bars) / 2)
         return max(exp(-1.9 * x * x), 0.22)
     }
-    private static let phases: [Double] = (0..<bars).map { Double($0) * 1.31 }
 
     private var animates: Bool {
         phase == "listening" || phase == "thinking" || phase == "acting" || phase == "speaking"
@@ -329,13 +328,20 @@ private struct IslandWaveform: View {
         }
     }
 
+    // A traveling wave with a slow swell rather than per-bar noise: the crest
+    // moves across the bar set so it reads as one fluid ribbon, and the mic or
+    // playback level drives most of the height so speech makes it surge.
     private func bars(at t: Double) -> some View {
         let busy = phase == "thinking" || phase == "acting"
         return HStack(spacing: 3) {
             ForEach(0..<Self.bars, id: \.self) { i in
-                let wobble = 0.5 + 0.5 * sin(t * 2.6 + Self.phases[i])
+                let travel = sin(t * 5.2 - Double(i) * 0.55)
+                let swell = 0.62 + 0.38 * sin(t * 1.7 + Double(i) * 0.22)
+                let wave = (0.55 + 0.45 * travel) * swell
                 let amplitude: Double = animates
-                    ? (busy ? 0.14 + 0.09 * wobble : max(level, 0.14) * (0.42 + 0.58 * wobble))
+                    ? (busy
+                        ? 0.10 + 0.12 * (0.5 + 0.5 * sin(t * 2.4 - Double(i) * 0.45))
+                        : min(max(level * 1.4, 0.16) * (0.35 + 0.65 * wave), 1.0))
                     : 0.05
                 let height = 3.0 + 21.0 * Self.envelope[i] * amplitude
                 Capsule(style: .continuous)

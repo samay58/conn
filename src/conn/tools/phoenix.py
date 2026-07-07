@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import quote
@@ -55,13 +57,46 @@ def parse_qmd_output(text: str) -> list[dict]:
     return results
 
 
+# The daemon is often spawned by Conn.app with a minimal PATH (no homebrew,
+# no nvm), where a bare "qmd" resolves to nothing and qmd's own launcher
+# script cannot find `node`. Resolve the binary explicitly and run it with
+# its own bin directory prepended to PATH so the node runtime beside it wins.
+def _qmd_command(qmd_bin: str) -> tuple[str, dict[str, str]]:
+    exe = shutil.which(qmd_bin)
+    if exe is None and not Path(qmd_bin).is_absolute():
+        def _version_key(p: Path) -> tuple:
+            name = p.parent.parent.name.lstrip("v")
+            try:
+                return tuple(int(part) for part in name.split("."))
+            except ValueError:
+                return (0,)
+
+        nvm_candidates = sorted(
+            Path.home().glob(".nvm/versions/node/*/bin/qmd"), key=_version_key
+        )
+        brew = Path("/opt/homebrew/bin/qmd")
+        if nvm_candidates:
+            exe = str(nvm_candidates[-1])
+        elif brew.exists():
+            exe = str(brew)
+    if exe is None:
+        raise ToolError(
+            "qmd_not_found: qmd is not on the daemon's PATH; "
+            "set phoenix.qmd_bin to an absolute path in the config"
+        )
+    env = dict(os.environ)
+    env["PATH"] = f"{Path(exe).parent}{os.pathsep}{env.get('PATH', '')}"
+    return exe, env
+
+
 def phoenix_search(args: dict, ctx: ExecutionContext) -> dict:
     query = args["query"]
     limit = int(args.get("limit", 5))
+    exe, env = _qmd_command(ctx.cfg.phoenix.qmd_bin)
     proc = subprocess.run(
-        [ctx.cfg.phoenix.qmd_bin, "search", query],
+        [exe, "search", query],
         capture_output=True, text=True, timeout=20,
-        cwd=ctx.cfg.phoenix.vault_root,
+        cwd=ctx.cfg.phoenix.vault_root, env=env,
     )
     if proc.returncode != 0:
         raise ToolError(f"qmd search failed: {proc.stderr.strip()[:300]}")

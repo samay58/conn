@@ -533,3 +533,15 @@ def test_fake_executors_cover_all_grounded_input_tools(ctx):
     assert FAKE_EXECUTORS["computer_hotkey"]({"combo": "cmd+shift+t"}, ctx)["combo"] == "cmd+shift+t"
     assert FAKE_EXECUTORS["app_focus_tab"]({"title": "Kaku"}, ctx)["focused"] == "Kaku"
     assert FAKE_EXECUTORS["app_menu"]({"path": ["File", "New Tab"]}, ctx)["pressed"] == ["File", "New Tab"]
+
+
+def test_named_app_frontmost_matches_bundle_tail():
+    from conn.tools.ax_input import _require_named_app_frontmost
+
+    # Apps outside the alias map match on the bundle id's last component.
+    _require_named_app_frontmost({"app": "Terminal"}, "com.apple.Terminal")
+    _require_named_app_frontmost({"app": "kaku"}, "com.example.Kaku")
+    # Alias map still works, and a real mismatch still refuses.
+    _require_named_app_frontmost({"app": "Google Chrome"}, "com.google.Chrome")
+    with pytest.raises(ToolError, match="app_not_frontmost: Safari"):
+        _require_named_app_frontmost({"app": "Safari"}, "com.google.Chrome")

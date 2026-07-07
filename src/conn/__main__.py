@@ -5,7 +5,7 @@
   python -m conn                   live gpt-realtime-2 session (needs OPENAI_API_KEY)
   python -m conn --doctor          environment and permission checks
   python -m conn --eval            run the demo eval suite, write trace artifacts
-  python -m conn --latency-report <trace.jsonl>   print latency spans + budget pass/fail
+  python -m conn --latency-report [trace.jsonl]   latency spans + budget pass/fail (default: newest trace)
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def main() -> None:
     parser.add_argument("--simulate-tools", action="store_true", help="with --demo: canned tool results, zero side effects")
     parser.add_argument("--doctor", action="store_true", help="run environment checks")
     parser.add_argument("--eval", action="store_true", help="run the demo eval suite")
-    parser.add_argument("--latency-report", type=Path, default=None, metavar="TRACE_JSONL", help="print latency spans and budget pass/fail for a trace file")
+    parser.add_argument("--latency-report", nargs="?", const="latest", default=None, metavar="TRACE_JSONL", help="print latency spans and budget pass/fail for a trace file (no argument: newest trace)")
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--no-audio", action="store_true", help="live mode without mic/speaker")
     parser.add_argument("--no-hotkey", action="store_true", help="disable the global hotkey")
@@ -38,7 +38,20 @@ def main() -> None:
     if args.latency_report:
         from .latency import format_report, spans
 
-        print(format_report(spans(args.latency_report)))
+        if str(args.latency_report) == "latest":
+            cfg = load_config(args.config)
+            traces = sorted(
+                cfg.data_dir.glob("traces/*/*.jsonl"),
+                key=lambda p: p.stat().st_mtime,
+            )
+            if not traces:
+                print(f"no traces found under {cfg.data_dir / 'traces'}", file=sys.stderr)
+                sys.exit(1)
+            trace_path = traces[-1]
+            print(f"trace: {trace_path}")
+        else:
+            trace_path = Path(args.latency_report)
+        print(format_report(spans(trace_path)))
         return
 
     cfg = load_config(args.config)
