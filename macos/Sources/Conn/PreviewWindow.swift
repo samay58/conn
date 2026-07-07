@@ -1,8 +1,13 @@
 import AppKit
 import SwiftUI
 
-// `Conn --preview`: deterministic render of the island states for design
-// iteration. No daemon, no interference with a live session.
+// `Conn --preview`: the canonical IslandView rendered against a fake AppState
+// per state, for design iteration. No daemon, no interference with a live
+// session. The cycler steps through all eleven reviewable states (nine phases
+// plus toast and chip open); Replay and Collapse drive the same reveal tokens
+// IslandController uses live. `Conn --preview --shoot <dir>` writes one PNG
+// per state headlessly from an offscreen window, so appearance animations and
+// the breath timeline settle before capture.
 
 @MainActor
 enum PreviewRunner {
@@ -10,28 +15,14 @@ enum PreviewRunner {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let samples = PreviewSample.makeAll()
-
-        var t = 0.0
-        Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { _ in
-            t += 1.0 / 30.0
-            let syllable = max(0, sin(t * 6.2)) * (0.55 + 0.45 * sin(t * 1.7))
-            let value = min(0.15 + syllable * 0.75, 1.0)
-            Task { @MainActor in
-                for sample in samples {
-                    switch sample.state.phase {
-                    case "listening":
-                        sample.state.level = value
-                    case "speaking":
-                        sample.state.level = value * 0.8
-                    case "thinking", "acting":
-                        sample.state.level = 0.18
-                    default:
-                        sample.state.level = 0
-                    }
-                }
-            }
+        let args = CommandLine.arguments
+        if let flag = args.firstIndex(of: "--shoot"), flag + 1 < args.count {
+            shoot(to: args[flag + 1])
+            exit(0)
         }
+
+        let samples = PreviewSample.makeAll()
+        startLevelTimer(samples: samples)
 
         let hosting = NSHostingView(rootView: IslandPreviewRoot(samples: samples))
         hosting.sizingOptions = [.preferredContentSize]
@@ -49,15 +40,101 @@ enum PreviewRunner {
         window.orderFrontRegardless()
         app.run()
     }
+
+    // Synthesized mic/playback levels so the waveform moves in the cycler.
+    private static func startLevelTimer(samples: [PreviewSample]) {
+        var t = 0.0
+        Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { _ in
+            t += 1.0 / 30.0
+            let syllable = max(0, sin(t * 6.2)) * (0.55 + 0.45 * sin(t * 1.7))
+            let value = min(0.15 + syllable * 0.75, 1.0)
+            Task { @MainActor in
+                for sample in samples {
+                    sample.state.level = sample.animatedLevel(from: value)
+                }
+            }
+        }
+    }
+
+    // Renders each state in an offscreen window, lets the run loop settle so
+    // onAppear fades and the breath timeline produce a real frame, then
+    // captures a 2x bitmap.
+    private static func shoot(to dir: String) {
+        let dirURL = URL(fileURLWithPath: dir, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+        let samples = PreviewSample.makeAll()
+        var written = 0
+        for sample in samples {
+            sample.state.level = sample.animatedLevel(from: 0.55)
+
+            let size = NSSize(width: 500, height: 240)
+            let hosting = NSHostingView(
+                rootView: PreviewStage(sample: sample, crosshair: false))
+            hosting.frame = NSRect(origin: .zero, size: size)
+
+            let window = NSWindow(
+                contentRect: NSRect(x: -3000, y: -3000, width: size.width, height: size.height),
+                styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.35))
+
+            guard let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(size.width) * 2, pixelsHigh: Int(size.height) * 2,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
+            else {
+                print("shoot: could not allocate bitmap for \(sample.id)")
+                continue
+            }
+            rep.size = size
+            hosting.cacheDisplay(in: hosting.bounds, to: rep)
+            window.contentView = nil
+            window.orderOut(nil)
+
+            let fileURL = dirURL.appendingPathComponent("\(sample.id).png")
+            guard let png = rep.representation(using: .png, properties: [:]),
+                  (try? png.write(to: fileURL)) != nil else {
+                print("shoot: could not write \(fileURL.path)")
+                continue
+            }
+            written += 1
+            print("wrote \(fileURL.path)")
+        }
+        print("\(written)/\(samples.count) states written")
+    }
 }
 
-private struct PreviewSample: Identifiable {
+@MainActor
+final class PreviewSample: Identifiable {
     let id: String
     let title: String
     let note: String
     let state: AppState
+    let reveal = IslandReveal()
+    let client: DaemonClient
 
-    @MainActor
+    private init(id: String, title: String, note: String, state: AppState) {
+        self.id = id
+        self.title = title
+        self.note = note
+        self.state = state
+        // Never connected: send() is a no-op without a socket, so the chip's
+        // buttons and ui_ack are inert in the preview.
+        self.client = DaemonClient(state: state)
+    }
+
+    func animatedLevel(from value: Double) -> Double {
+        switch state.phase {
+        case "listening": return value
+        case "speaking": return value * 0.8
+        case "thinking", "acting": return 0.18
+        default: return 0
+        }
+    }
+
     static func makeAll() -> [PreviewSample] {
         [
             sample("idle", "Idle", "no island is visible") { _ in },
@@ -73,18 +150,17 @@ private struct PreviewSample: Identifiable {
                 $0.userLine = "send Alex the address"
                 $0.spentUSD = 0.014
             },
-            sample("acting", "Acting", "tool name is visible") {
+            sample("acting", "Acting", "running tool name is visible") {
                 $0.connected = true
                 $0.live = true
-                $0.modelLine = "Searching the vault."
+                $0.chips = [Chip(id: "c0", preview: "Search vault: transformer paper",
+                                  status: "running")]
                 $0.spentUSD = 0.021
             },
-            sample("awaiting_approval", "Awaiting approval", "chip row opens inside the island") {
+            sample("awaiting_approval", "Awaiting approval",
+                   "approval treatment before the ledger lands (defensive render)") {
                 $0.connected = true
                 $0.live = true
-                $0.modelLine = "I can copy that to your clipboard."
-                $0.chips = [Chip(id: "c1", preview: "Copy 29 characters to clipboard",
-                                  status: "proposed")]
                 $0.spentUSD = 0.034
             },
             sample("speaking", "Speaking", "playback level in white") {
@@ -107,30 +183,94 @@ private struct PreviewSample: Identifiable {
             sample("budget_hold", "Budget hold", "hard cap with one override target") {
                 $0.connected = true
                 $0.live = true
-                $0.modelLine = "$ cap reached."
                 $0.spentUSD = 1.000
             },
-            sample("thinking", "Toast", "daemon toast replaces the state line") {
+            sample("toast", "Toast", "daemon toast replaces the state line",
+                   phase: "thinking") {
                 $0.connected = true
                 $0.live = true
                 $0.toast = "Receipt saved"
                 $0.modelLine = "Still thinking."
                 $0.spentUSD = 0.044
             },
+            sample("chip", "Chip open", "live Deny and Approve inside the island",
+                   phase: "awaiting_approval") {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "I can copy that to your clipboard."
+                $0.chips = [Chip(id: "c1", preview: "Copy 29 characters to clipboard",
+                                  status: "proposed")]
+                $0.spentUSD = 0.034
+            },
         ]
     }
 
-    @MainActor
     private static func sample(
-        _ phase: String,
+        _ id: String,
         _ title: String,
         _ note: String,
+        phase: String? = nil,
         configure: (AppState) -> Void
     ) -> PreviewSample {
         let state = AppState()
-        state.phase = phase
+        state.phase = phase ?? id
         configure(state)
-        return PreviewSample(id: "\(phase)-\(title)", title: title, note: note, state: state)
+        return PreviewSample(id: id, title: title, note: note, state: state)
+    }
+}
+
+// One state rendered on the stage backdrop: the canonical IslandView at its
+// live proportions, or the idle placeholder. The crosshair marks the stage
+// center for the optical-alignment check (the waveform must center on it).
+@MainActor
+struct PreviewStage: View {
+    let sample: PreviewSample
+    var crosshair: Bool
+
+    private static let notchInset: CGFloat = 30
+
+    private var chipOpen: Bool {
+        sample.state.phase == "awaiting_approval" && sample.state.pendingChip != nil
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            PreviewBackdropColor()
+            if sample.state.phase == "idle" {
+                IdlePreview()
+                    .frame(maxHeight: .infinity)
+            } else {
+                IslandView(
+                    state: sample.state,
+                    client: sample.client,
+                    topInset: Self.notchInset,
+                    reveal: sample.reveal)
+                .frame(width: 316,
+                       height: Self.notchInset + DesignTokens.islandContentHeight
+                           + (chipOpen ? DesignTokens.chipRowHeight : 0))
+            }
+            if crosshair {
+                CrosshairOverlay()
+            }
+        }
+        .frame(width: 500, height: 240)
+        .clipped()
+    }
+}
+
+private struct CrosshairOverlay: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            Path { p in
+                p.move(to: CGPoint(x: center.x, y: 0))
+                p.addLine(to: CGPoint(x: center.x, y: proxy.size.height))
+                p.move(to: CGPoint(x: 0, y: center.y))
+                p.addLine(to: CGPoint(x: proxy.size.width, y: center.y))
+            }
+            .stroke(Color(red: 0.85, green: 0.25, blue: 0.25).opacity(0.6), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -138,8 +278,7 @@ private struct PreviewSample: Identifiable {
 private struct IslandPreviewRoot: View {
     let samples: [PreviewSample]
     @State private var index = 1
-    @State private var replaySeed = 0
-    @State private var replayVisible = true
+    @State private var crosshair = false
 
     private var selected: PreviewSample { samples[index] }
 
@@ -152,7 +291,7 @@ private struct IslandPreviewRoot: View {
             }
         }
         .padding(28)
-        .background(PreviewBackdrop())
+        .background(PreviewBackdropColor())
     }
 
     private var header: some View {
@@ -161,7 +300,7 @@ private struct IslandPreviewRoot: View {
                 Text("Conn island preview")
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
-                Text("State, one line, cost, chip when needed. The old panel is not part of this loop.")
+                Text("The canonical IslandView against a fake state per phase. Replay drives the live reveal tokens.")
                     .font(.system(size: 13))
                     .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
             }
@@ -172,8 +311,11 @@ private struct IslandPreviewRoot: View {
 
     private var controls: some View {
         HStack(spacing: 8) {
+            Toggle("Crosshair", isOn: $crosshair)
+                .toggleStyle(.checkbox)
             Button("Previous") { move(-1) }
-            Button("Replay") { replay() }
+            Button("Replay") { selected.reveal.token &+= 1 }
+            Button("Collapse") { selected.reveal.collapseToken &+= 1 }
             Button("Next") { move(1) }
         }
         .buttonStyle(.bordered)
@@ -188,15 +330,11 @@ private struct IslandPreviewRoot: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
                     )
-                IslandPreviewSurface(
-                    state: selected.state,
-                    replaySeed: replaySeed,
-                    isVisible: replayVisible
-                )
+                PreviewStage(sample: selected, crosshair: crosshair)
                     .padding(.top, 10)
                     .id(selected.id)
             }
-            .frame(width: 500, height: 300)
+            .frame(width: 520, height: 300)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(selected.title)
@@ -242,189 +380,7 @@ private struct IslandPreviewRoot: View {
 
     private func move(_ delta: Int) {
         index = (index + delta + samples.count) % samples.count
-        replayVisible = true
     }
-
-    private func replay() {
-        withAnimation(.easeOut(duration: DesignTokens.chipOpenDuration)) {
-            replaySeed += 1
-            replayVisible = true
-        }
-
-        let phase = selected.state.phase
-        let seed = replaySeed
-        let delay: TimeInterval?
-        switch phase {
-        case "done":
-            delay = DesignTokens.doneSettleDuration + DesignTokens.doneCollapseDelay
-        case "failed":
-            delay = DesignTokens.failedCollapseDelay
-        default:
-            delay = nil
-        }
-        guard let delay else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard seed == replaySeed, selected.state.phase == phase else { return }
-            withAnimation(.easeOut(duration: DesignTokens.chipOpenDuration)) {
-                replayVisible = false
-            }
-        }
-    }
-}
-
-@MainActor
-private struct IslandPreviewSurface: View {
-    @ObservedObject var state: AppState
-    let replaySeed: Int
-    let isVisible: Bool
-
-    private var line: String {
-        if !state.modelLine.isEmpty { return state.modelLine }
-        if !state.userLine.isEmpty { return state.userLine }
-        switch state.phase {
-        case "listening": return "Listening."
-        case "thinking": return "Thinking."
-        case "acting": return "Using the current tool."
-        case "speaking": return "Speaking."
-        case "done": return "Done."
-        case "failed": return "Reconnecting."
-        case "budget_hold": return "$ cap reached."
-        default: return ""
-        }
-    }
-
-    private var chipOpen: Bool {
-        state.phase == "awaiting_approval" || state.pendingChip != nil
-    }
-
-    // Mirrors IslandView's live silhouette: square top flush to the notch,
-    // rounded bottom, all content in the lane below the notch.
-    private static let notch: CGFloat = 30
-
-    private var previewShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            topLeadingRadius: 0,
-            bottomLeadingRadius: DesignTokens.islandCornerRadius,
-            bottomTrailingRadius: DesignTokens.islandCornerRadius,
-            topTrailingRadius: 0,
-            style: .continuous)
-    }
-
-    private var primaryIsSpeech: Bool {
-        state.phase == "speaking" || state.phase == "acting"
-            || !state.modelLine.isEmpty || !state.userLine.isEmpty
-    }
-
-    var body: some View {
-        if state.phase == "idle" {
-            IdlePreview()
-        } else if !isVisible {
-            CollapsedPreview()
-        } else {
-            VStack(spacing: 0) {
-                Color.clear.frame(height: Self.notch)
-                VStack(spacing: 7) {
-                    VStack(spacing: 6) {
-                        PreviewWaveform(level: state.level, phase: state.phase)
-                        caption
-                    }
-                    .frame(maxHeight: .infinity)
-                    if let chip = state.pendingChip {
-                        approvalRow(chip)
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 7)
-                .padding(.bottom, 9)
-                .frame(maxHeight: .infinity)
-            }
-            .frame(width: 316,
-                   height: Self.notch + DesignTokens.islandContentHeight
-                       + (chipOpen ? DesignTokens.chipRowHeight : 0))
-            .background(previewShape.fill(DesignTokens.islandBg))
-            .overlay(
-                previewShape.strokeBorder(
-                    state.phase == "listening" ? DesignTokens.islandAccent.opacity(0.9) : .clear,
-                    lineWidth: 1)
-            )
-            .clipShape(previewShape)
-            .scaleEffect(replaySeed.isMultiple(of: 2) ? 1 : 0.992)
-            .animation(.easeInOut(duration: DesignTokens.stateWordCrossfade),
-                       value: state.stateLabel)
-            .animation(.easeOut(duration: DesignTokens.chipOpenDuration),
-                       value: chipOpen)
-        }
-    }
-
-    private var caption: some View {
-        HStack(spacing: 6) {
-            if state.phase == "done" {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(DesignTokens.islandGreen)
-            }
-            Text(state.toast ?? line)
-                .font(.system(size: primaryIsSpeech ? 12.5 : 11,
-                              weight: primaryIsSpeech ? .regular : .medium))
-                .foregroundStyle(captionColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .contentTransition(.opacity)
-            if state.spentUSD > 0 && !primaryIsSpeech && state.toast == nil {
-                Text(String(format: "$%.3f", state.spentUSD))
-                    .font(.system(size: 10.5, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(state.phase == "budget_hold"
-                                     ? DesignTokens.islandRed
-                                     : DesignTokens.islandTextSecondary.opacity(0.85))
-            }
-            if state.phase == "budget_hold" {
-                Text("override")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(DesignTokens.islandRed)
-            }
-        }
-        .frame(maxWidth: 280)
-    }
-
-    private var captionColor: Color {
-        if state.toast != nil { return DesignTokens.islandTextSecondary }
-        switch state.phase {
-        case "failed", "budget_hold": return DesignTokens.islandRed
-        case "awaiting_approval": return DesignTokens.islandAmber
-        case "done": return DesignTokens.islandGreen
-        case "speaking": return DesignTokens.islandText
-        default: return primaryIsSpeech ? DesignTokens.islandText : DesignTokens.islandTextSecondary
-        }
-    }
-
-    private func approvalRow(_ chip: Chip) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(DesignTokens.islandAmber)
-                .frame(width: 5, height: 5)
-            Text(chip.preview)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(DesignTokens.islandText)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 8)
-            Text("Deny")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DesignTokens.islandTextSecondary)
-            Text("Approve")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DesignTokens.islandBg)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(DesignTokens.islandText)
-                )
-        }
-        .frame(maxWidth: 280)
-    }
-
 }
 
 private struct IdlePreview: View {
@@ -438,54 +394,6 @@ private struct IdlePreview: View {
                 .foregroundStyle(Color.black.opacity(0.50))
         }
         .frame(width: 390, height: 132)
-    }
-}
-
-private struct CollapsedPreview: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.88))
-                .frame(width: 172, height: 28)
-            Text("Collapsed back into the notch.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.black.opacity(0.50))
-        }
-        .frame(width: 390, height: 132)
-    }
-}
-
-private struct PreviewWaveform: View {
-    var level: Double
-    var phase: String
-
-    private static let bars = 13
-    private static let envelope: [Double] = (0..<bars).map { i in
-        let x = (Double(i) - Double(bars - 1) / 2) / (Double(bars) / 2)
-        return max(exp(-2.0 * x * x), 0.24)
-    }
-
-    private var tint: Color {
-        switch phase {
-        case "listening": return DesignTokens.islandAccent
-        case "speaking": return DesignTokens.islandText
-        case "failed", "budget_hold": return DesignTokens.islandRed
-        case "awaiting_approval": return DesignTokens.islandAmber.opacity(0.45)
-        default: return DesignTokens.islandTextSecondary
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<Self.bars, id: \.self) { i in
-                let base = phase == "awaiting_approval" ? 0.03 : max(level, 0.08)
-                let height = 4.0 + 24.0 * Self.envelope[i] * base
-                Capsule(style: .continuous)
-                    .fill(tint)
-                    .frame(width: 4, height: max(height, 4))
-            }
-        }
-        .frame(height: 30)
     }
 }
 
@@ -510,7 +418,7 @@ private struct PreviewDot: View {
     }
 }
 
-private struct PreviewBackdrop: View {
+private struct PreviewBackdropColor: View {
     var body: some View {
         Color(red: 0.96, green: 0.95, blue: 0.92)
     }
