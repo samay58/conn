@@ -15,6 +15,8 @@ final class IslandController: ConnSurface {
     private let reveal = IslandReveal()
     private var subscriptions = Set<AnyCancellable>()
     private var collapseTimer: Timer?
+    private var orderOutTimer: Timer?
+    private var isCollapsing = false
 
     init(state: AppState, client: DaemonClient, geometry: IslandGeometry) {
         self.state = state
@@ -24,6 +26,7 @@ final class IslandController: ConnSurface {
             state: state,
             client: client,
             topInset: geometry.notchHeight,
+            collapsedScale: geometry.collapsedScale(),
             reveal: reveal))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
@@ -56,12 +59,15 @@ final class IslandController: ConnSurface {
 
     func summon(chipOpen: Bool = false) {
         cancelScheduledCollapse()
+        orderOutTimer?.invalidate()
+        orderOutTimer = nil
         let wasHidden = !panel.isVisible
         panel.setFrame(geometry.expandedFrame(chipOpen: chipOpen), display: false)
         panel.orderFrontRegardless()
-        if wasHidden {
-            // Replay the breathe-open only when the island arrives from the
-            // notch, not on every in-session phase tick.
+        // Replay the breathe-open only when the island arrives from the notch
+        // (or was mid-retreat), not on every in-session phase tick.
+        if wasHidden || isCollapsing {
+            isCollapsing = false
             reveal.token &+= 1
         }
     }
@@ -72,7 +78,19 @@ final class IslandController: ConnSurface {
 
     func collapse() {
         cancelScheduledCollapse()
-        panel.orderOut(nil)
+        guard panel.isVisible, !isCollapsing else { return }
+        isCollapsing = true
+        reveal.collapseToken &+= 1
+        orderOutTimer = Timer.scheduledTimer(
+            withTimeInterval: DesignTokens.collapseSpring.settlingDuration,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isCollapsing else { return }
+                self.isCollapsing = false
+                self.panel.orderOut(nil)
+            }
+        }
     }
 
     func hide() {

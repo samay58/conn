@@ -12,6 +12,7 @@ import SwiftUI
 @MainActor
 final class IslandReveal: ObservableObject {
     @Published var token = 0
+    @Published var collapseToken = 0
 }
 
 @MainActor
@@ -19,11 +20,13 @@ struct IslandView: View {
     @ObservedObject var state: AppState
     let client: DaemonClient
     var topInset: CGFloat = 32
+    var collapsedScale: (x: CGFloat, y: CGFloat) = (0.6, 0.35)
     @ObservedObject var reveal: IslandReveal
 
     @State private var shakeOffset: CGFloat = 0
-    @State private var revealScale: CGFloat = 1
-    @State private var revealOpacity: Double = 1
+    @State private var shapeScaleX: CGFloat = 1
+    @State private var shapeScaleY: CGFloat = 1
+    @State private var contentOpacity: Double = 1
 
     private var islandShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
@@ -38,22 +41,25 @@ struct IslandView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: topInset)
             belowNotch
-                .scaleEffect(x: 1, y: revealScale, anchor: .top)
-                .opacity(revealOpacity)
+                .opacity(contentOpacity)
                 .offset(x: shakeOffset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(islandShape.fill(DesignTokens.islandBg))
         .overlay(
+            // The top edge is hardware; the ring wraps sides and bottom only.
             islandShape.strokeBorder(
                 DesignTokens.islandAccent.opacity(state.phase == "listening" ? 0.9 : 0),
                 lineWidth: 1)
+                .mask(Rectangle().padding(.top, 1))
         )
         .clipShape(islandShape)
+        .scaleEffect(x: shapeScaleX, y: shapeScaleY, anchor: .top)
         .animation(.easeInOut(duration: DesignTokens.stateWordCrossfade), value: state.stateLabel)
         .task(id: state.toast) { await autoClearToast() }
         .onChange(of: state.rejectPulse) { _, _ in refusalPulse() }
         .onChange(of: reveal.token) { _, _ in breatheOpen() }
+        .onChange(of: reveal.collapseToken) { _, _ in breatheClosed() }
     }
 
     // MARK: below-notch content
@@ -176,16 +182,30 @@ struct IslandView: View {
 
     // MARK: effects
 
+    // Summon: the shape grows out of the notch rect; content lags the shape.
     private func breatheOpen() {
         var reset = Transaction()
         reset.disablesAnimations = true
         withTransaction(reset) {
-            revealScale = 0.94
-            revealOpacity = 0
+            shapeScaleX = collapsedScale.x
+            shapeScaleY = collapsedScale.y
+            contentOpacity = 0
         }
         withAnimation(.spring(DesignTokens.summonSpring)) {
-            revealScale = 1
-            revealOpacity = 1
+            shapeScaleX = 1
+            shapeScaleY = 1
+        }
+        withAnimation(.spring(DesignTokens.summonSpring).delay(DesignTokens.contentStaggerDelay)) {
+            contentOpacity = 1
+        }
+    }
+
+    // Collapse: content clears first, the shape retreats into the notch.
+    private func breatheClosed() {
+        withAnimation(.spring(DesignTokens.collapseSpring)) {
+            shapeScaleX = collapsedScale.x
+            shapeScaleY = collapsedScale.y
+            contentOpacity = 0
         }
     }
 

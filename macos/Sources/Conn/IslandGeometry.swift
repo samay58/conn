@@ -48,6 +48,14 @@ struct IslandGeometry {
         return frame
     }
 
+    // Scale fractions that map the expanded island back onto the bare notch
+    // rect. The summon morph grows the shape from these to 1; collapse returns
+    // to them, so the island visibly emerges from and retreats into the notch.
+    func collapsedScale(chipOpen: Bool = false) -> (x: CGFloat, y: CGFloat) {
+        let frame = expandedFrame(chipOpen: chipOpen)
+        return (notchRect.width / frame.width, notchRect.height / frame.height)
+    }
+
     static func syntheticBuiltIn(
         screenFrame: CGRect,
         topInset: CGFloat = syntheticNotchHeightFallback

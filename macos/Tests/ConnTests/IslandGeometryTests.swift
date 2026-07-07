@@ -82,6 +82,24 @@ final class IslandGeometryTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(frame.height - geometry.notchRect.height, 52)
     }
 
+    func testCollapsedScaleMapsExpandedFrameBackOntoNotch() {
+        let geometry = IslandGeometry.syntheticBuiltIn(
+            screenFrame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            topInset: 30
+        )
+        guard let geometry else {
+            XCTFail("expected non-nil geometry")
+            return
+        }
+
+        let frame = geometry.expandedFrame(chipOpen: false)
+        let scale = geometry.collapsedScale()
+        XCTAssertEqual(frame.width * scale.x, geometry.notchRect.width, accuracy: 0.001)
+        XCTAssertEqual(frame.height * scale.y, geometry.notchRect.height, accuracy: 0.001)
+        XCTAssertLessThan(scale.x, 1)
+        XCTAssertLessThan(scale.y, 1)
+    }
+
     func testMainBuiltInScreenGetsIslandGeometry() throws {
         let screen = try XCTUnwrap(NSScreen.main)
         guard screen.localizedName.lowercased().contains("built-in") else { return }
