@@ -27,6 +27,7 @@ From Phase 1 on, the orchestrator runs on Opus 4.8, not Fable; the Fable budget 
 | 2026-07-05 | 955b6504 | Teardown, spec, plan | 333,448 | 84,366 | 80% (by design) | Teardown workflow wf_7214cbe4: 5 sonnet readers, effort low; all 5 completed, 0 errors; spot-checks confirmed findings. Spec and decomposition are what Fable tokens are for. |
 | 2026-07-05 | 955b6504 | Plan Phase 0 execution | 164,105 | 375,718 | 30% | Build workflow wf_64ca02bc: 9 agents (4 sonnet builders, 2 sonnet wave-2 builders, 3 opus reviewers), 305,421 out. Remediation workflow wf_d488b223: sonnet fixer + opus re-reviewer, 70,297 out. Fable overhead was gate work: two workflow scripts, finding verification, six-diff taste pass. |
 | 2026-07-05 | 955b6504 | Plan Phase 1 execution | Opus orch (frozen, not computed) | 552,745 | n/a (Opus orch) | Build workflow wf_35e7042c: 5 sonnet builders (I1 97,577; I2 91,528; I3 84,013; I4 92,758; I5 94,670) plus 1 opus adversarial reviewer (92,199), 552,745 out aggregate, 0 errors. Orchestrator now Opus per the freeze note; overhead was grounding, the gate, one inline one-line remediation, and this entry. |
+| 2026-07-07 | 0a5d02fd | Personality motion (I10/I11 substance) + doc stock-take | 186,885 (session total) | 0 | 100% (solo, by directive) | Samay-directed solo Fable round on the design-sensitive motion core; no subagents dispatched. Within the doctrine's solo carve-out (serially dependent, taste-critical, one tightly specced packet), but a doctrine deviation worth the flag: implementation ran on Fable rather than down-ladder. Friction note: the earlier refine round (`conn: refine notch island`, separate session) was never token-logged; measurement gap. |
 
 ## Session log 2026-07-05
 
@@ -70,6 +71,14 @@ Filled during execution sessions. Format: phase, mechanical gate command and res
 - Taste: Gate G brief written at `docs/2026-07-06-gate-g-fable-brief.md` with the prompt diff, refusal texts, and snapshot render sample. Fable taste review remains pending, so STOP-G is the current stop.
 - Token accounting by tier: unavailable from the Codex `multi_agent_v1` surface. The API returned agent final reports and commit evidence, but no per-agent usage object. Treat this as a measurement gap, not an efficiency proof. Friction note: the earlier truncated G4 spawn and the stopped outside agent both converged on the same G4 commit; the duplicate agent was closed and no duplicate files remained.
 - Stop state: Gate G mechanical and adversarial checks are green. Do not start X1, M packets, P1, or the queued island merge lane until Samay completes STOP-G and the Fable taste review passes.
+
+### Island refine and personality motion rounds (2026-07-07)
+
+Two Samay-directed solo sessions outside the packet dispatch flow, landing between Phase 2's I6 and the I7-I9 remainder. They deliver the substance of Phase 3 packets I10 and I11; execution records live in the plan under those packets.
+
+- Refine round (commit `conn: refine notch island`): island repaired to notch-flush geometry, synthetic menu-bar-inset adoption, breathe-open summon. Verified live by Samay. Session not token-logged (measurement gap noted in the Sessions table).
+- Personality round (session 0a5d02fd, commit 7361b6c): mechanical gates all green: `swift test` 17/17 (also run green with aliveness temporarily 0, then restored), token guard 12/12, pytest 247/247, evals 12/12, app rebuilt and installed to /Applications. Live verification: websocket-driven session recorded at /tmp/conn-island-motion.mov, frame-level analysis confirmed the summon overshoot frames, the 3.2s breath period at the island's bottom edge, animated tap-abort and belay retracts, and the exhale dip at done entry; no dismissal path vanishes in one frame. Spec updated in the same commit (whimsy ceiling renegotiated per Samay's directive); the motion-table summon and collapse rows were reconciled to the shipped per-axis springs in the stock-take commit that followed.
+- Deviations, both by Samay's direct instruction: solo Fable execution instead of down-ladder dispatch, and no adversarial review on the diff. The 12-principles adversarial pass and the Fable taste pass on a recording from I10's done-definition fold into STOP 3. Open taste gate: Samay's hand test, pending.
 
 ## Final report
 

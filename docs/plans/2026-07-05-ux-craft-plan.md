@@ -331,7 +331,9 @@ Order: I10 then I11 (same files); I12 parallel with I11 once I10 lands.
 - [ ] Implement; verify by preview replay and live key-down; token guard green.
 - [ ] Commit `conn: summon and collapse morph`.
 
-**Done:** guard green; adversarial reviewer scores the morph against the 12-principles skill (squash/stretch, anticipation, follow-through) and the spec's ≤3% overshoot line; Fable taste pass on a screen recording.
+**Done:** guard green; adversarial reviewer scores the morph against the 12-principles skill (squash/stretch, anticipation, follow-through) and the spec's overshoot tokens; Fable taste pass on a screen recording.
+
+Execution record 2026-07-07: the morph substance shipped across two Samay-directed solo rounds rather than a dispatched packet, ahead of I7-I9: `conn: refine notch island` (shape grows from the notch rect with content stagger) and 7361b6c `conn: island personality motion` (width leads height by squashWidthLeadMs, per-axis springs with damping derived from the overshoot tokens, mirrored staggered collapse, panel order-out waits for the trailing spring). Every dismissal path was verified to retract through the morph via frame-level recording analysis. The adversarial 12-principles score and the Fable taste pass on a recording did not run; both fold into STOP 3.
 
 ### Packet I11: Personality behaviors [opus, effort high]
 
@@ -344,6 +346,8 @@ Order: I10 then I11 (same files); I12 parallel with I11 once I10 lands.
 - [ ] Commit `conn: breath and exhale personality`.
 
 **Done:** test green; STOP 3 judges the feel.
+
+Execution record 2026-07-07 (commit 7361b6c, same round as I10's second half): breath while listening via a TimelineView paused in every other phase, exhale on done entry, all three behaviors scaled by aliveness. Deviations from the packet: the planned identical-frames XCTest became IslandMotionTests (the overshoot-to-damping inversion pinned at aliveness 1 and 0) plus live frame-level recording verification of the 3.2s breath period; WaveformView was left untouched (it remains I7's file, and the interim island waveform already gates its timeline by phase). The spec's whimsy ceiling was renegotiated for summon and retract in the same commit per Samay's directive. STOP 3 judges the feel.
 
 ### Packet I12: Tuning playground [sonnet, effort default]
 

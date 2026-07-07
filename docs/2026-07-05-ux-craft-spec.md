@@ -99,8 +99,8 @@ Motion policy: the island's shape and content move only on state change, breath,
 
 | Motion | Value (tuned) | Notes |
 |---|---|---|
-| Summon morph | spring(response 0.28, dampingFraction 0.80), content opacity staggered +80ms behind shape | Overshoot allowed, ≤3% of final width; the biomimetic beat |
-| Collapse | spring(response 0.22, dampingFraction 0.90) | Faster and more damped than summon; exits should feel certain |
+| Summon morph | per-axis springs at response 0.28, damping derived from the personality overshoot tokens (width 2%, height 4%); width leads height by the 40ms lead; content opacity staggered +80ms behind shape | Overshoot per the Personality table; the biomimetic beat |
+| Collapse | spring(response 0.22, damping 0.90); height retreats first with content, width trails by the same 40ms lead; the panel orders out only after the trailing spring settles | Faster and more damped than summon; exits should feel certain; the summon played backward |
 | Chip open/close | 160ms easeOut on shape growth, buttons fade +60ms | Replaces the unimplemented 140ms and shipped 180ms |
 | State word crossfade | 120ms easeInOut | |
 | Done settle | 320ms green tick fade-in, collapse at +900ms | |

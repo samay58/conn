@@ -16,19 +16,21 @@ Full design: [docs/gpt-realtime-2-computer-agent-spec.md](docs/gpt-realtime-2-co
 cd macos && ./make-app.sh && open Conn.app
 ```
 
-Menu-bar app with a floating voice panel: waveform, state, transcript,
-approval chips, live cost. It autolaunches the daemon if one is not running
-(live if a key resolves, demo otherwise). Hold Right Option to talk once
-Accessibility is granted to Conn.app (menu: Enable Global Hotkey). The panel
-never takes keyboard focus; approvals are deliberate clicks only. `Conn
---preview` renders the panel's key states for design iteration.
-
-A notch-integrated island surface is in active development (spec:
+Menu-bar app whose primary surface is the notch island: a black surface
+that grows out of the notch on key-down with waveform, state word,
+transcript, and live cost, breathes quietly while listening, and retreats
+into the notch when the turn ends (spec:
 [docs/2026-07-05-ux-craft-spec.md](docs/2026-07-05-ux-craft-spec.md), plan:
 [docs/plans/2026-07-05-ux-craft-plan.md](docs/plans/2026-07-05-ux-craft-plan.md)).
-On a notch display a fresh build routes to it and the panel becomes the
-fallback; the shipped install stays on the panel until the island carries
-content.
+The app autolaunches the daemon if one is not running (live if a key
+resolves, demo otherwise). Hold Right Option to talk once Accessibility is
+granted to Conn.app (menu: Enable Global Hotkey). No Conn surface ever
+takes keyboard focus; approvals are deliberate clicks only. On non-notch
+displays the older floating panel is the fallback surface. `Conn --preview`
+renders key states for design iteration. The interactive approve/deny beat
+inside the island lands with packet I8; until then the island shows an
+approval preview row and the web console at 127.0.0.1:8787 carries the
+approval clicks.
 
 ## Quickstart (demo, no credentials)
 

@@ -179,55 +179,74 @@ A narrow tightening pass before Phase 2, governed by
 The app is installed to /Applications with the brass speaking-trumpet icon
 (Samay's pick) and pinned to the Dock.
 
-## Current state (as of 2026-07-07)
+## Current state (as of 2026-07-07, post stock-take)
 
-- **Tests: 247 passing** (Python suite), grown through the capability round; Swift
-  `ConnTests` green; design-token guard and 12 demo evals green.
+- **Tests: 247 Python + 17 Swift** (`ConnTests`, including the geometry and
+  island-motion suites); design-token guard 12/12 and demo evals 12/12 green.
 - **Phases 0 and 1: done and gate-green.** Cleanup C1 to C4: done.
-- **Notch-island refine (2026-07-07):** the built-in-display island was repaired
-  from an oversized clipped pill to a notch-flush surface (square top under the
-  notch, content in a lane below it, no clip), synthetic geometry now adopts the
-  measured menu-bar inset, plus a restrained breathe-open on summon. Verified
-  live; commit `conn: refine notch island`. Not the full Phase 2 I6-I9 packet
-  set, a focused repair ahead of it.
+- **Phase 2 is partially done, not unstarted** (this corrects the earlier
+  draft of this file): packet I6, IslandView rendering all nine phases plus
+  toast, budget-hold override, and refusal pulse, executed 2026-07-06 in the
+  monorepo era and gate-green per the plan's execution record. I7 (waveform
+  rework), I8 (interactive chip beat), and I9 (preview retarget and
+  screenshot rig) remain open; IslandView carries a private interim waveform
+  until I7, and approvals on the island path render as a preview row with
+  the console still carrying the clicks until I8.
+- **Notch-island refine (2026-07-07):** the built-in-display island was
+  repaired from an oversized clipped pill to a notch-flush surface, synthetic
+  geometry adopts the measured menu-bar inset, and summon gained a restrained
+  breathe-open. Verified live; commit `conn: refine notch island`.
+- **Island personality motion (2026-07-07, commit 7361b6c):** the substance
+  of Phase 3 packets I10 and I11, executed ahead of I7-I9 by Samay's
+  directive. Squash-and-stretch summon (width leads height by 40ms, per-axis
+  spring damping derived from the 2% and 4% overshoot tokens), breath while
+  listening (plus or minus 1.5%, 3.2s, TimelineView paused in every other
+  phase), exhale on done, and a mirrored staggered retract on every
+  dismissal path; all scaled by `aliveness` (0 renders fully static,
+  verified both ways). The spec's whimsy ceiling was renegotiated for the
+  summon and retract beats in the same commit. Verified live with
+  frame-level analysis of a screen recording; Samay's hand-on-hotkey
+  judgment is the open taste gate.
 - **Standalone repo published** (see "Where the code lives"); the old subtree
   mirror is retired and replaced by this repo's clean history.
 
 ### Open items
 
-- **STOP 1 (Phase 0 hands-on reliability drill) is still deferred** by Samay's
-  skip-and-proceed call. It returns before the project closes: fresh build, five
-  real commands, wifi-kill mid-turn (Reconnecting visible within 1s), PTT during
-  thinking (reject pulse in the trace), and a `--latency-report` read on a live
-  session trace.
-- **Phase 2 (state vocabulary and typography) has not started.** It is the next
-  product work.
+- **STOP 1 (Phase 0 hands-on reliability drill): deferred** by Samay's
+  skip-and-proceed call; returns before the project closes (drill script:
+  docs/STOP1-manual-drill.md). Fresh build, five real commands, wifi-kill
+  mid-turn, PTT during thinking, `--latency-report` on a live trace.
+- **STOP-G (capability round taste review): pending.** Gate G mechanical and
+  adversarial checks are green; the Fable taste review of
+  docs/2026-07-06-gate-g-fable-brief.md has not run. Per the ledger, X1, the
+  M packets, and P1 stay blocked behind it.
+- **Personality hand gate: pending.** Samay drives the hotkey and judges
+  cute versus fidget; `aliveness` and the overshoot tokens are the knobs.
+- **Phase 2 remainder (I7, I8, I9) and STOP 2: not started.**
 
-## What's next: Phase 2
+## What's next
 
-Order I6 then I7 then I8 (shared visual language settles in sequence), I9
-parallel after I6:
+Order of work, restated after the 2026-07-07 stock-take:
 
-- **I6 [opus, ADV]:** `IslandView` rendering all nine machine phases distinctly
-  (the shipped panel's thinking/acting collision is a defect this fixes), plus
-  the toast line, budget-hold override target, and refusal pulse. Every literal
-  from DesignTokens.
-- **I7 [opus]:** the island waveform, state-gated (the 60fps TimelineView runs
-  only in listening/thinking/acting/speaking, static bars otherwise) and
-  re-paletted for black.
-- **I8 [opus, ADV]:** the chip row and approve beat inside the island silhouette
-  (island grows by chipRowHeight, no separate card), adversarially attacked for
-  focus-stealing and any path where Return could reach the panel.
-- **I9 [sonnet]:** the preview state cycler and `--shoot` screenshot rig (11
-  PNGs: nine phases plus toast and chip).
+- **I7 [opus]:** the island waveform, state-gated (the 60fps TimelineView
+  runs only in listening/thinking/acting/speaking) and re-paletted for
+  black; WaveformView rejoins the token guard here.
+- **I8 [opus, ADV]:** the chip row and approve beat inside the island
+  silhouette, adversarially attacked for focus-stealing and any path where
+  Return could reach an approval.
+- **I9 [sonnet]:** the preview state cycler and `--shoot` screenshot rig;
+  must retarget PreviewWindow's forked island at the canonical IslandView.
+- **STOP 2:** Samay reviews the screenshot set and drives the preview
+  cycler.
+- **Phase 3 remainder:** I12 (tuning playground with write-back) and the
+  STOP 3 tuning sessions. The morph and personality behaviors themselves
+  already shipped (see above); STOP 3 is where their values get tuned by
+  hand and written back to tokens and spec tables in one commit, and where
+  the deferred adversarial 12-principles pass and taste-on-recording from
+  I10's done-definition land.
 
-Then **STOP 2**: Samay reviews the screenshot set and drives the preview cycler.
-Typography and state vocabulary must feel calm and non-AI before Phase 3 motion
-work begins.
-
-Phases 3 to 5 after that: the summon morph and personality physics with a live
-tuning playground (the signature round), then sound and the AX-via-app
-migration, then the full live-eval proof run.
+Phases 4 and 5 after that: sound and the AX-via-app migration, then the full
+live-eval proof run.
 
 ## Key files
 
@@ -260,7 +279,7 @@ export OPENAI_API_KEY=...
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
 
 # Tests and evals
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 166 tests
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 247 tests
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # harness evals
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor     # TCC/grant check
 ```
