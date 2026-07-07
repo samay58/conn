@@ -15,7 +15,7 @@ from typing import Callable
 from ..config import Config
 from ..events import Gate
 from .ax_input import _normalize_combo
-from .base import ExecutionContext
+from .base import ExecutionContext, app_matches_bundle
 
 
 class RiskLevel(StrEnum):
@@ -33,11 +33,6 @@ _LEVEL_TO_GATE = {
 }
 
 CLIPBOARD_MAX_CHARS = 100_000
-APP_BUNDLE_ALIASES = {
-    "Google Chrome": {"com.google.Chrome"},
-    "Safari": {"com.apple.Safari"},
-    "Obsidian": {"md.obsidian"},
-}
 
 
 def _guard_app_allowlist(args: dict, cfg: Config) -> str | None:
@@ -75,9 +70,7 @@ def _guard_present_app_frontmost(args: dict, cfg: Config, ctx: ExecutionContext 
 
 
 def _app_matches_bundle(app: str, bundle_id: str) -> bool:
-    if app == bundle_id:
-        return True
-    return bundle_id in APP_BUNDLE_ALIASES.get(app, set())
+    return app_matches_bundle(app, bundle_id)
 
 
 def _exception_reason(exc: Exception) -> str:

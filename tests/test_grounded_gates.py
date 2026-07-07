@@ -288,6 +288,24 @@ def test_app_qualified_tools_allow_matching_frontmost_app(cfg, tmp_path):
     assert menu_call.gate is Gate.CONFIRM
 
 
+def test_app_qualified_tools_match_bundle_tail_outside_alias_map(cfg, tmp_path):
+    # Live regression 2026-07-07: "Use menu: Shell > New Tab" on Terminal was
+    # blocked app_not_frontmost because Terminal is not in the alias map even
+    # though com.apple.Terminal was frontmost.
+    cfg.apps.allowlist = cfg.apps.allowlist + ["Terminal"]
+    harness, _ctx, _store, _backend, _snap = make_ctx(
+        cfg,
+        tmp_path,
+        node("AXWindow", "Main"),
+        bundle="com.apple.Terminal",
+    )
+
+    menu_call = gate(harness, "app_menu", {"path": ["Shell", "New Tab"], "app": "Terminal"})
+
+    assert menu_call.gate is Gate.CONFIRM
+    assert menu_call.block_reason is None
+
+
 def test_expired_auto_grounded_call_is_reblocked_at_run_time(cfg, tmp_path, monkeypatch):
     import asyncio
     import conn.tools.ax as ax

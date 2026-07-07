@@ -6,7 +6,7 @@ import os
 from typing import Protocol
 
 from .ax import RawNode
-from .base import ExecutionContext, ToolError
+from .base import ExecutionContext, ToolError, app_matches_bundle
 
 MAX_TEXT_CHARS = 2000
 TYPE_CHUNK_CHARS = 20
@@ -23,11 +23,6 @@ BROWSER_BUNDLES = {
     "com.brave.Browser",
     "org.chromium.Chromium",
     "com.operasoftware.Opera",
-}
-APP_BUNDLE_ALIASES = {
-    "Google Chrome": {"com.google.Chrome"},
-    "Safari": {"com.apple.Safari"},
-    "Obsidian": {"md.obsidian"},
 }
 MODIFIER_FLAGS = {
     "cmd": 1 << 20,
@@ -524,15 +519,8 @@ def _require_named_app_frontmost(args: dict, bundle_id: str) -> None:
     app = str(args.get("app") or "").strip()
     if not app:
         return
-    if app == bundle_id or bundle_id in APP_BUNDLE_ALIASES.get(app, set()):
-        return
-    # The model names apps the human way ("Terminal", "Kaku"); the alias map
-    # cannot enumerate every app, so fall back to matching the bundle id's
-    # last component against the normalized name.
-    tail = bundle_id.rsplit(".", 1)[-1].lower()
-    if tail and tail == app.lower().replace(" ", ""):
-        return
-    raise ToolError(f"app_not_frontmost: {app}")
+    if not app_matches_bundle(app, bundle_id):
+        raise ToolError(f"app_not_frontmost: {app}")
 
 
 def _submit_uncertain(bundle_id: str, element, raw: RawNode) -> bool:
