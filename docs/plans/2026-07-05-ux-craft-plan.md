@@ -289,6 +289,8 @@ Execution record 2026-07-06: two commits (33b9510f1 IslandView + host, 01b8dbaa9
 
 **Done:** `swift test --filter WaveformTests` green; token guard green.
 
+Cold-start notes (2026-07-07, for execution without Fable; load fable-judgment and fable-execution first): the island no longer uses WaveformView at all. IslandView.swift carries a private `IslandWaveform` (15 capsule bars, gaussian envelope, traveling wave plus slow swell, level-driven, timeline gated to the four active phases) that Samay approved live for fluidity. I7 is therefore a promotion-and-reconcile packet, not a rewrite: extract `IslandWaveform` into WaveformView.swift as the canonical island waveform (keep the felt motion exactly; the constants are shape parameters, not motion tokens, and may stay inline), keep the fallback panel rendering working, remove WaveformView.swift from EXCLUDED_FILES in tests/test_design_tokens.py and make the file guard-clean, and add the tickCount XCTest as specced. Do not regress the fluid feel: the traveling-wave constants (5.2 temporal, 0.55 spatial, 1.7/0.22 swell, level*1.4 floor 0.16) are the approved baseline.
+
 ### Packet I8: Chip row and approve beat [opus, effort high] [ADV]
 
 **Files:**
@@ -301,6 +303,8 @@ Execution record 2026-07-06: two commits (33b9510f1 IslandView + host, 01b8dbaa9
 
 **Done:** build + token guard green; preview chip state screenshot; adversarial reviewer attacks the approve beat for focus-stealing, mis-click geometry (buttons at least 24pt tall targets), and any path where Return could reach the panel.
 
+Cold-start notes (2026-07-07, for execution without Fable; load fable-judgment, fable-execution, and fable-verification first): this is now the highest-priority packet; live use shows confirm-gated actions (app_menu and friends) dying on the 30s timeout because the approve click still lives on the web console. Current state to build from: IslandView.swift renders a non-interactive `approvalRow` (amber dot plus preview) when phase is awaiting_approval and `state.pendingChip` is set; IslandGeometry.expandedFrame(chipOpen:) already grows the frame by chipRowHeight and IslandController.apply already summons with chipOpen on awaiting_approval. Replace the preview row with the interactive IslandChipView per the interface above. Wire buttons to the daemon's real approval message, verified against console/app.js and server/http.py on 2026-07-07: `{"type": "approval", "call_id": <chip id>, "approved": true|false}` (check AppState's Chip model for which field carries call_id). Safety invariants, non-negotiable and adversarially attacked: IslandPanel keeps canBecomeKey and canBecomeMain false, buttons are `.buttonStyle(.plain)` pointer targets with no keyboard equivalents, no `.keyboardShortcut`, no focusable controls, no default-button styling. The retract-on-collapse morph must keep working when the chip row is open (the collapsed scale for chipOpen frames comes from IslandGeometry.collapsedScale(chipOpen:)). Mechanical gate additions: the existing pointer-only tests in tests/ (grep test_grounded_gates and Swift tests for focus assertions) stay green; hand test is typing in another app while a chip is up, zero keystroke loss, Return does nothing.
+
 ### Packet I9: Preview states + screenshot rig [sonnet, effort low]
 
 **Files:**
@@ -312,6 +316,8 @@ Execution record 2026-07-06: two commits (33b9510f1 IslandView + host, 01b8dbaa9
 - [ ] Commit `conn: preview state cycler and screenshot rig`.
 
 **Done:** 11 PNGs exist and are reviewed at the phase gate.
+
+Cold-start notes (2026-07-07, for execution without Fable; load fable-execution first): PreviewWindow.swift still carries its own private island fork (IslandPreviewSurface, left by cleanup C2); this packet's first job is deleting that fork and rendering the canonical IslandView with a fake AppState per phase, otherwise the screenshots review the wrong surface. IslandView now takes (state, client, topInset, collapsedScale, reveal: IslandReveal); drive the summon/collapse replay by bumping reveal.token / reveal.collapseToken. The `--shoot` rig must set state.phase per sample and give the breath TimelineView one frame to settle; breath only runs in listening, so only that PNG varies frame to frame (capture is still deterministic enough for review). Eleven states: the nine phases plus toast and chip open.
 
 ### STOP 2 (end of Phase 2): Samay reviews the screenshot set and drives the preview cycler. Typography and state vocabulary must feel calm and non-AI before motion work begins.
 
@@ -361,6 +367,8 @@ Execution record 2026-07-07 (commit 7361b6c, same round as I10's second half): b
 - [ ] Commit `conn: tuning playground with write-back`.
 
 **Done:** the write-back file diff round-trips; token guard still green after a write-back.
+
+Cold-start notes (2026-07-07, for execution without Fable; load fable-judgment and fable-execution first): DesignTokens.swift has grown a derived section since this packet was written: `squashWidthLead`, `summonWidthSpring`, and `summonHeightSpring` are computed from the raw personality tokens via `springOvershooting(_:response:)` (overshoot fraction inverted to a damping ratio). The inspector exposes only raw tokens (aliveness, breath*, squash*, exhale*, springs, durations, palette); derived values recompute and are displayed read-only, and the write-back regenerates the raw literals plus the derived block verbatim from a template, never from slider state. IslandMotionTests pins the derived math; a write-back that breaks those tests is wrong. The replay button drives IslandReveal.token / collapseToken exactly as IslandController does. Aliveness slider at 0 must render the fully static island live, which doubles as the acceptance demo.
 
 ### STOP 3 (end of Phase 3): tuning sessions. Samay drives the playground and the live hotkey until summon, breath, exhale, chip, and belay feel right. Tuned values written back to DesignTokens.swift AND the spec tables in one commit. The phase does not close until Samay says the morph is award-grade, and the ≤3% overshoot line in the spec is updated if taste moved it.
 
