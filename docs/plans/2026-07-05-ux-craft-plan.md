@@ -403,6 +403,8 @@ Cold-start notes (2026-07-07, for execution without Fable; load fable-judgment a
 
 **Done:** tests green; manual: with zero grants on the python binary, "copy this selection" round-trips real selected text (closes the live-eval task 4 gap).
 
+Rescope (2026-07-07): the capability round shipped grounded UI control (snapshot, click, menu, focus_tab) inside the python daemon on python's own AX grant, so "python AX code and its grant requirement retired" is no longer achievable in this packet; the grant stays as long as grounded control lives daemon-side. S2 narrows to: `computer_get_context` reads route through the app client (the interface above is unchanged), python AX remains the fallback and the grounded-control path. The full AX-via-app migration is a separate future decision, logged in the roadmap.
+
 ### Packet S3: Frontmost filtering [haiku, effort low]
 
 **Files:**

@@ -231,7 +231,8 @@ The app is installed to /Applications with the brass speaking-trumpet icon
 
 ## What's next
 
-Order of work, restated after the 2026-07-07 stock-take:
+Canonical forward sequence: `docs/2026-07-07-roadmap.md` (blocks A through
+E, with rationale and exit criteria). Summary as of the stock-take:
 
 - **I7 [opus]:** the island waveform, state-gated (the 60fps TimelineView
   runs only in listening/thinking/acting/speaking) and re-paletted for
