@@ -6,8 +6,8 @@ struct DaemonLaunchConfig: Equatable {
 }
 
 enum DaemonLauncher {
-    static let defaultPython = "/Users/samaydhawan/phoenix/.venv/bin/python"
-    static let defaultProjectRoot = "/Users/samaydhawan/phoenix/01-active/projects/conn"
+    static let defaultPython = "/Users/samaydhawan/conn/.venv/bin/python"
+    static let defaultProjectRoot = "/Users/samaydhawan/conn"
     static let health = URL(string: "http://127.0.0.1:8787/healthz")!
     static let port = 8787
     static let logRetentionDays = 7

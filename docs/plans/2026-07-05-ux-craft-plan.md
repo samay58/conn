@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Working dir: `/Users/samaydhawan/phoenix/01-active/projects/conn`. Python: `PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python`. Never create a second venv.
+- Working dir: `/Users/samaydhawan/conn`. Python: `PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python`. Never create a second venv.
 - Baseline `python -m pytest tests -q` was 82 passed at Phase 0 start (the original 81 undercounted; 162 after Phase 1); every packet leaves the full suite green. Swift: `./make-app.sh` builds bare via the R4 toolchain probe, and raw `swift build`/`swift test` still need `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` on this machine.
 - Safety invariants are untouchable: harness gates every tool call, continuations withheld until results are real, budget hard stop, approvals pointer-only, island/panel window always `styleMask [.borderless, .nonactivatingPanel]` and never key.
 - Every animation duration, spring, and palette value in Swift lives in `DesignTokens.swift` only (enforced by test I1-T1). Spec tables in `docs/2026-07-05-ux-craft-spec.md` are the source of truth; tuned values get written back there in the same commit that changes the tokens.

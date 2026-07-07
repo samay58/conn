@@ -6,7 +6,7 @@ lines and this gate closes. Everything else in Phases 0/1 is already green.
 ## Setup
 
 ```bash
-cd /Users/samaydhawan/phoenix/01-active/projects/conn
+cd /Users/samaydhawan/conn
 export OPENAI_API_KEY=...        # daemon-side only; never in config or logs
 ```
 
@@ -15,7 +15,7 @@ Two surfaces. Drills 1-4 use the daemon + console. Drills 5-6 use the app.
 ## Surface A: daemon + console (drills 1-4)
 
 ```bash
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
 # browser: http://127.0.0.1:8787 ; hold Space to talk
 ```
 
@@ -58,7 +58,7 @@ After the session, read the newest trace.
 
 ```bash
 ls -t data/traces/2026-07-06/*.jsonl | head -1
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --latency-report data/traces/2026-07-06/<newest>.jsonl
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --latency-report data/traces/2026-07-06/<newest>.jsonl
 ```
 
 - WATCH: six spans print with budget pass/fail.

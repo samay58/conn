@@ -411,9 +411,9 @@ connect_timeout_s = 3.0
 
 **Dependencies:** G1 adds `pyobjc-framework-Cocoa`,
 `pyobjc-framework-ApplicationServices`, `pyobjc-framework-Quartz` to
-`pyproject.toml` (verified importable in the Phoenix `.venv` already; the
+`pyproject.toml` (verified importable in the conn `.venv` already; the
 declaration closes a latent deploy bug). M1 adds `mcp>=1.2` to
-`pyproject.toml` AND installs it into `/Users/samaydhawan/phoenix/.venv`
+`pyproject.toml` AND installs it into `/Users/samaydhawan/conn/.venv`
 (verified absent as of 2026-07-06); M1 re-runs the full baseline after
 install before writing any test.
 
@@ -447,7 +447,7 @@ boundary (output tokens by tier, gate results).
 - TDD order: failing test → run, expect FAIL → implement → full suite green →
   commit `conn: <lowercase imperative>` (no em-dashes anywhere, including commits).
 - Baseline: 166 tests green via
-  `PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m pytest tests -q`.
+  `PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q`.
   Never reduce the count; never edit a file outside your packet's ownership list.
 - `events.py` stays wire/protocol dataclasses only. The state machine stays
   pure. No osascript. The three safety invariants are inviolable.
@@ -710,7 +710,7 @@ root-`anyOf` (replace with permissive object + description note), keep
 D10 with collision hashing. Stdio servers launched with the config `env` map
 merged over a minimal environment; env values never logged.
 
-- [ ] Install `mcp>=1.2` into `/Users/samaydhawan/phoenix/.venv`; re-run the
+- [ ] Install `mcp>=1.2` into `/Users/samaydhawan/conn/.venv`; re-run the
       full baseline green BEFORE writing tests.
 - [ ] Failing tests against an in-process fake MCP server (the `mcp` SDK's
       memory transport): start lists and filters to `expose`; non-exposed

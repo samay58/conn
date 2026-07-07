@@ -33,8 +33,8 @@ content.
 ## Quickstart (demo, no credentials)
 
 ```bash
-cd /Users/samaydhawan/phoenix/01-active/projects/conn
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --demo --simulate-tools
+cd /Users/samaydhawan/conn
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --demo --simulate-tools
 # open http://127.0.0.1:8787
 ```
 
@@ -48,7 +48,7 @@ scripted model against the real executors, so apps and notes actually open.
 
 ```bash
 export OPENAI_API_KEY=...   # daemon-side only; the browser never sees it
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
 ```
 
 Defaults: model gpt-realtime-2, voice marin, reasoning effort low, session
@@ -74,7 +74,7 @@ Ghostty). Pick one host and stay with it.
 Check the machine any time:
 
 ```bash
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --doctor
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor
 ```
 
 ## Environment contract
@@ -88,8 +88,8 @@ PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --doctor
 ## Evals and tests
 
 ```bash
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m pytest tests -q   # 162 tests, no hardware needed
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --eval       # 6 harness evals, writes artifacts
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 162 tests, no hardware needed
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # 6 harness evals, writes artifacts
 ```
 
 Live model quality has a manual checklist: [docs/LIVE_EVAL_CHECKLIST.md](docs/LIVE_EVAL_CHECKLIST.md).

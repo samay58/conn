@@ -105,28 +105,25 @@ per-app profiles with named, validated targets before they open. Zero
 `osascript` anywhere means zero Automation prompts. The shell allowlist ships
 empty.
 
-## Where the code lives (two repos)
+## Where the code lives (standalone as of 2026-07-07)
 
-- **Working copy (private):** `~/phoenix/01-active/projects/conn`, inside the
-  Phoenix vault, whose git remote is `github.com/samay58/zindagi-phoenix`
-  (private). This is the active development home. All the vault's sync-daemon
-  commits land here.
-- **Public mirror:** `github.com/samay58/conn`, previously published via `git
-  subtree push` of the conn subtree only. **Set PRIVATE on 2026-07-07** after a
-  confidentiality sweep found career-confidential content live in its history:
-  a real career-exploration vault path (`operator-roles/every/...`) threaded
-  through the demo, and a naming-table aside naming the ATS in weekly personal
-  use. The believed-neutralized items were still present. The source tip is now
-  scrubbed (demo re-themed to a transformer-paper note; the ATS aside
-  neutralized), but the leak remains in the mirror's git history. Pending
-  deliberate follow-up: rewrite/purge the mirror history and republish clean
-  before it goes public again. Do not `subtree push` to it until then. The
-  private vault origin is never touched by the mirror push.
-- **Filed next step (idea ledger):** extract conn into a true standalone repo
-  outside the vault, to end mirror drift. It touches config paths, the
-  hardcoded DaemonLauncher paths (now partly resolved by C3), the daemon sync,
-  and TCC grants, so it is a deliberate dedicated-session job, good to pair with
-  the notch-app conceptual reframe.
+- **Standalone repo:** `~/conn`, its own git repository with its own `.venv`.
+  Extracted from the Phoenix vault on 2026-07-07 (the idea-ledger next step,
+  executed). History starts fresh at the scrubbed tip; the full development
+  history remains in the private `github.com/samay58/zindagi-phoenix` repo. A
+  symlink at `~/phoenix/01-active/projects/conn` keeps old vault references
+  working, but the vault's git no longer tracks conn source and the sync
+  daemon no longer commits it.
+- **Old public mirror:** `github.com/samay58/conn`, previously published via
+  `git subtree push`. **Set PRIVATE on 2026-07-07** after a confidentiality
+  sweep found career-confidential content in its history (a real
+  career-exploration vault path threaded through the demo, plus a naming-table
+  aside naming the ATS in weekly personal use). The source tip was scrubbed,
+  but the leak remains in that mirror's git history. The standalone repo's
+  fresh history supersedes the mirror: the clean republish path is to delete
+  or replace `samay58/conn` with a push from `~/conn`, never to reuse the old
+  mirror history. No remote is configured yet; publishing is a deliberate,
+  user-confirmed step.
 
 ## What has been built
 
@@ -263,15 +260,15 @@ migration, then the full live-eval proof run.
 cd macos && ./make-app.sh && open Conn.app
 
 # Demo, no credentials
-cd /Users/samaydhawan/phoenix/01-active/projects/conn
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --demo --simulate-tools
+cd /Users/samaydhawan/conn
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --demo --simulate-tools
 
 # Live (key daemon-side only, never seen by the browser)
 export OPENAI_API_KEY=...
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
 
 # Tests and evals
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m pytest tests -q   # 166 tests
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --eval       # harness evals
-PYTHONPATH=src /Users/samaydhawan/phoenix/.venv/bin/python -m conn --doctor     # TCC/grant check
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 166 tests
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # harness evals
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor     # TCC/grant check
 ```

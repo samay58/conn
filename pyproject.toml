@@ -9,13 +9,14 @@ dependencies = [
     "uvicorn>=0.30",
     "pydantic>=2",
     "sounddevice>=0.5",
+    "numpy>=2",
     "pynput>=1.8",
     "pyobjc-framework-ApplicationServices>=11",
     "pyobjc-framework-Cocoa>=11",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.27"]
 
 [project.scripts]
 conn = "conn.__main__:main"
