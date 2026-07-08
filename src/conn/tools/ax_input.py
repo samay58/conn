@@ -80,6 +80,8 @@ KEYCODES = {
 
 
 class InputBackend(Protocol):
+    lane: str
+
     def posting_capability(self) -> bool: ...
     def ax_press(self, pid: int, path: tuple[int, ...]) -> bool: ...
     def click(self, x: float, y: float, *, pid: int | None = None, path: tuple[int, ...] | None = None) -> None: ...
@@ -95,6 +97,7 @@ class InputBackend(Protocol):
 
 @dataclass
 class FakeInputBackend:
+    lane = "python"
     posting_ok: bool = True
     window_frame: tuple[float, float, float, float] | None = (0.0, 0.0, 1440.0, 900.0)
     default_ax_press: bool = True
@@ -154,7 +157,60 @@ class FakeInputBackend:
         return supported
 
 
+class AppLaneInputBackend:
+    """computer_hotkey and app_menu through Conn.app's Accessibility grant
+    (T4): the app posts the chord or presses the menu item and answers over
+    the websocket. Only the ops those two tools need cross the wire; the
+    grounded lane (snapshot, click, type) stays on the python backend and
+    its own grant. Wire failures raise instead of falling back: a chord
+    that may or may not have posted must never be posted twice."""
+
+    lane = "app"
+
+    def __init__(self, bridge):
+        self._bridge = bridge
+
+    def posting_capability(self) -> bool:
+        return self._bridge.request_action_sync("posting_capability", {}) is True
+
+    def key_chord(self, keys: tuple[str, ...]) -> None:
+        result = self._bridge.request_action_sync("key_chord", {"keys": list(keys)})
+        if result is not True:
+            raise ToolError("app_lane_error: key chord did not post; is Conn.app still connected?")
+
+    def press_menu_path(self, pid: int, titles: tuple[str, ...]) -> bool:
+        result = self._bridge.request_action_sync(
+            "press_menu_path", {"pid": pid, "titles": list(titles)})
+        if result is None:
+            raise ToolError("app_lane_error: menu press did not answer; is Conn.app still connected?")
+        return bool(result)
+
+    def menu_tree(self, pid: int) -> RawNode | None:
+        data = self._bridge.request_action_sync("menu_tree", {"pid": pid, "max_depth": 8})
+        return _menu_node_from_wire(data)
+
+
+def _menu_node_from_wire(data: object, depth: int = 8) -> RawNode | None:
+    """Menu trees cross a process boundary; whitelist and coerce, and cap the
+    depth so a malformed answer cannot recurse away."""
+    if not isinstance(data, dict) or depth < 0:
+        return None
+    raw_children = data.get("children")
+    children = tuple(
+        node
+        for node in (
+            _menu_node_from_wire(child, depth - 1)
+            for child in (raw_children if isinstance(raw_children, list) else [])
+        )
+        if node is not None
+    )
+    return RawNode(role=str(data.get("role", "")), title=str(data.get("title", "")),
+                   children=children)
+
+
 class MacInputBackend:
+    lane = "python"
+
     def posting_capability(self) -> bool:
         try:
             from ApplicationServices import AXIsProcessTrusted, CGEventCreateKeyboardEvent, CGEventPostToPid
@@ -417,12 +473,12 @@ def scroll(args: dict, ctx: ExecutionContext) -> dict:
 
 
 def hotkey(args: dict, ctx: ExecutionContext) -> dict:
-    backend = _input_backend(ctx)
+    backend = _posting_backend(ctx)
     _require_posting(backend)
     combo = _normalize_combo(str(args["combo"]))
     keys = _parse_combo(combo)
     backend.key_chord(keys)
-    return {"combo": combo}
+    return {"combo": combo, "lane": backend.lane}
 
 
 def focus_tab(args: dict, ctx: ExecutionContext) -> dict:
@@ -455,11 +511,16 @@ def focus_tab(args: dict, ctx: ExecutionContext) -> dict:
 
 def menu(args: dict, ctx: ExecutionContext) -> dict:
     store = _store(ctx)
-    backend = _input_backend(ctx)
+    backend = _posting_backend(ctx)
     _require_posting(backend)
     bundle_id, pid = store.backend.frontmost()
     _require_named_app_frontmost(args, bundle_id)
-    root = getattr(store.backend, "menu_root", None) or store.backend.menu_bar(pid)
+    if isinstance(backend, AppLaneInputBackend):
+        root = backend.menu_tree(pid)
+        if root is None:
+            raise ToolError("app_lane_error: menu bar not readable through Conn.app")
+    else:
+        root = getattr(store.backend, "menu_root", None) or store.backend.menu_bar(pid)
     if root is None:
         return {"candidates": []}
     titles: list[str] = []
@@ -492,8 +553,27 @@ def _input_backend(ctx: ExecutionContext) -> InputBackend:
     return backend
 
 
+def _posting_backend(ctx: ExecutionContext) -> InputBackend:
+    """The backend for pure event posting (hotkey, menu press): Conn.app's
+    lane when the app is attached, the python lane otherwise. An injected
+    ctx.input_backend always wins so tests and callers can pin a lane."""
+    injected = getattr(ctx, "input_backend", None)
+    if injected is not None:
+        return injected
+    bridge = getattr(ctx, "ax_reader", None)
+    if bridge is not None and getattr(bridge, "app_present", False):
+        return AppLaneInputBackend(bridge)
+    return _input_backend(ctx)
+
+
 def _require_posting(backend: InputBackend) -> None:
     if not backend.posting_capability():
+        if getattr(backend, "lane", "python") == "app":
+            raise ToolError(
+                "accessibility_untrusted: app lane; Conn.app's Accessibility "
+                "grant is off. Toggle Conn off and on in System Settings, "
+                "Privacy and Security, Accessibility"
+            )
         from ..identity import grant_target
 
         raise ToolError(

@@ -285,7 +285,7 @@ def test_hotkey_parses_cmd_shift_t(cfg, ctx):
 
     result = hotkey({"combo": "cmd+shift+t"}, ctx)
 
-    assert result == {"combo": "cmd+shift+t"}
+    assert result == {"combo": "cmd+shift+t", "lane": "python"}
     assert input_backend.actions == [{"kind": "key_chord", "keys": ("cmd", "shift", "t")}]
 
 
@@ -299,7 +299,7 @@ def test_hotkey_aliases_meta_and_super_to_cmd(cfg, ctx, spoken):
 
     result = hotkey({"combo": spoken}, ctx)
 
-    assert result == {"combo": "cmd+t"}
+    assert result == {"combo": "cmd+t", "lane": "python"}
     assert input_backend.actions == [{"kind": "key_chord", "keys": ("cmd", "t")}]
 
 

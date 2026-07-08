@@ -74,6 +74,18 @@ final class DaemonClient {
                                 "data": data])
                 }
             }
+        case "ax_action":
+            guard let requestId = msg["request_id"] as? String else { return }
+            let op = msg["op"] as? String ?? ""
+            let params = msg["params"] as? [String: Any] ?? [:]
+            Task.detached { [weak self] in
+                let data = AxActionEngine.perform(op: op, params: params)
+                await MainActor.run { [weak self] in
+                    self?.send(["type": "ax_action_result",
+                                "request_id": requestId,
+                                "data": data ?? NSNull()])
+                }
+            }
         default:
             break
         }

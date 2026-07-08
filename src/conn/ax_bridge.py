@@ -44,10 +44,21 @@ class AxBridge:
     def request_context_sync(self) -> dict | None:
         """Thread-safe context read through the app. None means no app,
         timeout, or malformed answer: the caller falls back to python AX."""
+        data = self._round_trip(self.request())
+        return data if isinstance(data, dict) else None
+
+    def request_action_sync(self, op: str, params: dict) -> object | None:
+        """Thread-safe action through the app's grant (T4): key chords, menu
+        presses, menu tree reads. None means no app, timeout, or app-side
+        failure; the caller decides whether a python fallback is safe."""
+        return self._round_trip(self.request_action(op, params))
+
+    def _round_trip(self, coro) -> object | None:
         loop = self._loop
         if loop is None or self._publish is None or not self.app_present:
+            coro.close()
             return None
-        future = asyncio.run_coroutine_threadsafe(self.request(), loop)
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
         try:
             return future.result(self.timeout_s + 0.5)
         except Exception:
@@ -55,12 +66,20 @@ class AxBridge:
             return None
 
     async def request(self) -> dict | None:
+        data = await self._ask({"type": "ax_read"}, "axread")
+        return data if isinstance(data, dict) else None
+
+    async def request_action(self, op: str, params: dict) -> object | None:
+        return await self._ask(
+            {"type": "ax_action", "op": op, "params": params}, "axact")
+
+    async def _ask(self, message: dict, id_prefix: str) -> object | None:
         assert self._loop is not None and self._publish is not None
-        request_id = new_id("axread")
+        request_id = new_id(id_prefix)
         future: asyncio.Future = self._loop.create_future()
         self._pending[request_id] = future
         try:
-            self._publish({"type": "ax_read", "request_id": request_id})
+            self._publish({**message, "request_id": request_id})
             return await asyncio.wait_for(future, self.timeout_s)
         except asyncio.TimeoutError:
             return None
@@ -69,7 +88,8 @@ class AxBridge:
 
     def resolve(self, request_id: str, data: object) -> None:
         """Called on the loop when the app answers. Unknown ids (a late answer
-        after timeout) are dropped."""
+        after timeout) are dropped. Payload validation is the requester's
+        job: reads need a dict, actions may carry bools or trees."""
         future = self._pending.get(request_id)
         if future is not None and not future.done():
-            future.set_result(data if isinstance(data, dict) else None)
+            future.set_result(data)

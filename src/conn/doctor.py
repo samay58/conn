@@ -77,13 +77,14 @@ def _accessibility() -> dict:
                            "window titles and selected text available "
                            f"(process image: {identity['grant_target']})")
         return _result("accessibility", WARN,
-                       "not granted for this python. Context reads route through "
-                       "Conn.app's grant when the app is connected; the console-only "
-                       "path and the python fallback lane need this exact artifact "
-                       f"granted: {identity['grant_target']} (System Settings, "
-                       "Privacy and Security, Accessibility, then relaunch the "
-                       "daemon). TCC checks the running process image, not the venv "
-                       f"symlink; the image here is {identity['image']}")
+                       "not granted for this python. Context reads, hotkeys, and "
+                       "menu presses ride Conn.app's grant when the app is "
+                       "connected; only the grounded lane (snapshot, click, type) "
+                       "and app-less runs still need this exact artifact granted: "
+                       f"{identity['grant_target']} (System Settings, Privacy and "
+                       "Security, Accessibility, then relaunch the daemon). TCC "
+                       "checks the running process image, not the venv symlink; "
+                       f"the image here is {identity['image']}")
     except Exception as e:
         return _result("accessibility", FAIL, str(e))
 

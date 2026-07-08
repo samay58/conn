@@ -129,7 +129,7 @@ def client_role(msg: dict) -> str | None:
 
 async def handle_client(app: ConnApp, msg: dict) -> None:
     match msg.get("type"):
-        case "ax_read_result":
+        case "ax_read_result" | "ax_action_result":
             app.ax_bridge.resolve(str(msg.get("request_id", "")), msg.get("data"))
         case "ptt_down":
             await app.on_ptt_down(client_ts_ms=msg.get("client_ts_ms"),
