@@ -26,29 +26,35 @@ class Broadcaster:
     turn's trace event garbles the transcript)."""
 
     def __init__(self):
-        self._queues: dict[WebSocket, asyncio.Queue[str]] = {}
+        self._clients: dict[WebSocket, tuple[asyncio.Queue[str], asyncio.Task]] = {}
 
     @property
     def clients(self):
-        return self._queues.keys()
+        return self._clients.keys()
 
     def attach(self, ws: WebSocket) -> None:
         queue: asyncio.Queue[str] = asyncio.Queue()
-        self._queues[ws] = queue
-        asyncio.ensure_future(self._writer(ws, queue))
+        task = asyncio.ensure_future(self._writer(ws, queue))
+        self._clients[ws] = (queue, task)
 
     def detach(self, ws: WebSocket) -> None:
-        self._queues.pop(ws, None)
+        # Cancel the writer with its client, or loop teardown logs a
+        # destroyed-but-pending task per client that ever connected.
+        entry = self._clients.pop(ws, None)
+        if entry is not None:
+            entry[1].cancel()
 
     def publish(self, msg: dict) -> None:
         data = json.dumps(msg, default=str)
-        for queue in self._queues.values():
+        for queue, _task in self._clients.values():
             queue.put_nowait(data)
 
     async def _writer(self, ws: WebSocket, queue: asyncio.Queue[str]) -> None:
         try:
-            while ws in self._queues:
+            while ws in self._clients:
                 await ws.send_text(await queue.get())
+        except asyncio.CancelledError:
+            raise
         except Exception:
             self.detach(ws)
 
