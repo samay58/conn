@@ -67,19 +67,23 @@ def _mic() -> dict:
 
 def _accessibility() -> dict:
     try:
-        import sys
-
         from ApplicationServices import AXIsProcessTrusted
 
+        from .identity import describe_identity
+
+        identity = describe_identity()
         if AXIsProcessTrusted():
-            return _result("accessibility", OK, "window titles and selected text available")
-        binary = os.path.realpath(sys.executable)
+            return _result("accessibility", OK,
+                           "window titles and selected text available "
+                           f"(process image: {identity['grant_target']})")
         return _result("accessibility", WARN,
                        "not granted for this python. Context reads route through "
                        "Conn.app's grant when the app is connected; the console-only "
-                       "path and the grounded lane (snapshot, click, type) need this "
-                       f"exact binary granted: {binary} (System Settings, Privacy and "
-                       "Security, Accessibility, then relaunch the daemon)")
+                       "path and the python fallback lane need this exact artifact "
+                       f"granted: {identity['grant_target']} (System Settings, "
+                       "Privacy and Security, Accessibility, then relaunch the "
+                       "daemon). TCC checks the running process image, not the venv "
+                       f"symlink; the image here is {identity['image']}")
     except Exception as e:
         return _result("accessibility", FAIL, str(e))
 
@@ -87,6 +91,8 @@ def _accessibility() -> dict:
 def _input_posting() -> dict:
     try:
         from .tools.ax_input import MacInputBackend
+
+        from .identity import grant_target
 
         if MacInputBackend().posting_capability():
             return _result(
@@ -97,7 +103,9 @@ def _input_posting() -> dict:
         return _result(
             "input_posting",
             FAIL,
-            "CGEvent posting probe failed for this process identity. Run doctor the same way the daemon runs.",
+            "CGEvent posting probe failed for this process identity. Grant "
+            f"Accessibility to {grant_target()} and relaunch, or run doctor "
+            "the same way the daemon runs.",
         )
     except Exception as e:
         return _result("input_posting", FAIL, str(e))
