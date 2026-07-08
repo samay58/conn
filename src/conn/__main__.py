@@ -97,9 +97,18 @@ async def _serve(cfg, args) -> None:
         audio = None
         if not args.no_audio:
             try:
-                from .audio import AudioPipe
+                import sounddevice as sd
 
-                audio = AudioPipe(on_pcm=lambda pcm: None, on_drain=lambda: None)
+                from .audio import AudioPipe, resolve_input_device
+
+                device, device_warning = resolve_input_device(
+                    list(sd.query_devices()), cfg.audio.input_device)
+                if device_warning:
+                    print(device_warning, file=sys.stderr)
+                audio = AudioPipe(on_pcm=lambda pcm: None, on_drain=lambda: None,
+                                  preroll_ms=cfg.audio.preroll_ms,
+                                  input_device=device,
+                                  low_signal_rms=cfg.audio.low_signal_rms)
             except Exception as e:
                 print(f"audio unavailable ({e}); continuing in text mode", file=sys.stderr)
 
@@ -113,6 +122,7 @@ async def _serve(cfg, args) -> None:
         audio.on_pcm = lambda pcm: asyncio.ensure_future(adapter.append_audio(pcm))
         audio.on_drain = lambda: asyncio.ensure_future(app.dispatch(PlaybackDrained()))
         audio.on_level = lambda source, value: app.publish({"type": "level", "source": source, "value": round(value, 3)})
+        audio.on_low_signal = lambda peak: app.on_low_signal(peak)
         audio.start(loop)
 
     hotkey = None

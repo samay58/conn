@@ -20,8 +20,9 @@ FAIL = "fail"
 
 def run_doctor(cfg: Config) -> list[dict]:
     checks = [
-        _deps(), _api_key(cfg), _mic(), _accessibility(), _screencapture(),
-        _input_posting(), _qmd(cfg), _obsidian(cfg), _input_monitoring_note(),
+        _deps(), _api_key(cfg), _mic(), _input_devices(cfg), _accessibility(),
+        _screencapture(), _input_posting(), _qmd(cfg), _obsidian(cfg),
+        _input_monitoring_note(),
     ]
     return checks
 
@@ -63,6 +64,36 @@ def _mic() -> dict:
                        "grant Microphone to your terminal in System Settings, Privacy")
     except Exception as e:
         return _result("microphone", FAIL, f"could not record: {e}")
+
+
+def _input_devices(cfg: Config) -> dict:
+    try:
+        import sounddevice as sd
+
+        from .audio import resolve_input_device
+
+        devices = list(sd.query_devices())
+        selected, warning = resolve_input_device(devices, cfg.audio.input_device)
+        if warning:
+            return _result("input_devices", WARN, warning)
+        try:
+            default_input = int(sd.default.device[0])
+        except Exception:
+            default_input = -1
+        names = []
+        for index, device in enumerate(devices):
+            if int(device.get("max_input_channels", 0) or 0) <= 0:
+                continue
+            if index == selected:
+                marker = " (selected)"
+            elif selected is None and index == default_input:
+                marker = " (default, in use)"
+            else:
+                marker = ""
+            names.append(f"{device.get('name')}{marker}")
+        return _result("input_devices", OK, "; ".join(names) or "no input devices found")
+    except Exception as e:
+        return _result("input_devices", FAIL, str(e))
 
 
 def _accessibility() -> dict:

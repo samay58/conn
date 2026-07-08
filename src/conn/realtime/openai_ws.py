@@ -73,9 +73,19 @@ class OpenAIRealtimeAdapter:
             "session": {
                 "type": "realtime",
                 "reasoning": {"effort": self.cfg.realtime.reasoning_effort},
-                "audio": {"input": {"transcription": {"model": "gpt-realtime-whisper"}}},
+                "audio": {"input": {"transcription": self._transcription_config()}},
             },
         })
+
+    def _transcription_config(self) -> dict:
+        """A3: the language pin ends short clips decoding as whatever
+        language fits ("óperas serían" for "open Obsidian"). Empty config
+        value means no pin."""
+        transcription: dict = {"model": "gpt-realtime-whisper"}
+        language = self.cfg.realtime.transcription_language.strip()
+        if language:
+            transcription["language"] = language
+        return transcription
 
     async def close(self) -> None:
         self._closing = True

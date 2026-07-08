@@ -76,6 +76,8 @@ final class AppState: ObservableObject {
             toast = msg["text"] as? String
         case "reject_input":
             rejectPulse += 1
+        case "low_signal":
+            toast = "Barely heard you: speak up or check the input device"
         case "ax_grants":
             axWarning = Self.grantWarning(
                 appAx: msg["app_ax"] as? String,

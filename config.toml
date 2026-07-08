@@ -8,6 +8,12 @@ confirm = ["cmd+t", "cmd+w", "cmd+n"]   # tab/window verbs run behind the approv
 model = "gpt-realtime-2"
 voice = "marin"
 reasoning_effort = "low"
+transcription_language = "en"   # pins input transcription; short clips stop decoding as random languages
+
+[audio]
+preroll_ms = 400          # capture ring flushed ahead of live frames at PTT keydown, so the first syllable survives
+input_device = ""         # substring match against input device names; empty means system default
+low_signal_rms = 150.0    # listening windows peaking below this show a "barely heard you" hint
 
 [budget]
 session_cap_usd = 1.00

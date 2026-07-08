@@ -181,6 +181,13 @@ class ConnApp:
         self.trace.log("budget_override")
         await self.dispatch(BudgetOverride())
 
+    def on_low_signal(self, peak_rms: float) -> None:
+        """A2: the listening window closed too quiet to be an utterance.
+        Trace plus surface hint; no machine input, the turn proceeds and
+        the model may still answer from what little arrived."""
+        self.trace.log("low_signal", peak_rms=round(peak_rms, 1))
+        self.publish({"type": "low_signal", "peak_rms": round(peak_rms, 1)})
+
     async def on_ui_ack(self, moment: str, client_ts_ms: int | None) -> None:
         """Client reports the render pass that first showed a state. Trace
         only, no machine input: the daemon does not act on UI paint timing."""

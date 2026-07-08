@@ -19,12 +19,19 @@ class RealtimeCfg(BaseModel):
     model: str = "gpt-realtime-2"
     voice: str = "marin"
     reasoning_effort: str = "low"
+    transcription_language: str = "en"   # ISO 639-1 pin; empty lets short clips decode as any language
 
 
 class BudgetCfg(BaseModel):
     session_cap_usd: float = 1.00
     warn_at_usd: float = 0.50
     hard_stop: bool = True
+
+
+class AudioCfg(BaseModel):
+    preroll_ms: int = 400
+    input_device: str = ""          # substring match against input device names; empty = system default
+    low_signal_rms: float = 150.0   # listening windows peaking below this emit a low_signal hint
 
 
 class SessionCfg(BaseModel):
@@ -87,6 +94,7 @@ class Config(BaseModel):
         validation_alias=AliasChoices("hotkeys", "hotkey"),
     )
     realtime: RealtimeCfg = RealtimeCfg()
+    audio: AudioCfg = AudioCfg()
     budget: BudgetCfg = BudgetCfg()
     session: SessionCfg = SessionCfg()
     apps: AppsCfg = AppsCfg()
