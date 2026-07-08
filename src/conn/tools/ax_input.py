@@ -494,7 +494,13 @@ def _input_backend(ctx: ExecutionContext) -> InputBackend:
 
 def _require_posting(backend: InputBackend) -> None:
     if not backend.posting_capability():
-        raise ToolError("accessibility_untrusted")
+        from ..identity import grant_target
+
+        raise ToolError(
+            "accessibility_untrusted: python lane; grant Accessibility to "
+            f"{grant_target()} in System Settings, Privacy and Security, "
+            "then relaunch the daemon"
+        )
 
 
 def _click_like(store, element, backend: InputBackend) -> str:

@@ -100,6 +100,7 @@ def build_server(app: ConnApp) -> Starlette:
                 if client_role(msg) == "app" and not is_app_client:
                     is_app_client = True
                     app.ax_bridge.app_attached()
+                    asyncio.ensure_future(app.publish_ax_grants())
                     continue
                 await handle_client(app, msg)
         except WebSocketDisconnect:

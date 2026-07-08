@@ -53,6 +53,18 @@ def grant_target(image_path: str | None = None) -> str:
     return app_bundle_of(image) or image
 
 
+def python_ax_trusted() -> bool | None:
+    """The daemon's own Accessibility trust. None when the AX framework is
+    unavailable (non-mac test hosts), which surfaces as unknown, not as a
+    false alarm."""
+    try:
+        from ApplicationServices import AXIsProcessTrusted
+
+        return bool(AXIsProcessTrusted())
+    except Exception:
+        return None
+
+
 def describe_identity() -> dict:
     """Everything doctor and refusal text need in one shot."""
     image = process_image_path()

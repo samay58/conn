@@ -47,14 +47,14 @@ class AxBridge:
         loop = self._loop
         if loop is None or self._publish is None or not self.app_present:
             return None
-        future = asyncio.run_coroutine_threadsafe(self._request(), loop)
+        future = asyncio.run_coroutine_threadsafe(self.request(), loop)
         try:
             return future.result(self.timeout_s + 0.5)
         except Exception:
             future.cancel()
             return None
 
-    async def _request(self) -> dict | None:
+    async def request(self) -> dict | None:
         assert self._loop is not None and self._publish is not None
         request_id = new_id("axread")
         future: asyncio.Future = self._loop.create_future()

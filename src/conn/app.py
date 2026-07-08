@@ -78,6 +78,25 @@ class ConnApp:
         self._arm_idle_timer()
         self._arm_watchdog_timer()
         self.publish_state()
+        await self.publish_ax_grants()
+
+    async def publish_ax_grants(self) -> None:
+        """T2 grant preflight: both lanes' Accessibility state, traced and
+        pushed to the surfaces at session start and on app attach, so a dead
+        grant is visible before the first command instead of mid-command."""
+        from .identity import grant_target, python_ax_trusted
+
+        trusted = python_ax_trusted()
+        python_ax = "unknown" if trusted is None else ("granted" if trusted else "not_granted")
+        app_ax = "unattached"
+        if self.ax_bridge.app_present:
+            payload = await self.ax_bridge.request()
+            if isinstance(payload, dict):
+                app_ax = "granted" if payload.get("accessibility") == "granted" else "not_granted"
+        grants = {"python_ax": python_ax, "app_ax": app_ax,
+                  "python_grant_target": grant_target()}
+        self.trace.log("ax_grants", **grants)
+        self.publish({"type": "ax_grants", **grants})
 
     async def stop(self) -> None:
         self._closing = True

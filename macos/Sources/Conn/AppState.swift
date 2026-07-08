@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     @Published var capUSD = 1.0
     @Published var toast: String?
     @Published var rejectPulse: Int = 0
+    @Published var axWarning: String?
 
     var pendingChip: Chip? { chips.first(where: \.pending) }
 
@@ -75,8 +76,25 @@ final class AppState: ObservableObject {
             toast = msg["text"] as? String
         case "reject_input":
             rejectPulse += 1
+        case "ax_grants":
+            axWarning = Self.grantWarning(
+                appAx: msg["app_ax"] as? String,
+                pythonAx: msg["python_ax"] as? String)
         default:
             break
         }
+    }
+
+    /// T2 grant preflight: one short line for the island; the console banner
+    /// and doctor carry the full fix. The app lane leads because it covers
+    /// context reads; "unattached" and "unknown" are not dark lanes.
+    static func grantWarning(appAx: String?, pythonAx: String?) -> String? {
+        if appAx == "not_granted" {
+            return "Accessibility grant lost: retoggle Conn in System Settings"
+        }
+        if pythonAx == "not_granted" {
+            return "Daemon Accessibility lane dark: run conn --doctor"
+        }
+        return nil
     }
 }

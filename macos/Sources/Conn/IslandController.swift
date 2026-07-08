@@ -55,6 +55,21 @@ final class IslandController: ConnSurface {
             .removeDuplicates()
             .sink { [weak self] phase in self?.apply(phase: phase) }
             .store(in: &subscriptions)
+
+        // T2 grant preflight: a lane going dark summons the island long
+        // enough to read the warning, then retreats; mid-session it rides
+        // the already-open island. Same dwell as a failure banner.
+        state.$axWarning
+            .removeDuplicates()
+            .compactMap { $0 }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.summon()
+                if self.state.phase == "idle" {
+                    self.scheduleCollapse(after: DesignTokens.failedCollapseDelay)
+                }
+            }
+            .store(in: &subscriptions)
     }
 
     func summon(chipOpen: Bool = false) {

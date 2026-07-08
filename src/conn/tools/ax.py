@@ -220,7 +220,13 @@ class MacAxBackend:
         from ApplicationServices import AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication, kAXFocusedWindowAttribute
 
         if not AXIsProcessTrusted():
-            raise ToolError("ax_untrusted: Accessibility permission required")
+            from ..identity import grant_target
+
+            raise ToolError(
+                "ax_untrusted: python lane; grant Accessibility to "
+                f"{grant_target()} in System Settings, Privacy and Security, "
+                "then relaunch the daemon"
+            )
         app = self._app(pid)
         err, window = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute, None)
         if err != 0 or window is None:

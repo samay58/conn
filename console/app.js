@@ -75,7 +75,28 @@ function handle(msg) {
     case "toast":
       toast(msg.text, msg.level);
       break;
+    case "ax_grants":
+      renderGrants(msg);
+      break;
+    case "low_signal":
+      toast("Barely heard you: speak up or check the input device.", "warn");
+      break;
   }
+}
+
+/* ---------- grant preflight (T2) ---------- */
+
+function renderGrants(g) {
+  const banner = $("grant-banner");
+  const dark = [];
+  if (g.app_ax === "not_granted") {
+    dark.push("Conn.app lost its Accessibility grant: toggle Conn off and on in System Settings, Privacy and Security, Accessibility.");
+  }
+  if (g.python_ax === "not_granted") {
+    dark.push(`Daemon lane has no Accessibility grant: add ${g.python_grant_target} in System Settings, Privacy and Security, Accessibility, then relaunch.`);
+  }
+  banner.hidden = dark.length === 0;
+  banner.textContent = dark.join(" ");
 }
 
 /* ---------- state + chips ---------- */

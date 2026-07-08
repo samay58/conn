@@ -267,3 +267,13 @@ kbd {
   cursor: pointer;
   font-weight: 600;
 }
+
+.grant-banner {
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  font: 12px/1.5 var(--mono);
+  color: var(--amber);
+  background: var(--amber-soft);
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--line));
+  border-radius: 6px;
+}

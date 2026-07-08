@@ -82,6 +82,14 @@ struct IslandView: View {
             VStack(spacing: 6) {
                 IslandWaveform(level: state.level, phase: state.phase)
                 caption
+                if let warning = state.axWarning {
+                    Text(warning)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(DesignTokens.islandAmber)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 280)
+                }
             }
             .frame(maxHeight: .infinity)
             if state.phase == "awaiting_approval", let chip = state.pendingChip {
