@@ -27,7 +27,7 @@ enum PreviewRunner {
         let hosting = NSHostingView(rootView: IslandPreviewRoot(samples: samples))
         hosting.sizingOptions = [.preferredContentSize]
 
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 690),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1140, height: 690),
                               styleMask: [.titled, .closable],
                               backing: .buffered, defer: false)
         window.title = "Conn island preview"
@@ -35,7 +35,7 @@ enum PreviewRunner {
         window.appearance = NSAppearance(named: .aqua)
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
-            window.setFrameOrigin(NSPoint(x: f.maxX - 880, y: f.minY + 40))
+            window.setFrameOrigin(NSPoint(x: f.maxX - 1200, y: f.minY + 40))
         }
         window.orderFrontRegardless()
         app.run()
@@ -281,6 +281,9 @@ private struct IslandPreviewRoot: View {
     let samples: [PreviewSample]
     @State private var index = 1
     @State private var crosshair = false
+    // Observing the token store re-renders the staged island on every
+    // inspector edit, so palette and personality changes land live.
+    @ObservedObject private var tokens = DesignTokens.current
 
     private var selected: PreviewSample { samples[index] }
 
@@ -290,6 +293,10 @@ private struct IslandPreviewRoot: View {
             HStack(alignment: .top, spacing: 24) {
                 mainStage
                 stateList
+                InspectorView(
+                    tokens: tokens,
+                    replay: { selected.reveal.token &+= 1 },
+                    collapse: { selected.reveal.collapseToken &+= 1 })
             }
         }
         .padding(28)

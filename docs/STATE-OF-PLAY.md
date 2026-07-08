@@ -181,19 +181,30 @@ The app is installed to /Applications with the brass speaking-trumpet icon
 
 ## Current state (as of 2026-07-07, post stock-take)
 
-- **Tests: 256 Python + 19 Swift** (`ConnTests`, including the geometry,
-  island-motion, panel-focus, and waveform-tick suites); design-token guard
-  12/12 and demo evals 12/12 green.
+- **Tests: 260 Python + 26 Swift** (`ConnTests`, including the geometry,
+  island-motion, panel-focus, waveform-tick, and token-writeback suites);
+  design-token guard and demo evals 12/12 green.
 - **Phases 0 and 1: done and gate-green.** Cleanup C1 to C4: done.
-- **Phase 2 is complete.** Packet I6 (IslandView rendering all nine phases
-  plus toast, budget-hold override, and refusal pulse) landed 2026-07-06.
-  The remainder landed 2026-07-07: I7 promoted the state-gated island
-  waveform into WaveformView.swift under the token guard, I8 put the
-  interactive approve/deny chip inside the island silhouette (pointer-only,
-  the approve click sends after a 120ms confirm settle so the daemon phase
-  change never clips the acknowledgment), and I9 retargeted PreviewWindow at
-  the canonical IslandView and added the `--shoot` screenshot rig. STOP 2
-  ran 2026-07-07: pass, with four refinements ordered (see Open items).
+- **Phase 2 is complete, including the STOP 2 refinements.** Packet I6
+  (IslandView rendering all nine phases plus toast, budget-hold override,
+  and refusal pulse) landed 2026-07-06. The remainder landed 2026-07-07: I7
+  promoted the state-gated island waveform into WaveformView.swift under
+  the token guard, I8 put the interactive approve/deny chip inside the
+  island silhouette (pointer-only, the approve click sends after a 120ms
+  confirm settle so the daemon phase change never clips the
+  acknowledgment), and I9 retargeted PreviewWindow at the canonical
+  IslandView and added the `--shoot` screenshot rig. STOP 2 ran 2026-07-07:
+  pass, with four refinements ordered; all four landed the same day in
+  commit `91b1460` (lilac signature accent with the thinking ellipsis
+  beat, the acting tool capsule with humanized labels, chip previews
+  budgeted daemon-side to fit whole, and the gold budget-hold identity
+  with a real Override once outline button).
+- **Packet I12 (tuning playground) landed 2026-07-07.** DesignTokens is a
+  runtime store behind the same static names; the preview grew an
+  inspector with every raw motion, personality, and palette token as a
+  live control, derived values read-only, and Write Back regenerating
+  DesignTokens.swift from a template plus a spec-table diff on stdout. A
+  round-trip test pins the template to the file on disk byte for byte.
 - **Notch-island refine (2026-07-07):** the built-in-display island was
   repaired from an oversized clipped pill to a notch-flush surface, synthetic
   geometry adopts the measured menu-bar inset, and summon gained a restrained
@@ -230,30 +241,31 @@ The app is installed to /Applications with the brass speaking-trumpet icon
 - **Personality hand gate: pending.** Samay drives the hotkey and judges
   cute versus fidget; `aliveness` and the overshoot tokens are the knobs.
 - **STOP 2 (Phase 2 screenshot review): done 2026-07-07, pass with four
-  refinements.** Samay reviewed the 11-PNG set and drove the cycler. The
-  summon animation sets the bar ("absolutely gorgeous"); typography and
-  state vocabulary pass. Four changes ordered, all Phase 2 scope, no
-  re-review round (the gates plus a fresh screenshot set verify): lilac
-  becomes the signature accent (listening waveform and ring) with a
-  distinct "thinking" treatment in it; the running tool name renders as a
-  quiet capsule with a humanized label; chip previews must fit whole with
-  no mid-word truncation ("Copy 2...lipboard" is the named defect); budget
-  hold gets its own color, a two-decimal cap figure, and Override as a
-  real outline button. Full implementation contract: `docs/NEXT-SESSION.md`.
+  refinements; refinements landed same day (`91b1460`).** Samay reviewed
+  the 11-PNG set and drove the cycler. The summon animation sets the bar
+  ("absolutely gorgeous"); typography and state vocabulary pass. The four
+  ordered changes (lilac signature accent with a distinct thinking
+  treatment, humanized tool capsule, whole-phrase chip previews, gold
+  budget-hold identity with a real Override once button) shipped with the
+  gates plus a fresh screenshot set as the verification, per the no
+  re-review decision.
+- **STOP 3 (hand tuning) is the next stop.** I12 is live: Samay drives the
+  playground and the hotkey until the motion is award-grade, tuned values
+  write back to DesignTokens.swift and the spec tables in one commit. The
+  deferred 12-principles adversarial pass and the Fable taste pass on a
+  recording land here too.
 
 ## What's next
 
 Canonical forward sequence: `docs/2026-07-07-roadmap.md` (blocks A through
 E, with rationale and exit criteria). Summary as of the stock-take:
 
-- **STOP 2 refinements:** the four ordered changes above land as one commit
-  (contract in `docs/NEXT-SESSION.md`); this closes Phase 2.
-- **Phase 3 remainder:** I12 (tuning playground with write-back) and the
-  STOP 3 tuning sessions. The morph and personality behaviors themselves
-  already shipped (see above); STOP 3 is where their values get tuned by
-  hand and written back to tokens and spec tables in one commit, and where
-  the deferred adversarial 12-principles pass and taste-on-recording from
-  I10's done-definition land.
+- **STOP 3 (hand tuning):** Samay drives the playground (`Conn --preview`)
+  and the live hotkey until summon, breath, exhale, chip, and belay feel
+  award-grade; tuned values write back to tokens and spec tables in one
+  commit. The deferred adversarial 12-principles pass and
+  taste-on-recording from I10's done-definition land here. This closes
+  Block A.
 
 Phases 4 and 5 after that: sound and the AX-via-app migration, then the full
 live-eval proof run.

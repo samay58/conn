@@ -8,6 +8,10 @@ list.
 
 Exclusions (not scanned):
 - DesignTokens.swift: holds the numbers by design.
+- TokenWriteback.swift: the playground's write-back template, whose string
+  body IS the DesignTokens.swift text (packet I12). Excluded for the same
+  reason as the file it generates; a round-trip Swift test pins the two
+  files to each other.
 - PanelView.swift: the frozen panel-era fallback surface carrying legacy
   pre-island style. WaveformView rejoined the guard at packet I7.
 """
@@ -22,7 +26,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONN_SOURCES = REPO_ROOT / "macos" / "Sources" / "Conn"
 
-EXCLUDED_FILES = {"DesignTokens.swift", "PanelView.swift"}
+EXCLUDED_FILES = {"DesignTokens.swift", "TokenWriteback.swift", "PanelView.swift"}
 
 MONOSPACE_FONT_NAMES = ("Menlo", "Monaco", "SFMono", "SF Mono", "Courier")
 
