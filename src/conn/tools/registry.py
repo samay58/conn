@@ -193,7 +193,13 @@ def build_registry() -> dict[str, ToolSpec]:
         ),
         ToolSpec(
             name="computer_hotkey",
-            description="Press an allowlisted keyboard shortcut.",
+            description=(
+                "Press an allowlisted keyboard shortcut. Combo grammar: "
+                "modifiers then one key, joined by '+', e.g. 'cmd+t' or "
+                "'cmd+shift+t'. Modifiers: cmd, ctrl, alt, shift (meta and "
+                "super mean cmd). Non-allowlisted combos are refused; use "
+                "app_menu for menu actions instead."
+            ),
             parameters=_obj({"combo": {"type": "string"}}, ["combo"]),
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: f"Press keys: {a.get('combo', '?')}",

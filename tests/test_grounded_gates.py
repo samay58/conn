@@ -238,7 +238,7 @@ def test_hotkey_gate_uses_normalized_allowlists(cfg, harness, combo, auto, confi
 
     assert call.gate is expected
     if expected is Gate.BLOCKED:
-        assert call.block_reason == "hotkey_not_allowlisted"
+        assert call.block_reason.startswith("hotkey_not_allowlisted")
 
 
 def test_present_only_allowlist_guard_for_app_qualified_tools(cfg, tmp_path):

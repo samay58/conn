@@ -90,7 +90,10 @@ _EXTRA_CASES = [
             "end_phase": ["done", "idle"],
             "approvals_asked": 0,
             "tool_ok": {"computer_hotkey": False},
-            "errors": {"computer_hotkey": ["hotkey_not_allowlisted"]},
+            "errors": {"computer_hotkey": [
+                "hotkey_not_allowlisted: cmd+shift+p. Allowed: cmd+t, cmd+w, cmd+n. "
+                "Use app_menu for other menu actions"
+            ]},
         },
     },
     {

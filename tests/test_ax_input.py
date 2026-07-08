@@ -289,6 +289,20 @@ def test_hotkey_parses_cmd_shift_t(cfg, ctx):
     assert input_backend.actions == [{"kind": "key_chord", "keys": ("cmd", "shift", "t")}]
 
 
+@pytest.mark.parametrize("spoken", ["meta+t", "super+t", "win+t", "Meta+T"])
+def test_hotkey_aliases_meta_and_super_to_cmd(cfg, ctx, spoken):
+    # The 2026-07-07 live drive: the model proposed "meta+t" and the
+    # normalizer died with invalid_hotkey because meta parsed as a second
+    # primary key.
+    input_backend = FakeInputBackend()
+    attach(ctx, None, input_backend)
+
+    result = hotkey({"combo": spoken}, ctx)
+
+    assert result == {"combo": "cmd+t"}
+    assert input_backend.actions == [{"kind": "key_chord", "keys": ("cmd", "t")}]
+
+
 @pytest.mark.parametrize("tool_name,args_factory", [
     ("computer_click", lambda snap_id: {"snapshot_id": snap_id, "ref": "e2"}),
     ("computer_type_text", lambda snap_id: {"snapshot_id": snap_id, "ref": "e2", "text": "hello"}),

@@ -174,7 +174,12 @@ def _gate_hotkey(args: dict, cfg: Config) -> tuple[Gate, str | None, str | None]
         return Gate.AUTO, None, f"Press keys: {combo}"
     if combo in {_normalize_combo(item) for item in cfg.hotkeys.confirm}:
         return Gate.CONFIRM, None, f"Press keys: {combo}"
-    return Gate.BLOCKED, "hotkey_not_allowlisted", f"Press keys: {combo}"
+    # The refusal names the allowlist so the model can reroute (usually to
+    # app_menu) instead of retrying spellings of the same dead combo.
+    allowed = ", ".join([*cfg.hotkeys.auto, *cfg.hotkeys.confirm]) or "none"
+    return (Gate.BLOCKED,
+            f"hotkey_not_allowlisted: {combo}. Allowed: {allowed}. Use app_menu for other menu actions",
+            f"Press keys: {combo}")
 
 
 def gate_for(

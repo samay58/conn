@@ -552,6 +552,11 @@ def _normalize_combo(combo: str) -> str:
     aliases = {
         "command": "cmd",
         "cmd": "cmd",
+        # The model speaks cross-platform: meta/super/win all mean cmd on a
+        # Mac. Without these, "meta+t" parses as two primary keys and dies.
+        "meta": "cmd",
+        "super": "cmd",
+        "win": "cmd",
         "control": "ctrl",
         "ctrl": "ctrl",
         "option": "alt",

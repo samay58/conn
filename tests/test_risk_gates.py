@@ -33,6 +33,33 @@ class TestGateDecisions:
     def test_static_levels(self, harness, name, args, expected):
         assert gate(harness, name, args).gate is expected
 
+    def test_confirm_allowlisted_hotkey_gates_confirm(self, harness, cfg):
+        cfg.hotkeys.confirm = ["cmd+t", "cmd+w", "cmd+n"]
+        call = gate(harness, "computer_hotkey", {"combo": "cmd+t"})
+        assert call.gate is Gate.CONFIRM
+
+    def test_meta_alias_matches_cmd_allowlist_entry(self, harness, cfg):
+        # Both sides of the comparison normalize, so the model's "meta+t"
+        # matches an allowlist written as "cmd+t".
+        cfg.hotkeys.confirm = ["cmd+t"]
+        call = gate(harness, "computer_hotkey", {"combo": "meta+t"})
+        assert call.gate is Gate.CONFIRM
+        assert call.preview == "Press keys: cmd+t"
+
+    def test_hotkey_refusal_names_the_allowlist(self, harness, cfg):
+        cfg.hotkeys.confirm = ["cmd+t", "cmd+w"]
+        call = gate(harness, "computer_hotkey", {"combo": "cmd+s"})
+        assert call.gate is Gate.BLOCKED
+        reason = harness.block_reason(call)
+        assert "hotkey_not_allowlisted" in reason
+        assert "cmd+t, cmd+w" in reason
+        assert "app_menu" in reason
+
+    def test_hotkey_refusal_with_empty_allowlist_says_none(self, harness):
+        call = gate(harness, "computer_hotkey", {"combo": "cmd+s"})
+        reason = harness.block_reason(call)
+        assert "Allowed: none" in reason
+
     def test_app_not_on_allowlist_is_blocked(self, harness):
         call = gate(harness, "app_open", {"app": "Disk Utility"})
         assert call.gate is Gate.BLOCKED

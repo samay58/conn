@@ -2,6 +2,7 @@
 
 [hotkey]
 ptt = "alt_r"            # pynput key name for global push-to-talk; "none" disables the global hotkey
+confirm = ["cmd+t", "cmd+w", "cmd+n"]   # tab/window verbs run behind the approval chip; everything else refuses toward app_menu
 
 [realtime]
 model = "gpt-realtime-2"
