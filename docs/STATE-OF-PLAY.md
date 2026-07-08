@@ -301,7 +301,7 @@ export OPENAI_API_KEY=...
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
 
 # Tests and evals
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 247 tests
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 260 tests
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # harness evals
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor     # TCC/grant check
 ```

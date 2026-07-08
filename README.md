@@ -26,11 +26,14 @@ The app autolaunches the daemon if one is not running (live if a key
 resolves, demo otherwise). Hold Right Option to talk once Accessibility is
 granted to Conn.app (menu: Enable Global Hotkey). No Conn surface ever
 takes keyboard focus; approvals are deliberate clicks only. On non-notch
-displays the older floating panel is the fallback surface. `Conn --preview`
-renders key states for design iteration. The interactive approve/deny beat
-inside the island lands with packet I8; until then the island shows an
-approval preview row and the web console at 127.0.0.1:8787 carries the
-approval clicks.
+displays the older floating panel is the fallback surface. Approve and
+Deny live inside the island itself (pointer clicks only, as does the
+Override once button on a budget hold); the web console at 127.0.0.1:8787
+stays as the engineer's debug surface. `Conn --preview` renders every
+state for design iteration, with a live token inspector beside the
+cycler: sliders and color wells for the motion, personality, and palette
+tokens, Replay for the summon morph, and Write Back to land tuned values
+in DesignTokens.swift.
 
 ## Quickstart (demo, no credentials)
 

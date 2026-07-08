@@ -13,7 +13,7 @@ Push-to-talk voice command surface for the Mac on the OpenAI Realtime API (gpt-r
 All Python commands run from the repo root with the project venv and `PYTHONPATH=src`:
 
 ```bash
-# Tests (256, no hardware/TCC needed; pytest addopts skips the "hardware" marker)
+# Tests (260, no hardware/TCC needed; pytest addopts skips the "hardware" marker)
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_state_machine.py -q          # one file
 PYTHONPATH=src .venv/bin/python -m pytest tests -q -k "approval"                  # by keyword
