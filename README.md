@@ -35,6 +35,21 @@ cycler: sliders and color wells for the motion, personality, and palette
 tokens, Replay for the summon morph, and Write Back to land tuned values
 in DesignTokens.swift.
 
+### Stable signing (one-time, keeps TCC grants across rebuilds)
+
+TCC binds grants to the code signature. An ad-hoc signature changes on
+every build, so each reinstall silently kills Conn.app's Accessibility
+grant while the Settings toggle still shows on. Create a persistent
+self-signed identity once and make-app.sh uses it automatically:
+
+1. Keychain Access > Certificate Assistant > Create a Certificate
+2. Name: `Conn Dev Signing`, Identity Type: Self-Signed Root,
+   Certificate Type: Code Signing. Check "Let me override defaults" and
+   set validity to 3650 days so it does not quietly expire in a year.
+3. Rebuild with `./make-app.sh install` and grant Accessibility once; every rebuild after that keeps the grant.
+
+Without the identity the script falls back to ad hoc and prints a warning that grants will reset on install.
+
 ## Quickstart (demo, no credentials)
 
 ```bash

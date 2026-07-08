@@ -1,5 +1,7 @@
 #!/bin/zsh
-# Build Conn.app from the SwiftPM package. Ad-hoc signed so TCC grants stick.
+# Build Conn.app from the SwiftPM package. Signs with the persistent
+# "Conn Dev Signing" identity when the keychain has one, so TCC grants
+# survive rebuilds; ad hoc otherwise (grants die on every install).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -23,7 +25,17 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Conn "$APP/Contents/MacOS/Conn"
 cp Info.plist "$APP/Contents/Info.plist"
 [[ -f AppIcon.icns ]] && cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-codesign --force --sign - "$APP"
+SIGN_IDENTITY="Conn Dev Signing"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
+    codesign --force --sign "$SIGN_IDENTITY" "$APP"
+    echo "signed with $SIGN_IDENTITY (TCC grants survive reinstalls)"
+else
+    codesign --force --sign - "$APP"
+    >&2 echo "WARNING: ad hoc signature; macOS resets Conn.app's TCC grants on every install."
+    >&2 echo "Create the persistent identity once (see README, Stable signing):"
+    >&2 echo "  Keychain Access > Certificate Assistant > Create a Certificate,"
+    >&2 echo "  name '$SIGN_IDENTITY', type Code Signing, then rerun make-app.sh"
+fi
 
 if [[ "${1:-}" == "install" ]]; then
     rm -rf /Applications/Conn.app
