@@ -100,6 +100,21 @@ One solo session landing the four STOP 2 refinements as `91b1460`, then packet I
 - Mechanical gates, green before and after each commit: pytest 260 (4 new preview-budget tests), swift test 26 (1 waveform-tick extension, 6 write-back tests, motion suite untouched), evals 12/12, token guard green, fresh 11-PNG screenshot set eyeballed per state. App rebuilt and installed to /Applications.
 - Deviations: both parts executed solo on Fable per the session contract Samay wrote (no re-review round for the refinements; I12 was plan-tagged sonnet). No adversarial reviewer dispatched; the refinements were verified against the contract's per-change acceptance and the screenshot set, I12 against its round-trip and live-statics tests. The two recorded-not-fixed findings (unauthenticated localhost approval websocket, AXPress reachability) stand untouched, awaiting Samay.
 
+### Session log 2026-07-08 (P0 reliability round)
+
+The frontmost spine round from `docs/NEXT-SESSION.md`, run solo per the contract (serially dependent bug chain, live-machine probes required). One session worked bugs 1-2 to commit, landed bugs 3-5 in the working tree, and was interrupted by a harness outage before the gate set could run; a resume session verified the staged work from scratch and landed the rest.
+
+- Discriminating test ran FIRST per the contract: three probes proved NSWorkspace (frontmostApplication AND isActive filtering) is KVO-frozen at spawn in a runloop-less daemon; a main-thread runloop pump fixes it, a worker-thread pump does not; CGWindowList is fresh from any thread. Probe 2 also caught WindowManager (accessory policy) transiently owning the front window: both contract hypotheses (staleness AND imposter class) were real, and the fix needed both layers.
+- Bug 1: `tools/frontmost.py`, per-call window-server source plus activation-policy filter, both call sites (commit `38503b8`, 11 new tests).
+- Bug 2: S2 pulled forward. client_hello/ax_read/ax_read_result over the existing websocket, AxBridge thread-safe round trip, AxContextReader app-side, doctor names the exact python binary (commit `dd6f732`, 12 python + 2 swift tests).
+- Bug 3: gate fixed via the shared source; switch-then-menu regression eval added (eval 13); live gate probe flip confirmed on resume: blocked before the hand switch, confirm after, from a worker thread against the real MacAxBackend (commit `595c849`). Probe caveat, observation only: during a cold app launch the window server can show the previous app's window in front for a beat after activation, so the gate follows the visible window, not the activation event; a retry lands once the window draws.
+- Bug 4: meta/super/win alias to cmd, combo grammar in the tool description, refusal names the allowlist and reroutes to app_menu, cmd+t/w/n at confirm tier in config.toml (commit `17da556`).
+- Bug 5: Broadcaster writer tasks cancelled on detach (3 tests, commit `229e526`); PaMacCore -50 ledgered as cosmetic.
+- Resume verification: two stale test expectations the interrupted session had not updated (the exact `hotkey_not_allowlisted` string in test_grounded_gates, the 7-case tasks.json count in test_latency_report) were fixed and committed with their owning bugs; everything else landed as staged.
+- Gates at close: pytest 294 passed, evals 13/13, swift 28 passed, token guard green, fresh Conn.app installed to /Applications.
+- Observation, no packet: the 2026-07-07 drive trace also shows benign reconnect churn (8x "Cancellation failed: no active response", 3x 60-minute session cap).
+- Live acceptance (the trace-level checks in the contract) rides on Samay's quick-test-menu drive; `NEXT-SESSION.md` stays until it is green. STOP 3 stays parked behind it.
+
 ## Final report
 
 Written at project close: total spend by tier, Fable share of output tokens, counterfactual all-Fable estimate.

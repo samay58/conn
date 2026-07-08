@@ -249,16 +249,25 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   budget-hold identity with a real Override once button) shipped with the
   gates plus a fresh screenshot set as the verification, per the no
   re-review decision.
-- **Live drive 2026-07-07 evening: four bugs registered, P0 round is the
-  next session.** Samay drove the refinement build and hit a broken
-  context spine: frontmost reads Kaku always (stale or imposter
-  NSWorkspace source, mac.py:20 and ax.py:214), the app-spawned daemon's
-  python has no Accessibility grant despite Conn.app holding one (TCC
-  binds to the binary), the app_menu frontmost gate blocks the app you
-  are visibly in (downstream of the first), and "meta+t" dies in the
-  hotkey normalizer (no meta alias). Full registry with trace evidence
-  and fix directions: `docs/NEXT-SESSION.md`. The round pulls S2, S3,
-  and R5 forward, ahead of STOP 3.
+- **P0 reliability round (the frontmost spine): fixes landed 2026-07-08,
+  live verification pending.** The 2026-07-07 live drive registered four
+  bugs; all four are fixed and committed, with the discriminating test
+  run first per the contract. Root cause of the shared three:
+  NSWorkspace.frontmostApplication() is KVO-cached and never updates in
+  a daemon whose main thread never pumps a runloop, so every read served
+  the spawn-time app (Kaku) forever. Fixes: a per-call fresh frontmost
+  source from the window server with the S3 activation-policy filter
+  (tools/frontmost.py, both call sites); context reads routed through
+  the app's Accessibility grant over the existing websocket with python
+  fallback (S2 pulled forward, ax_bridge.py + AxContextReader.swift),
+  and doctor now names the exact python binary for the grounded-lane
+  grant; a switch-then-menu regression eval pinning the frontmost gate;
+  meta/super aliased to cmd with the combo grammar in the tool
+  description and cmd+t/w/n allowlisted at confirm tier; and the
+  Broadcaster writer-task leak fixed (the PaMacCore -50 teardown line is
+  ledgered, cosmetic). The round is green when Samay's live drive
+  confirms it; the quick-test menu in `docs/NEXT-SESSION.md` is the
+  script, and that file is deleted when the round closes.
 - **STOP 3 (hand tuning) follows the P0 round.** I12 is live: Samay
   drives the playground and the hotkey until the motion is award-grade,
   tuned values write back to DesignTokens.swift and the spec tables in

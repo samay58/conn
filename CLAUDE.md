@@ -72,3 +72,17 @@ Plus two earned from incidents: approvals are pointer-only (no keyboard focus, e
 - `config.toml` holds all tunables (hotkey, model, budget, allowlists, vault paths, pricing). Secrets never live there; `OPENAI_API_KEY` is environment-only and must never reach config, logs, or the browser.
 - `data/` (traces, receipts, eval results, screenshots) is gitignored; never commit its contents.
 - The neighboring `phoenix-voice-delegate` project shares discipline but **no code** with Conn; do not import from it.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on samay58/conn, via the gh CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage labels are used unmodified (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one CONTEXT.md and docs/adr/ at the repo root; neither exists yet; they're created lazily, so proceed silently if absent. See `docs/agents/domain.md`.
