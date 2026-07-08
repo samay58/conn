@@ -6,6 +6,39 @@ buggy" because three of them share one root. This round pulls S2, S3, and
 R5 forward, ahead of STOP 3: tuning polish means nothing while context
 reads lie. STOP 3 (hand tuning) runs after this round.
 
+Amended 2026-07-08: the first drive of this menu died on TCC identity,
+so the identity and audio round
+(`docs/2026-07-08-identity-audio-spec.md`) ran and landed. Both rounds
+now close together: run the acceptance list below FIRST (it makes the
+grants stable and visible), then the quick-test menu. This file is
+deleted when both are green.
+
+## Identity and audio acceptance (run first, in this order)
+
+0. One-time: create the signing certificate. Keychain Access >
+   Certificate Assistant > Create a Certificate, name `Conn Dev
+   Signing`, Identity Type Self-Signed Root, Certificate Type Code
+   Signing, override defaults with validity 3650 days. Then
+   `cd macos && ./make-app.sh install`, relaunch Conn, and grant
+   Accessibility to Conn.app once (the current /Applications build is
+   ad hoc, so this one regrant is expected). If doctor's python lane
+   warns, add what it names (the Python.app bundle) in the same pane.
+1. Rebuild and reinstall again (`./make-app.sh install`), zero Settings
+   visits this time: a context read returns a real window title with
+   accessibility granted (T3 plus the app lane).
+2. "Open a new tab" via app_menu and cmd+t behind the chip both execute
+   with Conn.app attached; kill the app and confirm the python fallback
+   either works (if the Python.app grant is on) or refuses naming
+   exactly what to grant (T1, T4).
+3. Kill a lane's grant on purpose (toggle Conn off in Accessibility):
+   the island warns within a second of the next session start or app
+   attach, the console shows the banner, and the refusal names the fix
+   (T2).
+4. Ten whispered-then-normal utterances at desk distance: no clipped
+   first words, no non-English fragments, the "barely heard you" hint
+   on the too-quiet ones (A1 to A3).
+5. Then the standing quick-test menu below, which closes both rounds.
+
 Evidence: data/traces/2026-07-07/session_d3708bd6a7.jsonl (21:24-21:34,
 the live drive). Read it before touching anything.
 

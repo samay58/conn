@@ -108,6 +108,30 @@ hallucination on short clips. Done: unit test pins the session.update
 payload; a live fragment transcribes as English or empty, never another
 language.
 
+## Lane T4 (amendment, added and executed 2026-07-08 in session)
+
+Scope decision made in session discussion: pull the AX-action migration
+forward. What landed: `computer_hotkey` posting and `app_menu` (both the
+menu tree read and the press) ride Conn.app's Accessibility grant over
+the existing websocket when the app is attached, via the ax_action /
+ax_action_result message pair and an AppLaneInputBackend; the python
+lane stays the fallback when no app is attached; wire failures refuse
+rather than fall back so a chord that may have posted is never posted
+twice; refusals name the lane that refused.
+
+What deliberately did not land, with the judgment recorded: the grounded
+click/type lane stays python-side. Its safety semantics (snapshot
+fingerprints, execution-time re-walks, secure-field redaction in
+SnapshotStore.resolve) perform AX reads at execution time, so moving
+only the action posting would not free the grant, and moving the reads
+is a full remote AX backend (serialized trees, reworked window-identity
+semantics, a Swift tree engine): a session-sized packet on its own,
+registered in the idea ledger as T4b with a design sketch and a concrete
+trigger. Consequence for the grant story: the Python.app grant is still
+required for the grounded lane and app-less runs; doctor says exactly
+that. The two failures from the drive (app_menu, computer_hotkey) no
+longer need it.
+
 ## Order and gates
 
 T1 and T2 first (they make every later failure diagnosable), then A1 to

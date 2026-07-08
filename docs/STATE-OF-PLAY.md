@@ -179,11 +179,12 @@ A narrow tightening pass before Phase 2, governed by
 The app is installed to /Applications with the brass speaking-trumpet icon
 (Samay's pick) and pinned to the Dock.
 
-## Current state (as of 2026-07-07, post stock-take)
+## Current state (as of 2026-07-08, post identity and audio round)
 
-- **Tests: 260 Python + 26 Swift** (`ConnTests`, including the geometry,
-  island-motion, panel-focus, waveform-tick, and token-writeback suites);
-  design-token guard and demo evals 12/12 green.
+- **Tests: 334 Python + 40 Swift** (`ConnTests`, including the geometry,
+  island-motion, panel-focus, waveform-tick, token-writeback, ax-grants,
+  and ax-action-engine suites); design-token guard and demo evals 13/13
+  green.
 - **Phases 0 and 1: done and gate-green.** Cleanup C1 to C4: done.
 - **Phase 2 is complete, including the STOP 2 refinements.** Packet I6
   (IslandView rendering all nine phases plus toast, budget-hold override,
@@ -268,6 +269,26 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   ledgered, cosmetic). The round is green when Samay's live drive
   confirms it; the quick-test menu in `docs/NEXT-SESSION.md` is the
   script, and that file is deleted when the round closes.
+- **Identity and audio round: landed 2026-07-08, live verification
+  pending with the P0 round.** The first quick-test drive proved the
+  failing layer is beneath the harness: TCC grants bind to code identity
+  and Conn churned two identities per rebuild. Spec
+  `docs/2026-07-08-identity-audio-spec.md`. Landed in five commits:
+  doctor and refusals name the true process image from proc_pidpath
+  (Python.app, not the venv symlink the grant went to on the drive); an
+  ax_grants preflight traces and surfaces both lanes' Accessibility
+  state at session start and app attach (console banner, island amber
+  warning, refusals name the lane and the grant path); computer_hotkey
+  and app_menu actions ride Conn.app's grant over the websocket when
+  the app is attached (T4; the grounded lane stays python-side,
+  ledgered as T4b with a design sketch); a 400ms pre-roll ring stops
+  the first syllable dying between PTT keydown and gate-open, with
+  input device selection, a low-signal "barely heard you" hint, and a
+  transcription language pin ending the Spanish-fragment hallucination;
+  and make-app.sh signs with a persistent "Conn Dev Signing" identity
+  when the keychain has one, so reinstalls stop silently killing the
+  app grant (creating the certificate is Samay's one-time step on the
+  acceptance list).
 - **STOP 3 (hand tuning) follows the P0 round.** I12 is live: Samay
   drives the playground and the hotkey until the motion is award-grade,
   tuned values write back to DesignTokens.swift and the spec tables in
@@ -320,7 +341,7 @@ export OPENAI_API_KEY=...
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
 
 # Tests and evals
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 260 tests
+PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 334 tests
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # harness evals
 PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor     # TCC/grant check
 ```

@@ -115,6 +115,19 @@ The frontmost spine round from `docs/NEXT-SESSION.md`, run solo per the contract
 - Observation, no packet: the 2026-07-07 drive trace also shows benign reconnect churn (8x "Cancellation failed: no active response", 3x 60-minute session cap).
 - Live acceptance (the trace-level checks in the contract) rides on Samay's quick-test-menu drive; `NEXT-SESSION.md` stays until it is green. STOP 3 stays parked behind it.
 
+### Session log 2026-07-08 (identity and audio round)
+
+The round from `docs/2026-07-08-identity-audio-spec.md`, run solo on Fable per the session contract (live-machine TCC probes required; serially dependent lane order). Six packets in five commits, T1 T2 T4 A1-A3 T3, plus this close-out.
+
+- Live verification ran before building, per the contract: the running daemon's process image is `Python.framework/.../Resources/Python.app/Contents/MacOS/Python` (pid probe), confirming the T1 root cause with the machine's own state; doctor at session start still named the venv realpath.
+- T1 (`a53389d`): identity module resolving the live image via proc_pidpath (ctypes libproc) and mapping it to the enclosing .app bundle; doctor accessibility and input_posting name the grant target; 9 tests; live doctor names Python.app on this machine.
+- T2 (`9d1ee2a`): ax_grants trace and publish at session start and app attach (python_ax, app_ax, python grant target); console banner, island amber warning line with summon-then-collapse from idle; refusals name the lane and the artifact; 4 python + 5 swift tests.
+- T4 (`2f43199`): the in-session scope amendment, executed as the severable half. computer_hotkey and app_menu (menu tree read plus press) through the app's grant via ax_action / ax_action_result and AppLaneInputBackend; python fallback when no app attached; wire failures refuse so a maybe-posted chord never posts twice. The grounded lane deliberately stayed python-side: its safety semantics run AX reads at execution time, so a full move is a remote AX backend, deferred as T4b in the idea ledger with a design sketch. Judged too large to land properly alongside the round; flagged for Samay's veto in the handoff. 12 python + 7 swift tests.
+- A1-A3 (`a146876`): 400ms pre-roll ring flushed ahead of live frames at gate open, cleared on close; input_device substring resolver with doctor listing inputs and marking the one in use; low_signal trace event and hint on both surfaces for quiet windows (5-frame floor so tap discards stay silent); transcription language pin riding the second session.update. 16 tests.
+- T3 (`58fff56`): make-app.sh signs with "Conn Dev Signing" when the keychain has it, ad hoc fallback with a loud warning (verified on a real build); README one-time recipe with ten-year validity. Grant survival across reinstall needs the certificate, which only Samay can create (GUI keychain step): step 0 on the acceptance list.
+- Gates at close: pytest 334 passed, evals 13/13, swift 40 passed, token guard green, slopcheck clean on every commit message and doc edit, fresh Conn.app built and installed to /Applications (ad hoc until the certificate exists, so the app grant needs one retoggle after install; called out in the handoff).
+- Deviations: all packets executed solo on Fable (the round is TCC-identity-bound to this machine; no subagent can probe grants). The T4 scope split is the session's one judgment call against the discussed packet, recorded above and in the spec amendment.
+
 ## Final report
 
 Written at project close: total spend by tier, Fable share of output tokens, counterfactual all-Fable estimate.

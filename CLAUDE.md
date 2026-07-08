@@ -13,7 +13,7 @@ Push-to-talk voice command surface for the Mac on the OpenAI Realtime API (gpt-r
 All Python commands run from the repo root with the project venv and `PYTHONPATH=src`:
 
 ```bash
-# Tests (260, no hardware/TCC needed; pytest addopts skips the "hardware" marker)
+# Tests (334, no hardware/TCC needed; pytest addopts skips the "hardware" marker)
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_state_machine.py -q          # one file
 PYTHONPATH=src .venv/bin/python -m pytest tests -q -k "approval"                  # by keyword
@@ -25,7 +25,7 @@ PYTHONPATH=src .venv/bin/python -m conn --demo                    # scripted mod
 PYTHONPATH=src .venv/bin/python -m conn                           # live; needs OPENAI_API_KEY in the environment
 PYTHONPATH=src .venv/bin/python -m conn --no-audio --no-hotkey    # live with typed input only, no mic/speaker/global key
 PYTHONPATH=src .venv/bin/python -m conn --doctor                  # environment + TCC permission checks
-PYTHONPATH=src .venv/bin/python -m conn --eval                    # 12 harness evals (evals/tasks.json), writes artifacts to data/
+PYTHONPATH=src .venv/bin/python -m conn --eval                    # 13 harness evals (evals/tasks.json plus in-code cases), writes artifacts to data/
 PYTHONPATH=src .venv/bin/python -m conn --latency-report          # latency spans + budget pass/fail on the newest trace
 
 # macOS app (SwiftPM, macOS 14+; make-app.sh falls back to Xcode-beta toolchain if needed)
