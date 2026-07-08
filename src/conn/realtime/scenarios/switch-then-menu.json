@@ -1,0 +1,40 @@
+{
+  "id": "switch-then-menu",
+  "spoken": "switch to Chrome and open a new tab",
+  "match": ["switch", "chrome", "new tab"],
+  "segments": [
+    {
+      "say": "Switching to Chrome.",
+      "tools": [
+        {"name": "app_switch", "arguments": {"app": "Google Chrome"}}
+      ],
+      "usage": {
+        "input_tokens": 600, "output_tokens": 42,
+        "input_token_details": {"text_tokens": 440, "audio_tokens": 160, "cached_tokens": 320,
+                                  "cached_tokens_details": {"text_tokens": 320, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 28}
+      }
+    },
+    {
+      "say": "Opening a new tab.",
+      "tools": [
+        {"name": "app_menu", "arguments": {"app": "Google Chrome", "path": ["File", "New Tab"]}}
+      ],
+      "usage": {
+        "input_tokens": 660, "output_tokens": 42,
+        "input_token_details": {"text_tokens": 500, "audio_tokens": 160, "cached_tokens": 400,
+                                  "cached_tokens_details": {"text_tokens": 400, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 28}
+      }
+    },
+    {
+      "say": "Done. New tab open in Chrome.",
+      "usage": {
+        "input_tokens": 720, "output_tokens": 42,
+        "input_token_details": {"text_tokens": 560, "audio_tokens": 160, "cached_tokens": 460,
+                                  "cached_tokens_details": {"text_tokens": 460, "audio_tokens": 0}},
+        "output_token_details": {"text_tokens": 14, "audio_tokens": 28}
+      }
+    }
+  ]
+}

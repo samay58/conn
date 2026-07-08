@@ -199,17 +199,18 @@ class TestPromptAndEvalSuite:
 
         ids = [case['id'] for case in evals.load_eval_cases()]
 
-        assert len(ids) == 12
-        assert ids[:7] == [
+        assert len(ids) == 13
+        assert ids[:8] == [
             'open-app',
             'vault-search-then-open',
             'context-read',
             'clipboard-needs-approval-approve',
             'clipboard-needs-approval-deny',
             'blocked-ui-click-refused',
+            'switch-then-menu',
             'latency-v2-kinds-present',
         ]
-        assert ids[7:] == [
+        assert ids[8:] == [
             'stale-ref-round-trip',
             'secure-field-refusal',
             'hotkey-not-allowlisted',

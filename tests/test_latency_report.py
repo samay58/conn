@@ -207,7 +207,7 @@ class TestTasksJsonCase:
     def test_tasks_json_has_a_trace_kinds_eval_case(self):
         spec = json.loads(evals.EVAL_TASKS.read_text())
         cases = spec["cases"]
-        assert len(cases) == 7
+        assert len(cases) == 8
         with_trace_kinds = [c for c in cases if "trace_kinds" in c.get("expect", {})]
         assert len(with_trace_kinds) == 1
         assert with_trace_kinds[0]["expect"]["trace_kinds"]

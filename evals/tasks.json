@@ -69,6 +69,33 @@
       }
     },
     {
+      "id": "switch-then-menu",
+      "input": "switch to Chrome and open a new tab",
+      "runtime": {
+        "bundle_id": "com.google.Chrome",
+        "tree": {"role": "AXWindow", "title": "New Tab - Google Chrome"},
+        "menu_root": {
+          "role": "AXMenuBar",
+          "title": "Menu",
+          "children": [
+            {"role": "AXMenu", "title": "File", "children": [
+              {"role": "AXMenuItem", "title": "New Tab"}
+            ]}
+          ]
+        },
+        "trusted": {"com.google.Chrome": ["AXMenuItem"]},
+        "real_tools": ["app_menu"]
+      },
+      "expect": {
+        "tools": ["app_switch", "app_menu"],
+        "gates": {"app_switch": "auto", "app_menu": "auto"},
+        "end_phase": ["done", "idle"],
+        "approvals_asked": 0,
+        "tool_ok": {"app_switch": true, "app_menu": true},
+        "data_contains": {"app_menu": [{"pressed": ["File", "New Tab"]}]}
+      }
+    },
+    {
       "id": "latency-v2-kinds-present",
       "input": "open obsidian",
       "expect": {
