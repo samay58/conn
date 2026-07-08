@@ -249,11 +249,21 @@ The app is installed to /Applications with the brass speaking-trumpet icon
   budget-hold identity with a real Override once button) shipped with the
   gates plus a fresh screenshot set as the verification, per the no
   re-review decision.
-- **STOP 3 (hand tuning) is the next stop.** I12 is live: Samay drives the
-  playground and the hotkey until the motion is award-grade, tuned values
-  write back to DesignTokens.swift and the spec tables in one commit. The
-  deferred 12-principles adversarial pass and the Fable taste pass on a
-  recording land here too.
+- **Live drive 2026-07-07 evening: four bugs registered, P0 round is the
+  next session.** Samay drove the refinement build and hit a broken
+  context spine: frontmost reads Kaku always (stale or imposter
+  NSWorkspace source, mac.py:20 and ax.py:214), the app-spawned daemon's
+  python has no Accessibility grant despite Conn.app holding one (TCC
+  binds to the binary), the app_menu frontmost gate blocks the app you
+  are visibly in (downstream of the first), and "meta+t" dies in the
+  hotkey normalizer (no meta alias). Full registry with trace evidence
+  and fix directions: `docs/NEXT-SESSION.md`. The round pulls S2, S3,
+  and R5 forward, ahead of STOP 3.
+- **STOP 3 (hand tuning) follows the P0 round.** I12 is live: Samay
+  drives the playground and the hotkey until the motion is award-grade,
+  tuned values write back to DesignTokens.swift and the spec tables in
+  one commit. The deferred 12-principles adversarial pass and the Fable
+  taste pass on a recording land here too.
 
 ## What's next
 
