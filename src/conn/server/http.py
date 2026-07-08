@@ -83,6 +83,7 @@ def build_server(app: ConnApp) -> Starlette:
         app.publish({"type": "hello", "live": app.adapter_is_live(),
                      "cap_usd": app.cfg.budget.session_cap_usd,
                      "server_ts_ms": now_ms()})
+        is_app_client = False
         try:
             while True:
                 raw = await ws.receive_text()
@@ -90,10 +91,16 @@ def build_server(app: ConnApp) -> Starlette:
                     msg = json.loads(raw)
                 except ValueError:
                     continue
+                if client_role(msg) == "app" and not is_app_client:
+                    is_app_client = True
+                    app.ax_bridge.app_attached()
+                    continue
                 await handle_client(app, msg)
         except WebSocketDisconnect:
             pass
         finally:
+            if is_app_client:
+                app.ax_bridge.app_detached()
             bus.detach(ws)
 
     return Starlette(routes=[
@@ -104,8 +111,19 @@ def build_server(app: ConnApp) -> Starlette:
     ])
 
 
+def client_role(msg: dict) -> str | None:
+    """A client_hello names the connection's role; the native app registers
+    as "app" so ax_read requests have a known answerer."""
+    if msg.get("type") == "client_hello":
+        role = msg.get("role")
+        return role if isinstance(role, str) else None
+    return None
+
+
 async def handle_client(app: ConnApp, msg: dict) -> None:
     match msg.get("type"):
+        case "ax_read_result":
+            app.ax_bridge.resolve(str(msg.get("request_id", "")), msg.get("data"))
         case "ptt_down":
             await app.on_ptt_down(client_ts_ms=msg.get("client_ts_ms"),
                                   source=str(msg.get("source", "console")))

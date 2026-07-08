@@ -40,3 +40,7 @@ class ExecutionContext:
     screenshot_dir: Path
     ax: SnapshotStore | None = None
     mcp: object | None = None
+    # AxBridge when the daemon serves an app client: context reads route
+    # through the app's Accessibility grant (TCC binds to the binary, and
+    # the grant lives on Conn.app, not on the spawned python).
+    ax_reader: object | None = None

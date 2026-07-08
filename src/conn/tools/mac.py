@@ -14,7 +14,40 @@ from urllib.parse import quote_plus
 from .base import ExecutionContext, ToolError
 
 
+SELECTED_TEXT_MAX = 2000
+
+
 def get_context(args: dict, ctx: ExecutionContext) -> dict:
+    # App lane first: the app's Accessibility grant covers window titles and
+    # selected text that the daemon's own TCC identity cannot read.
+    if ctx.ax_reader is not None:
+        payload = ctx.ax_reader.request_context_sync()
+        if payload is not None:
+            return _normalize_app_context(payload)
+    return _python_context()
+
+
+def _normalize_app_context(payload: dict) -> dict:
+    """The app payload crosses a process boundary; whitelist and coerce."""
+    def text(key: str, limit: int | None = None) -> str | None:
+        value = payload.get(key)
+        if value is None:
+            return None
+        value = str(value)
+        return value[:limit] if limit else value
+
+    accessibility = payload.get("accessibility")
+    return {
+        "app": text("app"),
+        "bundle_id": text("bundle_id"),
+        "window_title": text("window_title"),
+        "selected_text": text("selected_text", SELECTED_TEXT_MAX),
+        "accessibility": accessibility if accessibility == "granted" else "not_granted",
+        "source": "app",
+    }
+
+
+def _python_context() -> dict:
     from . import frontmost
 
     app = frontmost.frontmost_application()
@@ -24,6 +57,7 @@ def get_context(args: dict, ctx: ExecutionContext) -> dict:
         "window_title": None,
         "selected_text": None,
         "accessibility": "not_granted",
+        "source": "daemon",
     }
     if app is None:
         return data
@@ -51,7 +85,7 @@ def get_context(args: dict, ctx: ExecutionContext) -> dict:
         if err == 0 and focused is not None:
             err, sel = AXUIElementCopyAttributeValue(focused, kAXSelectedTextAttribute, None)
             if err == 0 and sel:
-                data["selected_text"] = str(sel)[:2000]
+                data["selected_text"] = str(sel)[:SELECTED_TEXT_MAX]
     except Exception:
         pass  # AX is best-effort by design; app name alone is still useful
     return data

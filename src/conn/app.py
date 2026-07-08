@@ -13,6 +13,7 @@ import time
 from typing import Callable
 
 from .approval import ApprovalManager
+from .ax_bridge import AxBridge
 from .config import Config
 from .cost import CostMeter
 from .events import (
@@ -51,6 +52,8 @@ class ConnApp:
         self.trace.subscribe(lambda e: self.publish({"type": "trace", "event": e}))
         self.cost = CostMeter(pricing=cfg.pricing, budget=cfg.budget)
         self.approvals = ApprovalManager(on_timeout=self.dispatch_soon)
+        self.ax_bridge = AxBridge()
+        self.harness.ctx.ax_reader = self.ax_bridge
         self.publisher: Callable[[dict], None] | None = None
         self._pump_task: asyncio.Task | None = None
         self._spoke_this_response = False
@@ -67,6 +70,7 @@ class ConnApp:
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
+        self.ax_bridge.bind(self._loop, self.publish)
         self.trace.log("session_start", session_id=self.session_id,
                        model=self.cfg.realtime.model, demo=not self.adapter_is_live())
         await self.adapter.connect()

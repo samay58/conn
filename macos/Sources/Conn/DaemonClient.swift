@@ -56,6 +56,29 @@ final class DaemonClient {
         ])
     }
 
+    /// Messages the app answers itself rather than renders. On hello (the
+    /// daemon's first frame, so the socket is provably open) the app
+    /// registers as the ax_read answerer; on ax_read it performs the
+    /// Accessibility context read the daemon's TCC identity cannot (S2).
+    private func handleSideband(_ msg: [String: Any]) {
+        switch msg["type"] as? String {
+        case "hello":
+            send(["type": "client_hello", "role": "app"])
+        case "ax_read":
+            guard let requestId = msg["request_id"] as? String else { return }
+            Task.detached { [weak self] in
+                let data = AxContextReader.read()
+                await MainActor.run { [weak self] in
+                    self?.send(["type": "ax_read_result",
+                                "request_id": requestId,
+                                "data": data])
+                }
+            }
+        default:
+            break
+        }
+    }
+
     private func receive(on task: URLSessionWebSocketTask) {
         task.receive { [weak self] result in
             Task { @MainActor [weak self] in
@@ -65,6 +88,7 @@ final class DaemonClient {
                     if case .string(let text) = message,
                        let data = text.data(using: .utf8),
                        let msg = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        self.handleSideband(msg)
                         self.state.apply(msg)
                     }
                     self.receive(on: task)

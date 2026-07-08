@@ -67,13 +67,19 @@ def _mic() -> dict:
 
 def _accessibility() -> dict:
     try:
+        import sys
+
         from ApplicationServices import AXIsProcessTrusted
 
         if AXIsProcessTrusted():
             return _result("accessibility", OK, "window titles and selected text available")
+        binary = os.path.realpath(sys.executable)
         return _result("accessibility", WARN,
-                       "not granted; get_context degrades to app name only. Grant in "
-                       "System Settings, Privacy and Security, Accessibility")
+                       "not granted for this python. Context reads route through "
+                       "Conn.app's grant when the app is connected; the console-only "
+                       "path and the grounded lane (snapshot, click, type) need this "
+                       f"exact binary granted: {binary} (System Settings, Privacy and "
+                       "Security, Accessibility, then relaunch the daemon)")
     except Exception as e:
         return _result("accessibility", FAIL, str(e))
 
