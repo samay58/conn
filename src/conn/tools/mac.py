@@ -15,9 +15,9 @@ from .base import ExecutionContext, ToolError
 
 
 def get_context(args: dict, ctx: ExecutionContext) -> dict:
-    from AppKit import NSWorkspace
+    from . import frontmost
 
-    app = NSWorkspace.sharedWorkspace().frontmostApplication()
+    app = frontmost.frontmost_application()
     data: dict = {
         "app": str(app.localizedName()) if app else None,
         "bundle_id": str(app.bundleIdentifier()) if app else None,

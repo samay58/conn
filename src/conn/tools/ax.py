@@ -209,9 +209,9 @@ class MacAxBackend:
         self._prior_ax_flags: dict[int, dict[str, object | None]] = {}
 
     def frontmost(self) -> tuple[str, int]:
-        from AppKit import NSWorkspace
+        from . import frontmost
 
-        app = NSWorkspace.sharedWorkspace().frontmostApplication()
+        app = frontmost.frontmost_application()
         if app is None:
             raise ToolError("frontmost_unavailable")
         return str(app.bundleIdentifier() or ""), int(app.processIdentifier())
