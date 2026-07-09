@@ -6,14 +6,38 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 BETA_DEVELOPER_DIR="/Applications/Xcode-beta.app/Contents/Developer"
+XCODE_DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 
-if swift build --version >/dev/null 2>&1 && swift package describe --type json >/dev/null 2>&1; then
-    : # current toolchain works bare (manifest actually compiles)
-elif DEVELOPER_DIR="$BETA_DEVELOPER_DIR" swift build --version >/dev/null 2>&1 \
-    && DEVELOPER_DIR="$BETA_DEVELOPER_DIR" swift package describe --type json >/dev/null 2>&1; then
+# A toolchain qualifies only when the manifest compiles AND SwiftUI macros
+# expand: older Command Line Tools pass the manifest probe but lack the
+# SwiftUIMacros plugin, which otherwise only surfaces as a build failure.
+toolchain_ok() {
+    local dir="${1:-}"
+    local -a run=()
+    [[ -n "$dir" ]] && run=(env "DEVELOPER_DIR=$dir")
+    "${run[@]}" swift build --version >/dev/null 2>&1 || return 1
+    "${run[@]}" swift package describe --type json >/dev/null 2>&1 || return 1
+    local probedir
+    probedir="$(mktemp -d -t conn-macro-probe)"
+    printf 'import SwiftUI\nstruct P: View { @State private var n = 0; var body: some View { Text("p") } }\n' \
+        > "$probedir/probe.swift"
+    "${run[@]}" swiftc -typecheck "$probedir/probe.swift" >/dev/null 2>&1
+    local rc=$?
+    rm -rf "$probedir"
+    return $rc
+}
+
+if toolchain_ok; then
+    : # selected toolchain works bare
+elif toolchain_ok "$BETA_DEVELOPER_DIR"; then
     export DEVELOPER_DIR="$BETA_DEVELOPER_DIR"
+elif toolchain_ok "$XCODE_DEVELOPER_DIR"; then
+    export DEVELOPER_DIR="$XCODE_DEVELOPER_DIR"
 else
-    echo "no working Swift toolchain: install/select Xcode-beta at $BETA_DEVELOPER_DIR or repair Command Line Tools (xcode-select --install)"
+    echo "no Swift toolchain here can build SwiftUI macro code: install full Xcode, or Command Line Tools new enough to ship SwiftUIMacros"
+    if [[ -d /Applications/Xcode.app ]]; then
+        echo "Xcode.app is present; if its license is unaccepted that alone disqualifies it: sudo xcodebuild -license accept"
+    fi
     exit 1
 fi
 
