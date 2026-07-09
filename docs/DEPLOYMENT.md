@@ -105,8 +105,8 @@ Everything else is relative to the project or resolved at runtime.
 
 ## Verification checklist (copy into the Mini session when migrating)
 
-- [ ] 166 tests pass on the Mini's venv
-- [ ] `conn --eval` 7/7 with artifacts under `data/evals/`
+- [ ] full pytest suite green on the Mini's venv (337 tests at last count)
+- [ ] `conn --eval` all green with artifacts under `data/evals/` (13 at last count)
 - [ ] `conn --doctor` reviewed; mic RMS is live, qmd path pinned, vault registered in Obsidian
 - [ ] App builds, installs to /Applications, menu bar icon up
 - [ ] Demo turn end to end in the panel (no credentials needed)
