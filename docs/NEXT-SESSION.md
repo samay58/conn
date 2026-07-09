@@ -174,3 +174,33 @@ voice marks ("remember this spot, come back to it"), and dictate-to-
 selection replace. None are Block B; they wait for triggers.
 
 Delete this file when the P0 round closes and STOP 3 is scheduled.
+
+## 2026-07-09 late-drive findings (for the next session)
+
+Identity plumbing verified live: grants green both lanes after a
+cert-signed reinstall with zero Settings visits (trace
+session_de08ed53a2). Three open findings, in priority order:
+
+1. app_menu reports success but does not perform: the trace says
+   pressed Shell > New Tab ok in 84ms, Samay's eyes say the Shell menu
+   opened and nothing else happened. AXPress on the leaf item returned
+   success without invoking it. Suspects: lazy menu population (the
+   AXMenu's children may need the menu opened before the real items
+   exist, so the walk may press a stale or proxy element) and blind
+   trust in the AXPress return code. First step is observability: tag
+   the menu result with the lane that pressed (menu has no lane field;
+   hotkey already does) and verify post-press that the menu actually
+   closed or the action occurred. Then probe AXPress semantics live
+   against Terminal and Safari from both lanes.
+2. Transcription garbled but English ("goes resale for around the
+   Tatton terminal"): the language pin holds; recognition quality does
+   not. Check input device choice (BOYA mini is the default in use) and
+   whether pre-roll plus device selection improves it.
+3. Model repeated its previous tool call: "Open Safari" re-proposed
+   app_menu Shell > New Tab in Terminal and executed after approval.
+   Prompt tightening, reasoning effort, and the specced X2 context
+   pruning are the candidates.
+
+Samay's verdict at close: still not usable against real apps; the
+menu-action lane needs real work, not patchwork. Plan the session
+around finding 1 with a live probe harness before writing any fix.
