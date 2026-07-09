@@ -1,12 +1,31 @@
 # Deployment: running Conn on another Mac (Mac Mini path)
 
-Written 2026-07-02, updated 2026-07-07 for the standalone repo. Conn lives in
+Written 2026-07-02, updated 2026-07-09 for `bootstrap.sh`. Conn lives in
 its own repo at `~/conn` (no longer inside the Phoenix vault); cloning or
 copying that repo brings all source, docs, scenarios, and evals. Build
 artifacts, traces, receipts, screenshots, and the `.venv` are gitignored and
 stay local to each machine. What does NOT travel automatically: the Python
 venv, the built app bundle, TCC grants, and the API key. This doc is the
 complete path from repo checkout to a working install.
+
+## One command
+
+```bash
+git clone https://github.com/samay58/conn.git ~/conn && ~/conn/bootstrap.sh
+```
+
+`bootstrap.sh` automates setup steps 2 through 5 below (venv, config checks,
+test + eval + doctor verification, app build and install) and prints the
+manual remainder. It is idempotent; rerun it after any `git pull`. The
+numbered steps stay as the reference for what it does and for doing it by
+hand. `--no-app` skips the Swift build for a daemon-only install.
+
+From the MacBook, with Tailscale up on both machines, the same thing over
+SSH (Tailscale SSH answers on the `samays-mac-mini` name, no key setup):
+
+```bash
+ssh samays-mac-mini 'git clone https://github.com/samay58/conn.git ~/conn 2>/dev/null; ~/conn/bootstrap.sh'
+```
 
 ## What Conn is on a second machine
 

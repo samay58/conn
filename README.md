@@ -50,6 +50,18 @@ self-signed identity once and make-app.sh uses it automatically:
 
 Without the identity the script falls back to ad hoc and prints a warning that grants will reset on install.
 
+## Second Mac in one command
+
+```bash
+git clone https://github.com/samay58/conn.git ~/conn && ~/conn/bootstrap.sh
+```
+
+`bootstrap.sh` builds the per-machine venv, verifies the daemon (tests,
+evals, doctor), builds and installs the app, then prints the only steps
+that never travel: key material and TCC grants. Idempotent; rerun it after
+any `git pull`. Machine-specific values and the full checklist:
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Quickstart (demo, no credentials)
 
 ```bash
