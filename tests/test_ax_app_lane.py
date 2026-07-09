@@ -26,14 +26,19 @@ class FakeBridge:
         return self.responses.get(op)
 
 
+# The real shape: an untitled AXMenu interposer sits between every menu-bar
+# item and its items. The idealized flat shape hid the interposer bug until
+# a live drive found it (2026-07-09).
 MENU_TREE = {
     "title": "",
     "children": [
         {"title": "File", "children": [
-            {"title": "New Tab", "children": []},
-            {"title": "Close Window", "children": []},
+            {"title": "", "children": [
+                {"title": "New Tab", "children": []},
+                {"title": "Close Window", "children": []},
+            ]},
         ]},
-        {"title": "Edit", "children": []},
+        {"title": "Edit", "children": [{"title": "", "children": []}]},
     ],
 }
 
@@ -130,4 +135,16 @@ def test_menu_node_from_wire_caps_depth():
 
 def test_app_lane_backend_is_selected_only_when_present(ctx):
     ctx.ax_reader = FakeBridge({}, app_present=True)
+    assert isinstance(_posting_backend(ctx), AppLaneInputBackend)
+
+
+def test_python_fallback_does_not_pin_the_lane(ctx):
+    # One app-less call used to cache MacInputBackend on ctx, which then read
+    # as an explicit injection and kept the app lane unselectable for the
+    # daemon's lifetime (found live 2026-07-09).
+    bridge = FakeBridge({"posting_capability": True, "key_chord": True}, app_present=False)
+    ctx.ax_reader = bridge
+    assert not isinstance(_posting_backend(ctx), AppLaneInputBackend)
+    assert getattr(ctx, "input_backend", None) is None
+    bridge.app_present = True
     assert isinstance(_posting_backend(ctx), AppLaneInputBackend)

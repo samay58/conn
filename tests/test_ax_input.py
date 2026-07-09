@@ -559,3 +559,48 @@ def test_named_app_frontmost_matches_bundle_tail():
     _require_named_app_frontmost({"app": "Google Chrome"}, "com.google.Chrome")
     with pytest.raises(ToolError, match="app_not_frontmost: Safari"):
         _require_named_app_frontmost({"app": "Safari"}, "com.google.Chrome")
+
+def test_menu_walks_through_the_untitled_ax_menu_interposer(cfg, ctx):
+    # Real macOS menus: AXMenuBar -> AXMenuBarItem(titled) -> AXMenu("") ->
+    # AXMenuItem(titled). The idealized flat trees above hid this until a
+    # live drive died with empty candidates (2026-07-09).
+    menu_root = node(
+        "AXMenuBar",
+        children=(
+            node("AXMenuBarItem", "Shell", children=(
+                node("AXMenu", children=(node("AXMenuItem", "New Tab"), node("AXMenuItem", "New Window"))),
+            )),
+            node("AXMenuBarItem", "Edit", children=(node("AXMenu"),)),
+        ),
+    )
+    tree = node("AXWindow", "Main")
+    store, backend, _snap = make_store(cfg, tree)
+    backend.menu_root = menu_root
+    input_backend = FakeInputBackend()
+    attach(ctx, store, input_backend)
+
+    result = menu({"path": ["shell", "new tab"]}, ctx)
+
+    assert result == {"pressed": ["Shell", "New Tab"]}
+    assert input_backend.actions == [{"kind": "press_menu_path", "titles": ("Shell", "New Tab"), "supported": True}]
+
+
+def test_menu_candidates_surface_through_the_interposer(cfg, ctx):
+    menu_root = node(
+        "AXMenuBar",
+        children=(
+            node("AXMenuBarItem", "View", children=(
+                node("AXMenu", children=(node("AXMenuItem", "Zoom In"), node("AXMenuItem", "Zoom Out"))),
+            )),
+        ),
+    )
+    tree = node("AXWindow", "Main")
+    store, backend, _snap = make_store(cfg, tree)
+    backend.menu_root = menu_root
+    input_backend = FakeInputBackend()
+    attach(ctx, store, input_backend)
+
+    result = menu({"path": ["View", "Missing"]}, ctx)
+
+    assert result == {"candidates": ["Zoom In", "Zoom Out"]}
+    assert input_backend.actions == []

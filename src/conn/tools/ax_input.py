@@ -190,6 +190,19 @@ class AppLaneInputBackend:
         return _menu_node_from_wire(data)
 
 
+def _titled_children(node: RawNode):
+    """Matchable children for a menu walk. Real macOS menus put an untitled
+    AXMenu interposer between the menu-bar item and its items (Shell ->
+    AXMenu "" -> New Tab); the walk descends through untitled nodes
+    transparently or every real menu dies with empty candidates (found live
+    2026-07-09; the test trees were idealized and hid it)."""
+    for child in node.children:
+        if child.title:
+            yield child
+        else:
+            yield from _titled_children(child)
+
+
 def _menu_node_from_wire(data: object, depth: int = 8) -> RawNode | None:
     """Menu trees cross a process boundary; whitelist and coerce, and cap the
     depth so a malformed answer cannot recurse away."""
@@ -347,12 +360,7 @@ class MacInputBackend:
             return False
         element = menu_bar
         for title in titles:
-            children = self._copy_attr(element, "AXChildren") or []
-            match = None
-            for child in children:
-                if str(self._copy_attr(child, "AXTitle") or "") == title:
-                    match = child
-                    break
+            match = self._find_titled_child(element, title)
             if match is None:
                 return False
             element = match
@@ -360,6 +368,19 @@ class MacInputBackend:
             return AXUIElementPerformAction(element, "AXPress") == 0
         except Exception:
             return False
+
+    def _find_titled_child(self, element: object, title: str) -> object | None:
+        """Menu walk step that sees through the untitled AXMenu interposer
+        (the same descent as _titled_children, on live AX elements)."""
+        for child in self._copy_attr(element, "AXChildren") or []:
+            child_title = str(self._copy_attr(child, "AXTitle") or "")
+            if child_title == title:
+                return child
+            if not child_title:
+                found = self._find_titled_child(child, title)
+                if found is not None:
+                    return found
+        return None
 
     def _frontmost_pid(self) -> int:
         from AppKit import NSWorkspace
@@ -526,7 +547,7 @@ def menu(args: dict, ctx: ExecutionContext) -> dict:
     titles: list[str] = []
     current = root
     for segment in list(args["path"]):
-        children = [(child, child.title or "") for child in current.children if child.title]
+        children = [(child, child.title or "") for child in _titled_children(current)]
         result = _choose_match(segment, [((index,), child, title) for index, (child, title) in enumerate(children)])
         if result["match"] is None:
             return {"candidates": [title for _path, _raw, title in result["ranked"]]}
@@ -546,11 +567,11 @@ def _store(ctx: ExecutionContext):
 
 
 def _input_backend(ctx: ExecutionContext) -> InputBackend:
+    # No caching on ctx: MacInputBackend is stateless, and a cached instance
+    # would read as an explicit injection in _posting_backend, pinning
+    # hotkey and menu to the python lane forever after one app-less call.
     backend = getattr(ctx, "input_backend", None)
-    if backend is None:
-        backend = MacInputBackend()
-        ctx.input_backend = backend
-    return backend
+    return backend if backend is not None else MacInputBackend()
 
 
 def _posting_backend(ctx: ExecutionContext) -> InputBackend:

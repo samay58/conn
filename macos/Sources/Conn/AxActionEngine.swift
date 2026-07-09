@@ -91,11 +91,24 @@ enum AxActionEngine {
         guard AXIsProcessTrusted(), let menuBar = menuBarElement(pid: pid) else { return false }
         var element = menuBar
         for title in titles {
-            guard let match = children(of: element).first(where: { self.title(of: $0) == title })
-            else { return false }
+            guard let match = findTitledChild(of: element, title: title) else { return false }
             element = match
         }
         return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+    }
+
+    /// Real menus put an untitled AXMenu interposer between the bar item and
+    /// its items; the walk descends through untitled nodes transparently,
+    /// mirroring the daemon's _titled_children (found live 2026-07-09).
+    private static func findTitledChild(of element: AXUIElement, title: String) -> AXUIElement? {
+        for child in children(of: element) {
+            let childTitle = self.title(of: child) ?? ""
+            if childTitle == title { return child }
+            if childTitle.isEmpty, let found = findTitledChild(of: child, title: title) {
+                return found
+            }
+        }
+        return nil
     }
 
     private static func menuTree(pid: pid_t, maxDepth: Int) -> [String: Any]? {
