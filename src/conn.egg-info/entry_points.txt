@@ -1,2 +1,0 @@
-[console_scripts]
-conn = conn.__main__:main
