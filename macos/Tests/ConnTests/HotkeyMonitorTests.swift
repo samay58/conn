@@ -3,12 +3,12 @@ import XCTest
 @testable import Conn
 
 final class HotkeyMonitorTests: XCTestCase {
-    func testExternalKeyboardDefaultUsesRightCommand() {
+    func testExternalKeyboardDefaultUsesControlOptionChord() {
         let defaults = isolatedDefaults()
 
         let monitor = HotkeyMonitor(defaults: defaults)
 
-        XCTAssertEqual(monitor.binding, .rightCommand)
+        XCTAssertEqual(monitor.binding, .controlOption)
     }
 
     func testSelectedBindingPersistsForNextLaunch() {
@@ -22,6 +22,7 @@ final class HotkeyMonitorTests: XCTestCase {
 
     func testConfiguredModifierEmitsOnePressAndRelease() {
         let monitor = HotkeyMonitor(defaults: isolatedDefaults())
+        monitor.setBinding(.rightCommand)
         var events: [String] = []
         monitor.onDown = { events.append("down") }
         monitor.onUp = { events.append("up") }
@@ -45,8 +46,49 @@ final class HotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(events, ["down", "up"])
     }
 
+    func testControlOptionStartsOnlyWhenBothModifiersAreHeld() {
+        let monitor = HotkeyMonitor(defaults: isolatedDefaults())
+        var events: [String] = []
+        monitor.onDown = { events.append("down") }
+        monitor.onUp = { events.append("up") }
+
+        monitor.handle(
+            keyCode: 59,
+            eventType: .flagsChanged,
+            modifierFlags: .control
+        )
+        monitor.handle(
+            keyCode: 58,
+            eventType: .flagsChanged,
+            modifierFlags: [.control, .option]
+        )
+        monitor.handle(
+            keyCode: 59,
+            eventType: .flagsChanged,
+            modifierFlags: .option
+        )
+        monitor.handle(
+            keyCode: 58,
+            eventType: .flagsChanged,
+            modifierFlags: .option
+        )
+        monitor.handle(
+            keyCode: 59,
+            eventType: .flagsChanged,
+            modifierFlags: [.control, .option]
+        )
+        monitor.handle(
+            keyCode: 58,
+            eventType: .flagsChanged,
+            modifierFlags: .control
+        )
+
+        XCTAssertEqual(events, ["down", "up", "down", "up"])
+    }
+
     func testChangingBindingReleasesAnActivePress() {
         let monitor = HotkeyMonitor(defaults: isolatedDefaults())
+        monitor.setBinding(.rightCommand)
         var events: [String] = []
         monitor.onDown = { events.append("down") }
         monitor.onUp = { events.append("up") }

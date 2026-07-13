@@ -81,7 +81,7 @@ kill $(lsof -ti :8787)
 
 ```bash
 cd macos && ./make-app.sh && open Conn.app
-# hold the configured PTT key to talk; new installs default to Right Command
+# hold the configured PTT keys to talk; new installs default to Control + Option
 ```
 
 ### Drill 5: zombie adoption

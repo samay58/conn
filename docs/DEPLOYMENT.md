@@ -107,7 +107,7 @@ build when none can expand SwiftUI macros. Install full Xcode or newer Command
 Line Tools instead of editing around the macro requirement.
 
 Current reference results on the primary Mac are 461 Python tests passed with
-2 existing dependency warnings, 13 of 13 evals passed, and 108 Swift tests
+2 existing dependency warnings, 13 of 13 evals passed, and 109 Swift tests
 passed. Counts may grow. Every test and eval must be green on the new Mac.
 
 ## Grant privacy permissions
@@ -160,9 +160,9 @@ Artifacts are local under `data/action-probes/`.
 open /Applications/Conn.app
 ```
 
-Hold the configured push-to-talk key and ask a read-only question first. New
-installs default to Right Command. Change it from the Conn menu under
-Push-to-Talk Key if needed. Then try one harmless
+Hold the configured push-to-talk keys and ask a read-only question first. New
+installs default to left-side Control + Option. Change it from the Conn menu
+under Push-to-Talk Key if needed. Then try one harmless
 state-changing action. Confirm that the model continues only after a native
 receipt and that the island says:
 
@@ -178,7 +178,7 @@ calling the new machine accepted for daily use.
 - [ ] Full Python suite green
 - [ ] 13 of 13 harness evals green
 - [ ] Doctor reviewed with no substantive failure
-- [ ] 108 Swift tests or the current larger suite green
+- [ ] 109 Swift tests or the current larger suite green
 - [ ] Release app builds with a macro-capable toolchain
 - [ ] `Conn Dev Signing` is valid
 - [ ] Installed app passes strict signature verification

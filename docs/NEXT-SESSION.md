@@ -8,8 +8,8 @@ Current build is signed, installed, and mechanically green. Do not spend the
 next session on visual control, island polish, sound, MCP, or more architecture.
 The next missing proof is a real fixture-backed semantic matrix.
 
-Installed app uses Right Command for push-to-talk by default. Change it from
-Conn menu, Push-to-Talk Key, if another external-keyboard key is preferable.
+Installed app uses left-side Control + Option for push-to-talk by default.
+Change it from Conn menu, Push-to-Talk Key, if another binding is preferable.
 
 Before running it, unlock the desktop and rerun the fixture probe. If it still
 receives no Accessibility tree, open System Settings, Privacy and Security,

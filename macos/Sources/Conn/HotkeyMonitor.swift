@@ -2,6 +2,7 @@ import AppKit
 
 final class HotkeyMonitor {
     enum Binding: String, CaseIterable {
+        case controlOption = "control_option"
         case rightCommand = "right_command"
         case leftControl = "left_control"
         case leftOption = "left_option"
@@ -13,6 +14,7 @@ final class HotkeyMonitor {
 
         var title: String {
             switch self {
+            case .controlOption: "Control + Option"
             case .rightCommand: "Right Command"
             case .leftControl: "Left Control"
             case .leftOption: "Left Option"
@@ -22,28 +24,30 @@ final class HotkeyMonitor {
             }
         }
 
-        var keyCode: UInt16 {
+        var keyCodes: Set<UInt16> {
             switch self {
-            case .rightCommand: 54
-            case .leftControl: 59
-            case .leftOption: 58
-            case .rightControl: 62
-            case .rightOption: 61
-            case .f13: 105
+            case .controlOption: [58, 59]
+            case .rightCommand: [54]
+            case .leftControl: [59]
+            case .leftOption: [58]
+            case .rightControl: [62]
+            case .rightOption: [61]
+            case .f13: [105]
             }
         }
 
-        var modifier: NSEvent.ModifierFlags? {
+        var requiredModifiers: NSEvent.ModifierFlags {
             switch self {
+            case .controlOption: [.control, .option]
             case .rightCommand: .command
             case .leftControl, .rightControl: .control
             case .leftOption, .rightOption: .option
-            case .f13: nil
+            case .f13: []
             }
         }
 
         var eventMask: NSEvent.EventTypeMask {
-            modifier == nil ? [.keyDown, .keyUp] : .flagsChanged
+            requiredModifiers.isEmpty ? [.keyDown, .keyUp] : .flagsChanged
         }
     }
 
@@ -58,7 +62,7 @@ final class HotkeyMonitor {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         binding = defaults.string(forKey: Binding.defaultsKey)
-            .flatMap(Binding.init(rawValue:)) ?? .rightCommand
+            .flatMap(Binding.init(rawValue:)) ?? .controlOption
     }
 
     var trusted: Bool { AXIsProcessTrusted() }
@@ -83,10 +87,10 @@ final class HotkeyMonitor {
         modifierFlags: NSEvent.ModifierFlags,
         isRepeat: Bool = false
     ) {
-        guard keyCode == binding.keyCode else { return }
-        if let modifier = binding.modifier {
+        guard binding.keyCodes.contains(keyCode) else { return }
+        if !binding.requiredModifiers.isEmpty {
             guard eventType == .flagsChanged else { return }
-            transition(to: modifierFlags.contains(modifier))
+            transition(to: modifierFlags.contains(binding.requiredModifiers))
         } else {
             guard !isRepeat else { return }
             if eventType == .keyDown {

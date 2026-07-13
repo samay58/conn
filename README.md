@@ -35,8 +35,9 @@ It is disabled unless started with its own local console capability. It cannot
 claim the Conn.app control role, answer native RPC, initiate actions, or approve
 plans. Approvals live only in the signed Conn app.
 
-Push-to-talk defaults to **Right Command** for external-keyboard compatibility.
-Change it from the Conn menu under **Push-to-Talk Key**. Choices include Right
+Push-to-talk defaults to **Control + Option** using the normal left-side keys.
+Either press order works; releasing either key ends recording. Change it from
+the Conn menu under **Push-to-Talk Key**. Single-key choices include Right
 Command, Left Control, Left Option, Right Control, Right Option, and F13. The
 selection persists across relaunches and signed rebuilds.
 
@@ -155,7 +156,7 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ```
 
 Latest measured results: 461 Python tests passed with 2 existing dependency
-warnings, 13 of 13 harness evals passed, 108 Swift tests passed, and the release
+warnings, 13 of 13 harness evals passed, 109 Swift tests passed, and the release
 Swift build passed. A 1,000-transaction in-memory native-engine stress test
 recorded zero wrong targets and zero false verified outcomes. It is not the
 real fixture acceptance gate. See
