@@ -81,7 +81,7 @@ kill $(lsof -ti :8787)
 
 ```bash
 cd macos && ./make-app.sh && open Conn.app
-# hold Right Option to talk (needs Input Monitoring + Accessibility on Conn.app)
+# hold the configured PTT key to talk; new installs default to Right Command
 ```
 
 ### Drill 5: zombie adoption

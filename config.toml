@@ -1,7 +1,7 @@
 # Conn user config. Secrets never live here; OPENAI_API_KEY comes from the environment.
 
 [hotkey]
-ptt = "alt_r"            # pynput key name for global push-to-talk; "none" disables the global hotkey
+ptt = "alt_r"            # daemon-only fallback; installed Conn.app uses its persisted Push-to-Talk Key menu setting
 confirm = ["cmd+t", "cmd+w", "cmd+n"]   # tab/window verbs run behind the approval chip; everything else refuses toward app_menu
 
 [realtime]

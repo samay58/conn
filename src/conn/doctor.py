@@ -186,7 +186,7 @@ def _obsidian(cfg: Config) -> dict:
 def _input_monitoring_note() -> dict:
     host = os.environ.get("TERM_PROGRAM", "your terminal")
     return _result("global_hotkey", WARN,
-                   f"cannot be probed safely. If Right Option PTT stays dead, grant "
+                   f"cannot be probed safely. If global PTT stays dead, grant "
                    f"Input Monitoring to {host} and restart conn. Secure Keyboard "
                    f"Entry (iTerm setting or any password field) also disables it")
 

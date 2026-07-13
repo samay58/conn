@@ -20,7 +20,7 @@ cd /Users/samaydhawan/conn/macos
 open /Applications/Conn.app
 ```
 
-The Swift menu-bar app owns the notch island, global Right Option
+The Swift menu-bar app owns the notch island, configurable global
 push-to-talk, production Accessibility observations, semantic target
 resolution, dispatch, and effect verification. On non-notch displays it uses
 the floating panel fallback. No Conn surface takes keyboard focus. Approval is
@@ -34,6 +34,11 @@ The local web console is a read-only engineering surface.
 It is disabled unless started with its own local console capability. It cannot
 claim the Conn.app control role, answer native RPC, initiate actions, or approve
 plans. Approvals live only in the signed Conn app.
+
+Push-to-talk defaults to **Right Command** for external-keyboard compatibility.
+Change it from the Conn menu under **Push-to-Talk Key**. Choices include Right
+Command, Left Control, Left Option, Right Control, Right Option, and F13. The
+selection persists across relaunches and signed rebuilds.
 
 ## What verified means
 
@@ -150,7 +155,7 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ```
 
 Latest measured results: 461 Python tests passed with 2 existing dependency
-warnings, 13 of 13 harness evals passed, 102 Swift tests passed, and the release
+warnings, 13 of 13 harness evals passed, 108 Swift tests passed, and the release
 Swift build passed. A 1,000-transaction in-memory native-engine stress test
 recorded zero wrong targets and zero false verified outcomes. It is not the
 real fixture acceptance gate. See

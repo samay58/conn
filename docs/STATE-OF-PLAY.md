@@ -31,9 +31,14 @@ Conn.app owns:
 - plan fingerprints and signer-bound app launch
 - dispatch, effect verification, and retry certainty
 
-The web console can observe state and approve or deny an exact pending plan.
-It cannot initiate actions, claim the app role, or answer native RPC. No Conn
-surface takes keyboard focus. Approval remains pointer-only.
+The web console can observe state only. It cannot approve, initiate actions,
+claim the app role, or answer native RPC. No Conn surface takes keyboard
+focus. Approval remains pointer-only inside the signed app.
+
+Push-to-talk defaults to Right Command so external keyboards without Right
+Option can run Conn. The menu-bar menu can switch it to Left Control, Left
+Option, Right Control, Right Option, or F13. Choice persists across relaunches
+and signed rebuilds.
 
 ## Action contract
 
@@ -88,7 +93,7 @@ Latest mechanical run:
 |---|---|
 | Python | 461 passed; 2 existing dependency warnings |
 | Harness evals | 13 of 13 passed |
-| Swift | 102 passed |
+| Swift | 108 passed |
 | Release build | passed with Xcode-beta toolchain |
 | Doctor | all substantive checks passed; optional global-hotkey probe warned |
 | Installed app | valid `Conn Dev Signing` signature, built 2026-07-12 |

@@ -239,6 +239,8 @@ before commit and push. Each finding received a regression test and fix:
   approved plan fingerprint
 - schema bounds are enforced before policy, and qmd receives a non-secret
   environment allowlist
+- installed-app push-to-talk now defaults to Right Command, exposes six
+  persisted menu choices, and releases cleanly when the binding changes
 
 The final diff-scoped security scan reviewed 55 production and protocol files.
 Fourteen valid intermediate candidates were fixed and retested. One
@@ -248,7 +250,7 @@ Measured gates after hardening:
 
 - Python: 461 passed, 2 existing dependency warnings
 - evals: 13 of 13 passed
-- Swift: 102 passed
+- Swift: 108 passed
 - release build: passed
 - doctor: every substantive check passed; optional global-hotkey probe warned
 - persistent-signed Conn.app installed and verified on 2026-07-12

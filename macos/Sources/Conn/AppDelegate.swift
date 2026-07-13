@@ -14,9 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         client = DaemonClient(state: state, bridgeToken: bridgeToken)
+        hotkey = HotkeyMonitor()
         statusItem = StatusItemController(
             state: state,
             client: client,
+            hotkey: hotkey,
             panelProvider: { [weak self] in
                 guard let self else {
                     fatalError("Conn panel requested after AppDelegate deallocated")
@@ -40,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             primarySurface = panelController()
         }
 
-        hotkey = HotkeyMonitor()
         hotkey.onDown = { [weak self] in
             self?.client.send(["type": "ptt_down"])
             self?.primarySurface.show()
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        hotkey.stop()
         client.close()
     }
 

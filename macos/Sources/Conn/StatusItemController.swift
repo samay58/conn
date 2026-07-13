@@ -6,13 +6,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let item: NSStatusItem
     private let state: AppState
     private let client: DaemonClient
+    private let hotkey: HotkeyMonitor
     private let panelProvider: () -> PanelController
     private var subscriptions = Set<AnyCancellable>()
 
-    init(state: AppState, client: DaemonClient,
+    init(state: AppState, client: DaemonClient, hotkey: HotkeyMonitor,
          panelProvider: @escaping () -> PanelController) {
         self.state = state
         self.client = client
+        self.hotkey = hotkey
         self.panelProvider = panelProvider
         self.item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
@@ -58,6 +60,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let trust = makeItem("Enable Global Hotkey…", #selector(enableHotkey), "")
         trust.tag = 2
         menu.addItem(trust)
+        let binding = NSMenuItem(
+            title: "Push-to-Talk Key",
+            action: nil,
+            keyEquivalent: ""
+        )
+        binding.tag = 3
+        let choices = NSMenu()
+        for choice in HotkeyMonitor.Binding.allCases {
+            let choiceItem = makeItem(choice.title, #selector(selectHotkey), "")
+            choiceItem.representedObject = choice.rawValue
+            choices.addItem(choiceItem)
+        }
+        binding.submenu = choices
+        menu.addItem(binding)
         menu.addItem(makeItem("Open Console", #selector(openConsole), ""))
         menu.addItem(.separator())
         menu.addItem(makeItem("Quit Conn", #selector(quit), "q"))
@@ -77,6 +93,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.item(withTag: 1)?.title =
             "Conn \(conn) · \(state.stateLabel) · $\(String(format: "%.3f", state.spentUSD))"
         menu.item(withTag: 2)?.isHidden = AXIsProcessTrusted()
+        menu.item(withTag: 3)?.title = "Push-to-Talk Key: \(hotkey.binding.title)"
+        for item in menu.item(withTag: 3)?.submenu?.items ?? [] {
+            item.state = item.representedObject as? String == hotkey.binding.rawValue
+                ? .on : .off
+        }
     }
 
     @objc private func showPanel() { panelProvider().show() }
@@ -86,6 +107,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func enableHotkey() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         AXIsProcessTrustedWithOptions(options as CFDictionary)
+    }
+
+    @objc private func selectHotkey(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let binding = HotkeyMonitor.Binding(rawValue: raw) else { return }
+        hotkey.setBinding(binding)
     }
 
     @objc private func openConsole() {
