@@ -1,126 +1,200 @@
-# Deployment: running Conn on another Mac (Mac Mini path)
+# Deployment: running Conn on another Mac
 
-Written 2026-07-02, updated 2026-07-09 for `bootstrap.sh`. Conn lives in
-its own repo at `~/conn` (no longer inside the Phoenix vault); cloning or
-copying that repo brings all source, docs, scenarios, and evals. Build
-artifacts, traces, receipts, screenshots, and the `.venv` are gitignored and
-stay local to each machine. What does NOT travel automatically: the Python
-venv, the built app bundle, TCC grants, and the API key. This doc is the
-complete path from repo checkout to a working install.
+Updated 2026-07-12 for the verified semantic action engine.
 
-## One command
+Conn uses two local processes:
+
+- the Python daemon for Realtime, policy, approvals, provenance, traces, and
+  cost
+- Conn.app for the primary UI and all production macOS observation, semantic
+  action, and effect verification
+
+The source repo travels. The Python environment, built app, code-signing
+identity, macOS privacy grants, API key, and local evidence artifacts do not.
+
+## Prerequisites
+
+- macOS 14 or newer
+- full Xcode or Command Line Tools that include `SwiftUIMacros`
+- Python supported by the project dependencies
+- Accessibility permission for the installed Conn.app
+- Microphone permission for voice
+- a machine-local `Conn Dev Signing` identity for stable privacy grants
+- OpenAI API key for live mode
+- qmd and the Phoenix vault only when vault search is wanted
+
+Screen Recording is not required for semantic control. The visual action lane
+is not implemented.
+
+## Clone and bootstrap
 
 ```bash
-git clone https://github.com/samay58/conn.git ~/conn && ~/conn/bootstrap.sh
+git clone https://github.com/samay58/conn.git ~/conn
+~/conn/bootstrap.sh
 ```
 
-`bootstrap.sh` automates setup steps 2 through 5 below (venv, config checks,
-test + eval + doctor verification, app build and install) and prints the
-manual remainder. It is idempotent; rerun it after any `git pull`. The
-numbered steps stay as the reference for what it does and for doing it by
-hand. `--no-app` skips the Swift build for a daemon-only install.
+`bootstrap.sh` creates the project environment, checks configuration, runs the
+Python tests, evals, and doctor, then builds and installs the app. It prints the
+machine-local steps it cannot perform. Rerun it after `git pull`.
 
-From the MacBook, with Tailscale up on both machines, the same thing over
-SSH (Tailscale SSH answers on the `samays-mac-mini` name, no key setup):
+Use `--no-app` only for daemon development. A daemon-only install cannot run
+production semantic computer actions because there is no silent Python AX or
+input fallback.
+
+## Manual setup
 
 ```bash
-ssh samays-mac-mini 'git clone https://github.com/samay58/conn.git ~/conn 2>/dev/null; ~/conn/bootstrap.sh'
+cd ~/conn
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
 ```
 
-## What Conn is on a second machine
+Set machine-specific values in `config.toml`:
 
-The daemon plus the menu-bar app, identical to the MacBook install. On the Mini
-the likely uses are voice control of the recording desk and vault search on the
-always-on machine. Conn is not a background job: it does nothing until a human
-holds the talk key, which fits the Mini's prepare-by-default doctrine. Do not
-run it as a launchd service; launch the app when wanted.
+| Value | What to set |
+|---|---|
+| `phoenix.vault_root` | Absolute vault path on this Mac |
+| `phoenix.qmd_bin` | Absolute qmd path if it is not on the app child's PATH |
+| `OPENAI_API_KEY` or `~/.config/openai/key` | Provision locally, never commit |
+| `CONN_PROJECT_ROOT` and `CONN_PYTHON` | Set only when repo or venv is outside the default `~/conn` layout |
 
-## Machine-specific values (the honest list)
+When path overrides are needed:
 
-| Where | Value | Change needed on a new machine |
-|---|---|---|
-| `config.toml` `phoenix.vault_root` | `/Users/samaydhawan/phoenix` | Match the vault path on that machine |
-| `config.toml` `phoenix.qmd_bin` | nvm path to `qmd` | Run `which qmd` there and pin the absolute path |
-| App daemon launch | `CONN_PROJECT_ROOT` and `CONN_PYTHON`, or the default `~/conn` paths if they exist | Set both env vars before launching Conn when the repo or venv path differs. Source edits are no longer required |
-| `~/.config/openai/key` or `OPENAI_API_KEY` | key material | Provision manually; never synced, never in git |
+```bash
+CONN_PROJECT_ROOT="$HOME/conn" \
+CONN_PYTHON="$HOME/conn/.venv/bin/python" \
+open /Applications/Conn.app
+```
 
-Everything else is relative to the project or resolved at runtime.
+## Create stable signing on this Mac
 
-## Setup steps
+Each Mac needs its own persistent development identity unless the private key
+is deliberately transferred through a secure process.
 
-1. Get the repo onto the machine (clone, or copy `~/conn` from the MacBook).
+In Keychain Access:
 
-2. Create the project venv (wheels are per-machine):
+1. Open Certificate Assistant, then Create a Certificate.
+2. Name it `Conn Dev Signing`.
+3. Choose Self-Signed Root and Code Signing.
+4. Override defaults and use 3650 days of validity.
 
-   ```bash
-   cd ~/conn
-   python3 -m venv .venv
-   .venv/bin/pip install -e ".[dev]"
-   ```
+Check it:
 
-3. Adjust the machine-specific values from the table above. If the vault or
-   venv does not live at the default Phoenix paths, launch the app with both
-   daemon path overrides:
+```bash
+security find-identity -v -p codesigning
+```
 
-   ```bash
-   CONN_PROJECT_ROOT="$HOME/conn" \
-   CONN_PYTHON="$HOME/conn/.venv/bin/python" \
-   open /Applications/Conn.app
-   ```
+The result must list `Conn Dev Signing` as valid. If Keychain prompts during
+the build, choose **Always Allow**. Do not rely on an ad-hoc build for a machine
+that will be updated repeatedly. Ad-hoc signatures reset TCC identity.
 
-4. Verify the daemon before touching the app:
+## Verify the daemon and package
 
-   ```bash
-   cd ~/conn
-   PYTHONPATH=src .venv/bin/python -m pytest tests -q     # expect the full suite green
-   PYTHONPATH=src .venv/bin/python -m conn --eval          # expect all evals green
-   PYTHONPATH=src .venv/bin/python -m conn --doctor        # read every line
-   ```
+```bash
+cd ~/conn
+PYTHONPATH=src .venv/bin/python -m pytest tests -q
+PYTHONPATH=src .venv/bin/python -m conn --eval
+PYTHONPATH=src .venv/bin/python -m conn --doctor
 
-5. Build and install the app (`make-app.sh` probes for a working Swift
-   toolchain and falls back to Xcode-beta when Command Line Tools cannot
-   compile the package manifest):
+cd ~/conn/macos
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
+./make-app.sh install
+codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
+```
 
-   ```bash
-   cd macos && ./make-app.sh install
-   open /Applications/Conn.app
-   ```
+`make-app.sh` probes the active toolchain, Xcode-beta, and Xcode. It refuses to
+build when none can expand SwiftUI macros. Install full Xcode or newer Command
+Line Tools instead of editing around the macro requirement.
 
-   The app probes `127.0.0.1:8787` and autolaunches the daemon if none is
-   running: live when a key resolves, demo otherwise. The menu bar shows a
-   waveform icon; the panel appears on activity only.
+Current reference results on the primary Mac are 461 Python tests passed with
+2 existing dependency warnings, 13 of 13 evals passed, and 102 Swift tests
+passed. Counts may grow. Every test and eval must be green on the new Mac.
 
-6. TCC grants, attached to `/Applications/Conn.app` (stable identity; the
-   daemon is a child process so prompts appear as Conn):
-   - Microphone: auto-prompts on first live session.
-   - Accessibility: menu item "Enable Global Hotkey" prompts; needed for
-     Right Option hold-to-talk and for window titles plus selected text in
-     `computer_get_context`. Without it, panel and console PTT still work.
-   - Screen Recording: only if `computer_screenshot` should see other apps.
+## Grant privacy permissions
 
-7. Smoke it: hold Right Option (or hold Space in the console at
-   `http://127.0.0.1:8787`), say "what app am I in right now," watch the
-   trace and the cost line. One turn costs about a cent at reasoning effort
-   low; the session cap is $1.00 with a hard stop.
+Open `/Applications/Conn.app` after the persistent-signed install.
 
-## Verification checklist (copy into the Mini session when migrating)
+- **Microphone:** allow on the first live voice session.
+- **Accessibility:** enable Conn.app in System Settings, Privacy and Security,
+  Accessibility. This powers the global hotkey and the production semantic
+  observation/action lane.
+- **Screen Recording:** optional for the local screenshot tool only. It is not
+  used by semantic actions.
 
-- [ ] full pytest suite green on the Mini's venv (337 tests at last count)
-- [ ] `conn --eval` all green with artifacts under `data/evals/` (13 at last count)
-- [ ] `conn --doctor` reviewed; mic RMS is live, qmd path pinned, vault registered in Obsidian
-- [ ] App builds, installs to /Applications, menu bar icon up
-- [ ] Demo turn end to end in the panel (no credentials needed)
-- [ ] Live turn with one tool call, trace shows tool_result before continuation
-- [ ] Budget cap and Stop verified once each
+Python Accessibility permission is not required for production semantic
+control. The daemon asks Conn.app to observe and act.
 
-## Known portability debts (documented, deliberate)
+## Run installation smoke probes on the new Mac
 
-- `DaemonLauncher.swift` only resolves two path lanes: both env vars, or the
-  default Phoenix path pair if both exist. There is no preferences UI and no
-  filesystem scan by design.
-- The app is ad-hoc signed. Fine for personal installs; TCC grants survive
-  rebuilds because the bundle path and identifier stay stable.
-- `sounddevice` bundles PortAudio and `pynput` rides pyobjc; both installed
-  clean on Python 3.14.6 on the MacBook. If a future Python bumps and wheels
-  break, the fallback is a project-local venv on the last known-good Python,
-  documented in the spec's dependency-gate note.
+Keep the desktop unlocked. First confirm it is not console-locked:
+
+```bash
+ioreg -n Root -d1 | rg IOConsoleLocked
+```
+
+Then run:
+
+```bash
+cd ~/conn
+PYTHONPATH=src .venv/bin/python -m conn --action-probe fixture
+PYTHONPATH=src .venv/bin/python -m conn --action-probe terminal
+PYTHONPATH=src .venv/bin/python -m conn --action-probe safari
+PYTHONPATH=src .venv/bin/python -m conn --action-probe chrome
+PYTHONPATH=src .venv/bin/python -m conn --action-probe notes
+PYTHONPATH=src .venv/bin/python -m conn --action-probe obsidian
+```
+
+The fixture smoke passes when the engine reports `no_effect` and agrees with
+the independent fixture truth log. Each installed real-app smoke passes when
+the engine reports `verified` and WindowServer sees that app's window in front.
+Missing apps and unproven signing identities are blockers, not passes.
+
+These probes do not satisfy the operation-level fixture and live acceptance
+matrix in `docs/2026-07-07-roadmap.md`.
+
+Artifacts are local under `data/action-probes/`.
+
+## Smoke a live session
+
+```bash
+open /Applications/Conn.app
+```
+
+Hold Right Option and ask a read-only question first. Then try one harmless
+state-changing action. Confirm that the model continues only after a native
+receipt and that the island says:
+
+- `Done.` only for verified
+- `Sent, not confirmed.` for dispatch-only
+- `Did not run.` for other unsuccessful outcomes
+
+Run the 30-command product checklist in `docs/LIVE_EVAL_CHECKLIST.md` before
+calling the new machine accepted for daily use.
+
+## Deployment checklist
+
+- [ ] Full Python suite green
+- [ ] 13 of 13 harness evals green
+- [ ] Doctor reviewed with no substantive failure
+- [ ] 102 Swift tests or the current larger suite green
+- [ ] Release app builds with a macro-capable toolchain
+- [ ] `Conn Dev Signing` is valid
+- [ ] Installed app passes strict signature verification
+- [ ] Conn.app has Accessibility and Microphone permissions
+- [ ] Fixture smoke probe agrees with independent truth
+- [ ] Installed app-switch smokes pass or blockers are named
+- [ ] Live read-only turn works
+- [ ] Live harmless mutation uses evidence before completion language
+- [ ] Budget cap and Stop are verified once
+
+## Known portability constraints
+
+- The launcher uses explicit environment overrides or the default `~/conn`
+  layout. There is no preferences UI or filesystem scan.
+- Code-signing identity and TCC grants are machine-local.
+- Live AX probes require an unlocked desktop session.
+- External app probes depend on the app being installed and exposing the
+  expected native state.
+- The current build may need
+  `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` for raw Swift
+  commands. `make-app.sh` performs the same toolchain selection itself.

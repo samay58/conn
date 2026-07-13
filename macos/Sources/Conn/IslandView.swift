@@ -65,7 +65,7 @@ struct IslandView: View {
         .task(id: state.toast) { await autoClearToast() }
         .onChange(of: state.rejectPulse) { _, _ in refusalPulse() }
         .onChange(of: state.phase) { _, phase in
-            if phase == "done" { exhale() }
+            if phase == "done" && state.showsDoneSuccess { exhale() }
         }
         .onChange(of: reveal.token) { _, _ in breatheOpen() }
         .onChange(of: reveal.collapseToken) { _, _ in breatheClosed() }
@@ -109,7 +109,7 @@ struct IslandView: View {
     // Done leads with a green tick in place of a state word (spec state table).
     private var caption: some View {
         HStack(spacing: 6) {
-            if state.phase == "done" {
+            if state.showsDoneSuccess {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(DesignTokens.islandGreen)
@@ -120,7 +120,7 @@ struct IslandView: View {
                       let label = runningToolLabel {
                 toolCapsule(label)
             } else {
-                Text(primaryText)
+                Text(state.islandPrimaryText)
                     .font(.system(size: primaryIsSpeech ? 12.5 : 11,
                                   weight: primaryIsSpeech ? .regular : .medium))
                     .foregroundStyle(primaryColor)
@@ -189,26 +189,9 @@ struct IslandView: View {
 
     private var primaryIsSpeech: Bool {
         if state.phase == "budget_hold" { return false }
+        if state.phase == "done", state.lastActionOutcome != nil { return false }
         if state.phase == "speaking" || state.phase == "acting" { return true }
         return !state.modelLine.isEmpty || !state.userLine.isEmpty
-    }
-
-    private var primaryText: String {
-        if let toast = state.toast { return toast }
-        switch state.phase {
-        case "acting":
-            return state.modelLine.isEmpty ? state.stateLabel : state.modelLine
-        case "awaiting_approval":
-            return state.stateLabel
-        case "budget_hold":
-            return "Cap reached"
-        case "speaking":
-            return state.modelLine.isEmpty ? state.stateLabel : state.modelLine
-        default:
-            if !state.modelLine.isEmpty { return state.modelLine }
-            if !state.userLine.isEmpty { return state.userLine }
-            return state.stateLabel
-        }
     }
 
     private var showsCost: Bool {
@@ -223,7 +206,10 @@ struct IslandView: View {
         case "failed": return DesignTokens.islandRed
         case "budget_hold": return DesignTokens.islandGold
         case "awaiting_approval": return DesignTokens.islandAmber
-        case "done": return DesignTokens.islandGreen
+        case "done":
+            if state.showsDoneSuccess { return DesignTokens.islandGreen }
+            return state.lastActionOutcome == "dispatch_only"
+                ? DesignTokens.islandAmber : DesignTokens.islandRed
         case "speaking": return DesignTokens.islandText
         default:
             return primaryIsSpeech ? DesignTokens.islandText : DesignTokens.islandTextSecondary

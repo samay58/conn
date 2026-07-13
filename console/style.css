@@ -133,11 +133,6 @@ kbd {
 @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
 .chip .preview { font-size: 14px; }
 .chip .preview b { font-weight: 600; }
-.chip .chip-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.chip .approve {
-  background: var(--ink); color: var(--card); border-color: var(--ink);
-}
-.chip .approve:hover { background: #333; }
 .chip.ran {
   border-color: var(--line);
   background: var(--paper);
@@ -147,6 +142,7 @@ kbd {
 }
 .chip.ran .status { font: 11px var(--mono); }
 .chip.ran .status.ok { color: var(--green); }
+.chip.ran .status.warn { color: var(--amber); }
 .chip.ran .status.err { color: var(--red); }
 
 /* command row */
@@ -190,6 +186,22 @@ kbd {
   border-color: color-mix(in srgb, var(--green) 40%, var(--line));
 }
 .ptt[data-phase="done"] .ptt-state { color: var(--green); }
+.ptt[data-phase="done"][data-outcome="dispatch_only"] {
+  background: var(--amber-soft);
+  border-color: color-mix(in srgb, var(--amber) 40%, var(--line));
+}
+.ptt[data-phase="done"][data-outcome="dispatch_only"] .ptt-state { color: var(--amber); }
+.ptt[data-phase="done"][data-outcome="no_effect"],
+.ptt[data-phase="done"][data-outcome="ambiguous"],
+.ptt[data-phase="done"][data-outcome="failed"],
+.ptt[data-phase="done"][data-outcome="blocked"] {
+  background: var(--red-soft);
+  border-color: color-mix(in srgb, var(--red) 40%, var(--line));
+}
+.ptt[data-phase="done"][data-outcome="no_effect"] .ptt-state,
+.ptt[data-phase="done"][data-outcome="ambiguous"] .ptt-state,
+.ptt[data-phase="done"][data-outcome="failed"] .ptt-state,
+.ptt[data-phase="done"][data-outcome="blocked"] .ptt-state { color: var(--red); }
 .ptt[data-phase="failed"], .ptt[data-phase="budget_hold"] {
   background: var(--red-soft);
   border-color: color-mix(in srgb, var(--red) 40%, var(--line));

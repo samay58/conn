@@ -17,16 +17,19 @@ class RtSessionReady:
 @dataclass(frozen=True, slots=True)
 class RtAudioDelta:
     pcm: bytes  # 24kHz mono pcm16
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class RtTranscriptDelta:
     text: str  # transcript of the model's spoken output
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class RtTextDelta:
     text: str  # text-modality output
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,10 +38,16 @@ class RtInputTranscript:
 
 
 @dataclass(frozen=True, slots=True)
+class RtResponseCreated:
+    response_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class RtToolCall:
     call_id: str
     name: str
     arguments_json: str
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,11 +55,12 @@ class RtResponseDone:
     usage: dict = field(default_factory=dict)
     had_tool_calls: bool = False
     status: str = "completed"
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class RtResponseCancelled:
-    pass
+    response_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,8 +76,8 @@ class RtClosed:
 
 RtEvent = (
     RtSessionReady | RtAudioDelta | RtTranscriptDelta | RtTextDelta
-    | RtInputTranscript | RtToolCall | RtResponseDone | RtResponseCancelled
-    | RtError | RtClosed
+    | RtInputTranscript | RtResponseCreated | RtToolCall | RtResponseDone
+    | RtResponseCancelled | RtError | RtClosed
 )
 
 
@@ -80,6 +90,8 @@ class RealtimeAdapter(Protocol):
     async def create_response(self) -> None: ...
     async def cancel_response(self) -> None: ...
     async def send_text(self, text: str) -> None: ...
+    async def upsert_semantic_context(self, text: str) -> None: ...
+    async def clear_semantic_context(self) -> None: ...
     async def send_tool_result(self, call_id: str, output: str) -> None: ...
     def events(self) -> AsyncIterator[RtEvent]: ...
     @property

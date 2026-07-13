@@ -15,6 +15,8 @@ import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from .actions import ActionOutcome
+
 
 def now_ms() -> int:
     return int(time.time() * 1000)
@@ -36,6 +38,13 @@ class Gate(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ResponseProvenance:
+    turn_id: str
+    response_epoch: int
+    observation_epoch: int
+
+
+@dataclass(frozen=True, slots=True)
 class ToolCall:
     call_id: str
     name: str
@@ -43,9 +52,15 @@ class ToolCall:
     gate: Gate
     preview: str  # human sentence shown on the chip, e.g. 'Open app: Obsidian'
     block_reason: str | None = None  # set when gate is BLOCKED; goes back to the model
+    turn_id: str | None = None
+    response_epoch: int | None = None
+    observation_epoch: int | None = None
+    execution_id: int | None = None
+    prepared_plan: dict | None = None
+    prepared_failure: dict | None = None
 
 
-# ---------- machine inputs ----------
+# Machine inputs
 
 @dataclass(frozen=True, slots=True)
 class PttDown:
@@ -74,6 +89,12 @@ class ToolFinished:
     call_id: str
     ok: bool
     output: str  # JSON string handed back to the model verbatim
+    action_outcome: ActionOutcome | None = None
+    turn_id: str | None = None
+    response_epoch: int | None = None
+    observation_epoch: int | None = None
+    execution_id: int | None = None
+    action_trace: dict | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +177,7 @@ MachineInput = (
 )
 
 
-# ---------- machine outputs (commands executed by app.py) ----------
+# Machine outputs executed by app.py
 
 @dataclass(frozen=True, slots=True)
 class ClearInput:

@@ -1,5 +1,4 @@
-/* Conn console: a dumb renderer over the daemon's WebSocket. It holds no
-   secrets and makes no decisions; it displays state and forwards intents. */
+/* Conn console: capability-authenticated, read-only diagnostics. */
 
 const $ = (id) => document.getElementById(id);
 const pill = $("ptt"), pillState = $("ptt-state"), pillSub = $("ptt-sub");
@@ -22,30 +21,57 @@ const PHASE_LABEL = {
 let ws = null;
 let traceEvents = 0;
 let modelLine = null;
-let holding = false;
 let receiptSeen = false;
+const capabilityKey = "conn.console.capability";
+const consoleCapability = loadConsoleCapability();
+
+function loadConsoleCapability() {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const supplied = fragment.get("cap");
+  if (supplied) {
+    sessionStorage.setItem(capabilityKey, supplied);
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+    return supplied;
+  }
+  return sessionStorage.getItem(capabilityKey);
+}
+
+async function hmacProof(secret, purpose, challenge) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC", key, encoder.encode(`${purpose}:${challenge}`)
+  );
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 function connect() {
+  if (!consoleCapability) {
+    $("conn-dot").className = "dot failed";
+    $("mode-label").textContent = "locked";
+    toast("Read-only console requires an explicit debug capability.", "warn");
+    return;
+  }
   ws = new WebSocket(`ws://${location.host}/ws`);
-  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onmessage = async (e) => {
+    const message = JSON.parse(e.data);
+    if (message.type === "auth_challenge") {
+      const proof = await hmacProof(
+        consoleCapability, "conn-console-websocket-v1", message.challenge
+      );
+      ws.send(JSON.stringify({ type: "client_hello", role: "console", proof }));
+      return;
+    }
+    handle(message);
+  };
   ws.onclose = () => {
     $("conn-dot").className = "dot failed";
     setTimeout(connect, 800);
   };
-}
-
-function send(msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
-}
-
-function sendTimed(msg) {
-  send({ ...msg, client_ts_ms: Math.round(performance.now()) });
-}
-
-function sendUiAck(moment) {
-  requestAnimationFrame(() => {
-    send({ type: "ui_ack", moment, client_ts_ms: Math.round(performance.now()) });
-  });
 }
 
 function handle(msg) {
@@ -84,7 +110,6 @@ function handle(msg) {
   }
 }
 
-/* ---------- grant preflight (T2) ---------- */
 
 function renderGrants(g) {
   const banner = $("grant-banner");
@@ -99,22 +124,23 @@ function renderGrants(g) {
   banner.textContent = dark.join(" ");
 }
 
-/* ---------- state + chips ---------- */
 
-let lastAckedPhase = null;
-let chipAcked = false;
 function renderState(s) {
-  const [label, sub] = PHASE_LABEL[s.phase] || [s.phase, ""];
+  let [label, sub] = PHASE_LABEL[s.phase] || [s.phase, ""];
+  if (s.phase === "done" && s.last_action_outcome === "dispatch_only") {
+    [label, sub] = ["Sent, not confirmed", "effect was not observable"];
+  } else if (s.phase === "done" && s.last_action_outcome && s.last_action_outcome !== "verified") {
+    [label, sub] = ["Did not run", "no confirmed effect"];
+  }
   pill.dataset.phase = s.phase;
+  pill.dataset.outcome = s.last_action_outcome || "";
   pillState.textContent = label;
   pillSub.textContent = sub;
   $("conn-dot").className = "dot" + (s.connected ? " connected" : "");
 
   chipsEl.replaceChildren();
-  let hasProposedChip = false;
   for (const entry of s.ledger || []) {
     chipsEl.appendChild(entry.status === "proposed" ? liveChip(entry) : ranChip(entry));
-    if (entry.status === "proposed") hasProposedChip = true;
   }
 
   if (s.phase === "budget_hold") offerOverride();
@@ -123,40 +149,14 @@ function renderState(s) {
     costLine.textContent = `$${s.spent_usd.toFixed(4)}`;
   }
 
-  if ((s.phase === "listening" || s.phase === "thinking") && s.phase !== lastAckedPhase) {
-    lastAckedPhase = s.phase;
-    sendUiAck(s.phase);
-  }
-  if (hasProposedChip && !chipAcked) {
-    chipAcked = true;
-    sendUiAck("chip");
-  } else if (!hasProposedChip) {
-    chipAcked = false;
-  }
 }
 
 function liveChip(entry) {
   const chip = el("div", "chip");
   const preview = el("span", "preview");
   preview.innerHTML = `<b>${escapeHtml(entry.preview)}</b>`;
-  const actions = el("div", "chip-actions");
-  const approve = el("button", "approve", "Approve");
-  const deny = el("button", "", "Deny");
-  // Approvals are pointer-only on every surface: no tab focus, and
-  // keyboard-synthesized clicks (event.detail === 0) are ignored, so Return
-  // or Space can never approve an action.
-  approve.tabIndex = -1;
-  deny.tabIndex = -1;
-  approve.onclick = (e) => {
-    if (e.detail === 0) return;
-    sendTimed({ type: "approval", call_id: entry.call_id, approved: true });
-  };
-  deny.onclick = (e) => {
-    if (e.detail === 0) return;
-    sendTimed({ type: "approval", call_id: entry.call_id, approved: false });
-  };
-  actions.append(approve, deny);
-  chip.append(preview, actions);
+  const status = el("span", "status warn", "Approve in Conn");
+  chip.append(preview, status);
   return chip;
 }
 
@@ -164,13 +164,13 @@ function ranChip(entry) {
   const chip = el("div", "chip ran");
   const label = el("span", "preview", entry.preview);
   const status = el("span", "status " +
-    (entry.status === "completed" ? "ok" : entry.status === "running" ? "" : "err"),
+    (["completed", "verified"].includes(entry.status) ? "ok" :
+      entry.status === "unverified" ? "warn" : entry.status === "running" ? "" : "err"),
     entry.status);
   chip.append(label, status);
   return chip;
 }
 
-/* ---------- transcript ---------- */
 
 function addUserLine(text) {
   finishModelLine();
@@ -194,7 +194,6 @@ function finishModelLine() {
   modelLine = null;
 }
 
-/* ---------- cost + trace ---------- */
 
 function renderCost(r) {
   if (!r) return;
@@ -222,7 +221,6 @@ function addTrace(event) {
   traceList.scrollTop = traceList.scrollHeight;
 }
 
-/* ---------- toasts ---------- */
 
 function toast(text, level = "info", action = null) {
   const t = el("div", `toast ${level}`, text);
@@ -239,62 +237,10 @@ let overrideOffered = false;
 function offerOverride() {
   if (overrideOffered) return;
   overrideOffered = true;
-  toast("Session budget reached.", "warn",
-    { label: "Override once", fn: () => { send({ type: "override_budget" }); overrideOffered = false; } });
+  toast("Session budget reached. Use Conn.app to continue.", "warn");
   setTimeout(() => { overrideOffered = false; }, 8000);
 }
 
-/* ---------- input: hold-space PTT, pill hold, text ---------- */
-
-function pttDown() {
-  if (holding) return;
-  holding = true;
-  sendTimed({ type: "ptt_down" });
-}
-function pttUp() {
-  if (!holding) return;
-  holding = false;
-  sendTimed({ type: "ptt_up" });
-}
-
-document.addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat) return;
-  if (document.activeElement === $("text-input")) return;
-  e.preventDefault();
-  pttDown();
-});
-document.addEventListener("keyup", (e) => {
-  if (e.code !== "Space") return;
-  if (document.activeElement === $("text-input") && !holding) return;
-  e.preventDefault();
-  pttUp();
-});
-window.addEventListener("blur", pttUp);
-
-pill.addEventListener("pointerdown", (e) => { e.preventDefault(); pttDown(); });
-pill.addEventListener("pointerup", pttUp);
-pill.addEventListener("pointerleave", () => { if (holding) pttUp(); });
-
-$("text-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const input = $("text-input");
-  const text = input.value.trim();
-  if (!text) return;
-  send({ type: "text", text });
-  input.value = "";
-});
-
-$("stop").onclick = () => sendTimed({ type: "stop" });
-$("new-session").onclick = () => {
-  send({ type: "new_session" });
-  transcript.replaceChildren();
-  traceList.replaceChildren();
-  traceEvents = 0;
-  traceCount.textContent = "0 events";
-  modelLine = null;
-};
-
-/* ---------- utils ---------- */
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);

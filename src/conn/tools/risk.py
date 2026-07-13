@@ -43,6 +43,20 @@ def _guard_app_allowlist(args: dict, cfg: Config) -> str | None:
     return None
 
 
+def _guard_launch_app(args: dict, cfg: Config) -> str | None:
+    reason = _guard_app_allowlist(args, cfg)
+    if reason:
+        return reason
+    app = str(args.get("app") or "")
+    bundle_id = cfg.apps.bundle_ids.get(app, "").strip()
+    if not bundle_id:
+        return f"app_bundle_id_missing: {app!r}"
+    if (not bundle_id.startswith("com.apple.")
+            and not cfg.apps.team_ids.get(app, "").strip()):
+        return f"app_signer_not_configured: {app!r}"
+    return None
+
+
 def _guard_present_app_allowlist(args: dict, cfg: Config) -> str | None:
     if "app" not in args:
         return None
@@ -64,13 +78,13 @@ def _guard_present_app_frontmost(args: dict, cfg: Config, ctx: ExecutionContext 
     bundle_id = _current_bundle_id(ctx)
     if bundle_id is None:
         return f"app_frontmost_unavailable: {app}"
-    if _app_matches_bundle(app, bundle_id):
+    if _app_matches_bundle(app, bundle_id, cfg):
         return None
     return f"app_not_frontmost: {app}"
 
 
-def _app_matches_bundle(app: str, bundle_id: str) -> bool:
-    return app_matches_bundle(app, bundle_id)
+def _app_matches_bundle(app: str, bundle_id: str, cfg: Config) -> bool:
+    return app_matches_bundle(app, bundle_id, cfg.apps.bundle_ids)
 
 
 def _exception_reason(exc: Exception) -> str:
@@ -96,14 +110,26 @@ def _guard_clipboard_size(args: dict, cfg: Config) -> str | None:
     return None
 
 
+def _guard_scroll(args: dict, cfg: Config) -> str | None:
+    if ("direction" in args) != ("amount" in args):
+        return "scroll_direction_and_amount_required_together"
+    return None
+
+
 ARG_GUARDS: dict[str, Callable[[dict, Config], str | None]] = {
-    "app_open": _guard_app_allowlist,
-    "app_switch": _guard_app_allowlist,
+    "app_open": _guard_launch_app,
+    "app_switch": _guard_launch_app,
     "phoenix_open_note": _guard_vault_path,
     "clipboard_set": _guard_clipboard_size,
+    "computer_scroll": _guard_scroll,
     "app_focus_tab": _guard_present_app_allowlist,
     "app_menu": _guard_present_app_allowlist,
 }
+
+
+def argument_guard(name: str, args: dict, cfg: Config) -> str | None:
+    guard = ARG_GUARDS.get(name)
+    return guard(args, cfg) if guard is not None else None
 
 
 def _trusted_roles(cfg: Config, bundle_id: str) -> set[str]:
@@ -198,11 +224,9 @@ def gate_for(
         if reason:
             return Gate.BLOCKED, reason, None
 
-    guard = ARG_GUARDS.get(name)
-    if guard is not None:
-        reason = guard(args, cfg)
-        if reason:
-            return Gate.BLOCKED, reason, None
+    reason = argument_guard(name, args, cfg)
+    if reason:
+        return Gate.BLOCKED, reason, None
 
     if name == "computer_hotkey":
         try:
@@ -228,3 +252,58 @@ def gate_for(
     if override == "blocked":
         return Gate.BLOCKED, "blocked_by_config_override", None
     return _LEVEL_TO_GATE[level], None, None
+
+
+def gate_for_prepared(
+    name: str,
+    level: RiskLevel,
+    args: dict,
+    plan: dict,
+    cfg: Config,
+) -> tuple[Gate, str | None, str | None]:
+    if level is RiskLevel.BLOCKED:
+        return Gate.BLOCKED, "tool_disabled_in_v0", None
+    if bool(plan.get("denied")):
+        return Gate.BLOCKED, "denied_bundle: native policy refused target", None
+    if name == "computer_type_text" and bool(plan.get("secure")):
+        return Gate.BLOCKED, "secure_field: Conn never types into password fields", None
+
+    reason = argument_guard(name, args, cfg)
+    if reason:
+        return Gate.BLOCKED, reason, None
+
+    if name in {"app_focus_tab", "app_menu"}:
+        app = str(args.get("app") or "").strip()
+        bundle_id = str(plan.get("bundle_id") or "")
+        if app and (not bundle_id or not _app_matches_bundle(app, bundle_id, cfg)):
+            return Gate.BLOCKED, f"app_not_frontmost: {app}", None
+
+    if name == "computer_hotkey":
+        gate, reason, _preview = _gate_hotkey(args, cfg)
+        return gate, reason, str(plan["preview"])
+
+    if name == "computer_click":
+        bundle_id = str(plan.get("bundle_id") or "")
+        role = str(plan.get("target_role") or "")
+        gate = Gate.AUTO if role in _trusted_roles(cfg, bundle_id) else Gate.CONFIRM
+    elif name == "computer_type_text":
+        gate = Gate.CONFIRM
+    elif name == "app_menu":
+        bundle_id = str(plan.get("bundle_id") or "")
+        gate = Gate.AUTO if "AXMenuItem" in _trusted_roles(cfg, bundle_id) else Gate.CONFIRM
+    else:
+        gate = _LEVEL_TO_GATE[level]
+
+    native_risk = str(plan.get("risk") or "").lower()
+    if native_risk in {"external_side_effect", "destructive"}:
+        gate = Gate.CONFIRM
+
+    override = cfg.risk_overrides.get(name)
+    if override == "blocked":
+        return Gate.BLOCKED, "blocked_by_config_override", None
+    if override == "confirm":
+        gate = Gate.CONFIRM
+    elif override == "auto" and gate is Gate.AUTO:
+        gate = Gate.AUTO
+
+    return gate, None, str(plan["preview"])

@@ -13,6 +13,12 @@ from conn.tools.registry import build_registry
 def cfg(tmp_path):
     c = Config()
     c.apps.allowlist = ["Obsidian", "Google Chrome", "Safari"]
+    c.apps.bundle_ids = {
+        "Obsidian": "md.obsidian",
+        "Google Chrome": "com.google.Chrome",
+        "Safari": "com.apple.Safari",
+    }
+    c.apps.team_ids = {"Obsidian": "6JSW4SJWN9"}
     c.phoenix.vault_root = str(tmp_path / "vault")
     (tmp_path / "vault").mkdir()
     return c

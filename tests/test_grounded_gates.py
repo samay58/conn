@@ -288,11 +288,9 @@ def test_app_qualified_tools_allow_matching_frontmost_app(cfg, tmp_path):
     assert menu_call.gate is Gate.CONFIRM
 
 
-def test_app_qualified_tools_match_bundle_tail_outside_alias_map(cfg, tmp_path):
-    # Live regression 2026-07-07: "Use menu: Shell > New Tab" on Terminal was
-    # blocked app_not_frontmost because Terminal is not in the alias map even
-    # though com.apple.Terminal was frontmost.
+def test_app_qualified_tools_use_exact_configured_bundle(cfg, tmp_path):
     cfg.apps.allowlist = cfg.apps.allowlist + ["Terminal"]
+    cfg.apps.bundle_ids["Terminal"] = "com.apple.Terminal"
     harness, _ctx, _store, _backend, _snap = make_ctx(
         cfg,
         tmp_path,
@@ -304,6 +302,22 @@ def test_app_qualified_tools_match_bundle_tail_outside_alias_map(cfg, tmp_path):
 
     assert menu_call.gate is Gate.CONFIRM
     assert menu_call.block_reason is None
+
+
+def test_app_qualified_tools_reject_same_bundle_tail(cfg, tmp_path):
+    cfg.apps.allowlist = cfg.apps.allowlist + ["Terminal"]
+    cfg.apps.bundle_ids["Terminal"] = "com.apple.Terminal"
+    harness, _ctx, _store, _backend, _snap = make_ctx(
+        cfg,
+        tmp_path,
+        node("AXWindow", "Main"),
+        bundle="evil.Terminal",
+    )
+
+    menu_call = gate(harness, "app_menu", {"path": ["Shell", "New Tab"], "app": "Terminal"})
+
+    assert menu_call.gate is Gate.BLOCKED
+    assert menu_call.block_reason == "app_not_frontmost: Terminal"
 
 
 def test_expired_auto_grounded_call_is_reblocked_at_run_time(cfg, tmp_path, monkeypatch):
@@ -388,21 +402,20 @@ def test_export_payload_stays_under_20kb():
     assert len(payload) < 20_000
 
 
-def test_live_main_constructs_snapshot_store_with_mac_backend(monkeypatch, tmp_path):
+def test_verified_live_main_does_not_construct_python_ax_store(monkeypatch, tmp_path):
     import conn.__main__ as main_mod
 
     cfg = Config()
     cfg.data_dir = tmp_path / "data"
 
-    seen = {}
+    seen = {"ctx_ax": "unset"}
 
     class FakeMacAxBackend:
         pass
 
     class FakeSnapshotStore:
         def __init__(self, backend, passed_cfg):
-            seen["backend"] = backend
-            seen["cfg"] = passed_cfg
+            raise AssertionError("verified production constructed Python AX store")
 
     class FakeAdapter:
         def __init__(self, *args, **kwargs):
@@ -411,6 +424,7 @@ def test_live_main_constructs_snapshot_store_with_mac_backend(monkeypatch, tmp_p
     class FakeApp:
         def __init__(self, cfg, adapter, harness, audio=None):
             self.session_id = "s1"
+            seen["ctx_ax"] = harness.ctx.ax
 
         async def start(self):
             return None
@@ -439,5 +453,4 @@ def test_live_main_constructs_snapshot_store_with_mac_backend(monkeypatch, tmp_p
 
     asyncio.run(main_mod._serve(cfg, args))
 
-    assert isinstance(seen["backend"], FakeMacAxBackend)
-    assert seen["cfg"] is cfg
+    assert seen["ctx_ax"] is None

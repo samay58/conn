@@ -29,6 +29,14 @@ def main() -> None:
     parser.add_argument("--simulate-tools", action="store_true", help="with --demo: canned tool results, zero side effects")
     parser.add_argument("--doctor", action="store_true", help="run environment checks")
     parser.add_argument("--eval", action="store_true", help="run the demo eval suite")
+    parser.add_argument(
+        "--action-probe",
+        choices=[
+            "fixture", "terminal", "safari", "chrome", "notes", "obsidian",
+            "all", "fixture-legacy",
+        ],
+        help="run a bounded hardware action probe",
+    )
     parser.add_argument("--latency-report", nargs="?", const="latest", default=None, metavar="TRACE_JSONL", help="print latency spans and budget pass/fail for a trace file (no argument: newest trace)")
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--no-audio", action="store_true", help="live mode without mic/speaker")
@@ -67,16 +75,41 @@ def main() -> None:
 
         sys.exit(run_evals(cfg))
 
+    if args.action_probe:
+        from .action_probe import PROBE_TARGETS, run_fixture_probe, run_verified_probe
+
+        repo_root = Path(__file__).resolve().parents[2]
+        try:
+            if args.action_probe == "fixture-legacy":
+                result = run_fixture_probe(repo_root, cfg.data_dir)
+                sys.exit(0 if result.false_success_reproduced else 1)
+            targets = PROBE_TARGETS if args.action_probe == "all" else (args.action_probe,)
+            records = [
+                run_verified_probe(repo_root, cfg.data_dir, target)
+                for target in targets
+            ]
+        except RuntimeError as error:
+            print(f"action probe blocked: {error}", file=sys.stderr)
+            sys.exit(2)
+        failed = any(
+            record.get("engine_outcome") != "verified"
+            or record.get("independent_verdict") not in {"matched", "no_effect"}
+            for record in records
+            if record.get("probe") != "fixture"
+        )
+        fixture_failed = any(
+            record.get("probe") == "fixture" and not record.get("receipt_agrees", False)
+            for record in records
+        )
+        sys.exit(1 if failed or fixture_failed else 0)
+
     asyncio.run(_serve(cfg, args))
 
 
 async def _serve(cfg, args) -> None:
-    from .tools.ax import MacAxBackend, SnapshotStore
-
     registry = build_registry()
     session_shots = cfg.data_dir / "screenshots" / new_id("shots")
-    ax_store = SnapshotStore(MacAxBackend(), cfg)
-    ctx = ExecutionContext(cfg=cfg, screenshot_dir=session_shots, ax=ax_store)
+    ctx = ExecutionContext(cfg=cfg, screenshot_dir=session_shots, ax=None)
 
     if args.demo:
         from .realtime.fake import FakeRealtimeAdapter

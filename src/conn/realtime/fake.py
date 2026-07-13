@@ -16,8 +16,9 @@ from pathlib import Path
 
 from ..events import new_id
 from .base import (
-    RtClosed, RtEvent, RtInputTranscript, RtResponseCancelled, RtResponseDone,
-    RtSessionReady, RtToolCall, RtTranscriptDelta,
+    RtClosed, RtEvent, RtInputTranscript, RtResponseCancelled,
+    RtResponseCreated, RtResponseDone, RtSessionReady, RtToolCall,
+    RtTranscriptDelta,
 )
 
 SCENARIO_DIR = Path(__file__).parent / "scenarios"
@@ -54,6 +55,8 @@ class FakeRealtimeAdapter:
         self._pending_input: str | None = None
         self._audio_buffered = False
         self._play_task: asyncio.Task | None = None
+        self._active_response_id: str | None = None
+        self._semantic_context: str | None = None
 
     # ---- adapter interface ----
 
@@ -90,6 +93,12 @@ class FakeRealtimeAdapter:
         self._pending_input = text
         self._input_was_audio = False
 
+    async def clear_semantic_context(self) -> None:
+        self._semantic_context = None
+
+    async def upsert_semantic_context(self, text: str) -> None:
+        self._semantic_context = text
+
     async def create_response(self) -> None:
         if self._pending_input is not None:
             text = self._pending_input
@@ -100,12 +109,14 @@ class FakeRealtimeAdapter:
                 # Voice path: surface what the "model" heard, like live
                 # input transcription would.
                 await self._queue.put(RtInputTranscript(text=text))
+        self._active_response_id = new_id("response")
+        await self._queue.put(RtResponseCreated(response_id=self._active_response_id))
         self._play_task = asyncio.ensure_future(self._play_segment())
 
     async def cancel_response(self) -> None:
         if self._play_task and not self._play_task.done():
             self._play_task.cancel()
-        await self._queue.put(RtResponseCancelled())
+        await self._queue.put(RtResponseCancelled(response_id=self._active_response_id))
 
     async def send_tool_result(self, call_id: str, output: str) -> None:
         pass  # the scripted continuation reads nothing from results in v0
@@ -141,21 +152,28 @@ class FakeRealtimeAdapter:
             scenario = self._active or FALLBACK
             segments = scenario["segments"]
             if self._cursor >= len(segments):
-                await self._queue.put(RtResponseDone(usage={}, had_tool_calls=False))
+                await self._queue.put(RtResponseDone(
+                    usage={}, had_tool_calls=False,
+                    response_id=self._active_response_id,
+                ))
                 return
             seg = segments[self._cursor]
             self._cursor += 1
             for word in seg.get("say", "").split(" "):
-                await self._queue.put(RtTranscriptDelta(text=word + " "))
+                await self._queue.put(RtTranscriptDelta(
+                    text=word + " ", response_id=self._active_response_id,
+                ))
                 await asyncio.sleep(self.pace_s)
             tools = seg.get("tools", [])
             for t in tools:
                 await self._queue.put(RtToolCall(
                     call_id=new_id("call"), name=t["name"],
                     arguments_json=json.dumps(t.get("arguments", {})),
+                    response_id=self._active_response_id,
                 ))
             await self._queue.put(RtResponseDone(
                 usage=seg.get("usage", {}), had_tool_calls=bool(tools),
+                response_id=self._active_response_id,
             ))
         except asyncio.CancelledError:
             pass

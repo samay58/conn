@@ -10,9 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var island: IslandController?
     var primarySurface: ConnSurface!
     private var panelAutoReflectPhases = true
+    private let bridgeToken = BridgeToken.generate()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        client = DaemonClient(state: state)
+        client = DaemonClient(state: state, bridgeToken: bridgeToken)
         statusItem = StatusItemController(
             state: state,
             client: client,
@@ -49,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkey.start()
 
-        DaemonLauncher.ensureRunning { [weak self] in
+        DaemonLauncher.ensureRunning(bridgeToken: bridgeToken) { [weak self] in
             self?.client.connect()
         }
     }

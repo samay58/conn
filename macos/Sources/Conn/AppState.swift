@@ -7,7 +7,7 @@ struct Chip: Identifiable, Equatable {
     let status: String
 
     var pending: Bool { status == "proposed" }
-    var ok: Bool { status == "completed" || status == "running" }
+    var ok: Bool { status == "verified" || status == "completed" }
 }
 
 @MainActor
@@ -24,8 +24,30 @@ final class AppState: ObservableObject {
     @Published var toast: String?
     @Published var rejectPulse: Int = 0
     @Published var axWarning: String?
+    @Published var lastActionOutcome: String?
 
     var pendingChip: Chip? { chips.first(where: \.pending) }
+    var actionVerified: Bool { lastActionOutcome == "verified" }
+    var showsDoneSuccess: Bool {
+        phase == "done" && (lastActionOutcome == nil || actionVerified)
+    }
+
+    var islandPrimaryText: String {
+        if let toast { return toast }
+        if phase == "done", lastActionOutcome != nil { return stateLabel }
+        switch phase {
+        case "acting", "speaking":
+            return modelLine.isEmpty ? stateLabel : modelLine
+        case "awaiting_approval":
+            return stateLabel
+        case "budget_hold":
+            return "Cap reached"
+        default:
+            if !modelLine.isEmpty { return modelLine }
+            if !userLine.isEmpty { return userLine }
+            return stateLabel
+        }
+    }
 
     var stateLabel: String {
         switch phase {
@@ -35,7 +57,10 @@ final class AppState: ObservableObject {
         case "acting": return "Acting"
         case "awaiting_approval": return "Approve?"
         case "speaking": return "Speaking"
-        case "done": return "Done"
+        case "done":
+            if lastActionOutcome == "dispatch_only" { return "Sent, not confirmed" }
+            if let lastActionOutcome, lastActionOutcome != "verified" { return "Did not run" }
+            return "Done"
         case "failed": return "Reconnecting"
         case "budget_hold": return "Budget hold"
         default: return phase
@@ -50,6 +75,9 @@ final class AppState: ObservableObject {
         case "state":
             phase = msg["phase"] as? String ?? phase
             connected = msg["connected"] as? Bool ?? connected
+            if msg.keys.contains("last_action_outcome") {
+                lastActionOutcome = msg["last_action_outcome"] as? String
+            }
             if let spent = msg["spent_usd"] as? Double, spent > 0 { spentUSD = spent }
             if let ledger = msg["ledger"] as? [[String: Any]] {
                 chips = ledger.map {

@@ -3,6 +3,7 @@ so a refactor can never quietly widen what conn touches on the machine.
 """
 
 import json
+import os
 from unittest.mock import patch
 
 import pytest
@@ -55,7 +56,13 @@ class TestArgv:
 
 class TestPhoenixExecutors:
     def test_qmd_search_argv_cwd_and_env(self, ctx):
-        with patch("conn.tools.phoenix.shutil.which", return_value="/fake/bin/qmd"), \
+        with patch.dict(os.environ, {
+                "CONN_BRIDGE_TOKEN": "bridge-secret",
+                "CONN_CONSOLE_CAPABILITY": "console-secret",
+                "OPENAI_API_KEY": "api-secret",
+                "UNRELATED_SECRET": "other-secret",
+             }), \
+             patch("conn.tools.phoenix.shutil.which", return_value="/fake/bin/qmd"), \
              patch("conn.tools.phoenix.subprocess.run",
                    return_value=ok_proc(stdout="")) as run:
             run.return_value.stdout = ""
@@ -66,6 +73,10 @@ class TestPhoenixExecutors:
         # qmd's launcher script needs `node` beside it even when the daemon
         # was spawned by the app with a minimal PATH.
         assert run.call_args.kwargs["env"]["PATH"].startswith("/fake/bin")
+        assert "CONN_BRIDGE_TOKEN" not in run.call_args.kwargs["env"]
+        assert "CONN_CONSOLE_CAPABILITY" not in run.call_args.kwargs["env"]
+        assert "OPENAI_API_KEY" not in run.call_args.kwargs["env"]
+        assert "UNRELATED_SECRET" not in run.call_args.kwargs["env"]
 
     def test_qmd_missing_raises_clear_error(self, ctx, tmp_path):
         with patch("conn.tools.phoenix.shutil.which", return_value=None), \

@@ -11,14 +11,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import uuid
 
 import websockets
 
 from ..config import Config
 from .base import (
     RtAudioDelta, RtClosed, RtError, RtEvent, RtInputTranscript,
-    RtResponseCancelled, RtResponseDone, RtSessionReady, RtTextDelta,
-    RtToolCall, RtTranscriptDelta,
+    RtResponseCancelled, RtResponseCreated, RtResponseDone, RtSessionReady,
+    RtTextDelta, RtToolCall, RtTranscriptDelta,
 )
 
 WS_URL = "wss://api.openai.com/v1/realtime?model={model}"
@@ -31,7 +32,8 @@ class OpenAIRealtimeAdapter:
         self.instructions = instructions
         self._ws = None
         self._closing = False
-        self._emitted_calls: set[str] = set()
+        self._pending_calls: dict[str, dict[str, RtToolCall]] = {}
+        self._semantic_item_id: str | None = None
 
     @property
     def connected(self) -> bool:
@@ -42,6 +44,8 @@ class OpenAIRealtimeAdapter:
         if not key:
             raise RuntimeError("OPENAI_API_KEY is not set")
         self._closing = False
+        self._semantic_item_id = None
+        self._pending_calls.clear()
         self._ws = await websockets.connect(
             WS_URL.format(model=self.cfg.realtime.model),
             additional_headers={"Authorization": f"Bearer {key}"},
@@ -89,6 +93,7 @@ class OpenAIRealtimeAdapter:
 
     async def close(self) -> None:
         self._closing = True
+        self._pending_calls.clear()
         if self._ws is not None:
             ws, self._ws = self._ws, None
             await ws.close()
@@ -118,12 +123,47 @@ class OpenAIRealtimeAdapter:
                      "content": [{"type": "input_text", "text": text}]},
         })
 
-    async def send_tool_result(self, call_id: str, output: str) -> None:
+    async def clear_semantic_context(self) -> None:
+        if self._semantic_item_id is None:
+            return
+        item_id, self._semantic_item_id = self._semantic_item_id, None
+        await self._send({"type": "conversation.item.delete", "item_id": item_id})
+
+    async def upsert_semantic_context(self, text: str) -> None:
+        await self.clear_semantic_context()
+        item_id = f"ctx_{uuid.uuid4().hex}"
         await self._send({
             "type": "conversation.item.create",
-            "item": {"type": "function_call_output", "call_id": call_id,
-                     "output": output},
+            "item": {
+                "id": item_id,
+                "type": "message",
+                "role": "system",
+                "content": [{"type": "input_text", "text": text}],
+            },
         })
+        self._semantic_item_id = item_id
+
+    async def send_tool_result(self, call_id: str, output: str) -> None:
+        item_id = None
+        try:
+            payload = json.loads(output)
+        except (TypeError, json.JSONDecodeError):
+            payload = None
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if isinstance(data, dict) and isinstance(data.get("snapshot_id"), str):
+            await self.clear_semantic_context()
+            item_id = f"ctx_{uuid.uuid4().hex}"
+        await self._send({
+            "type": "conversation.item.create",
+            "item": {
+                **({"id": item_id} if item_id else {}),
+                "type": "function_call_output",
+                "call_id": call_id,
+                "output": output,
+            },
+        })
+        if item_id:
+            self._semantic_item_id = item_id
 
     # ---- server events ----
 
@@ -157,29 +197,50 @@ class OpenAIRealtimeAdapter:
 
     def _normalize(self, msg: dict) -> list[RtEvent]:
         kind = msg.get("type", "")
+        if kind == "response.created":
+            response_id = msg.get("response", {}).get("id")
+            if not response_id:
+                return [self._missing_response_id(kind)]
+        elif kind == "response.done":
+            if not msg.get("response", {}).get("id"):
+                return [self._missing_response_id(kind)]
+        elif kind.startswith("response.") and not msg.get("response_id"):
+            return [self._missing_response_id(kind)]
         match kind:
             case "session.created":
                 return [RtSessionReady(session_id=msg.get("session", {}).get("id", "?"))]
+            case "response.created":
+                self._pending_calls.setdefault(response_id, {})
+                return [RtResponseCreated(response_id=response_id)]
             case "response.output_audio.delta" | "response.audio.delta":
-                return [RtAudioDelta(pcm=base64.b64decode(msg.get("delta", "")))]
+                return [RtAudioDelta(pcm=base64.b64decode(msg.get("delta", "")),
+                                     response_id=msg.get("response_id"))]
             case ("response.output_audio_transcript.delta"
                   | "response.audio_transcript.delta"):
-                return [RtTranscriptDelta(text=msg.get("delta", ""))]
+                return [RtTranscriptDelta(text=msg.get("delta", ""),
+                                          response_id=msg.get("response_id"))]
             case "response.output_text.delta" | "response.text.delta":
-                return [RtTextDelta(text=msg.get("delta", ""))]
+                return [RtTextDelta(text=msg.get("delta", ""),
+                                    response_id=msg.get("response_id"))]
             case ("conversation.item.input_audio_transcription.completed"
                   | "conversation.item.audio_transcription.completed"):
                 return [RtInputTranscript(text=msg.get("transcript", ""))]
             case "response.function_call_arguments.done":
+                response_id = msg.get("response_id")
                 call_id = msg.get("call_id", "")
-                self._emitted_calls.add(call_id)
-                return [RtToolCall(call_id=call_id,
-                                   name=msg.get("name", ""),
-                                   arguments_json=msg.get("arguments", "{}"))]
+                self._pending_calls.setdefault(response_id, {})[call_id] = RtToolCall(
+                    call_id=call_id,
+                    name=msg.get("name", ""),
+                    arguments_json=msg.get("arguments", "{}"),
+                    response_id=response_id,
+                )
+                return []
             case "response.done":
                 return self._on_response_done(msg)
             case "response.cancelled":
-                return [RtResponseCancelled()]
+                response_id = msg.get("response_id")
+                self._pending_calls.pop(response_id, None)
+                return [RtResponseCancelled(response_id=response_id)]
             case "error":
                 err = msg.get("error", {})
                 message = err.get("message", str(err))
@@ -188,25 +249,60 @@ class OpenAIRealtimeAdapter:
                 return [RtError(message=message, fatal=False)]
         return []
 
+    @staticmethod
+    def _missing_response_id(kind: str) -> RtError:
+        return RtError(
+            message=f"protocol_error: missing response_id for {kind}",
+            fatal=False,
+        )
+
     def _on_response_done(self, msg: dict) -> list[RtEvent]:
         response = msg.get("response", {})
-        events: list[RtEvent] = []
-        had_calls = False
+        response_id = response.get("id")
+        status = response.get("status", "completed")
+        pending = self._pending_calls.pop(response_id, {})
+        if status == "cancelled":
+            return [RtResponseCancelled(response_id=response_id)]
+        if status != "completed":
+            return [RtResponseDone(
+                usage=response.get("usage", {}) or {},
+                had_tool_calls=False,
+                status=status,
+                response_id=response_id,
+            )]
+        terminal: list[RtToolCall] = []
         for item in response.get("output", []) or []:
-            if item.get("type") == "function_call":
-                had_calls = True
-                call_id = item.get("call_id", "")
-                if call_id not in self._emitted_calls:
-                    events.append(RtToolCall(
-                        call_id=call_id, name=item.get("name", ""),
-                        arguments_json=item.get("arguments", "{}")))
-                self._emitted_calls.add(call_id)
-        if response.get("status") == "cancelled":
-            events.append(RtResponseCancelled())
-            return events
+            if item.get("type") != "function_call":
+                continue
+            call = RtToolCall(
+                call_id=item.get("call_id", ""),
+                name=item.get("name", ""),
+                arguments_json=item.get("arguments", "{}"),
+                response_id=response_id,
+            )
+            buffered = pending.get(call.call_id)
+            if buffered is not None and buffered != call:
+                return [
+                    RtError(
+                        message=(
+                            "protocol_error: terminal tool call does not match "
+                            f"buffered arguments for {call.call_id!r}"
+                        ),
+                        fatal=False,
+                    ),
+                    RtResponseDone(
+                        usage=response.get("usage", {}) or {},
+                        had_tool_calls=False,
+                        status=status,
+                        response_id=response_id,
+                    ),
+                ]
+            terminal.append(call)
+        events: list[RtEvent] = list(terminal)
         events.append(RtResponseDone(usage=response.get("usage", {}) or {},
-                                     had_tool_calls=had_calls,
-                                     status=response.get("status", "completed")))
+                                     had_tool_calls=bool(terminal),
+                                     status=status,
+                                     response_id=response_id))
         return events
 
     async def _send(self, payload: dict) -> None:

@@ -5,6 +5,7 @@ the real executor.
 
 from __future__ import annotations
 
+from ..actions import simulated_verified_receipt
 from .base import ExecutionContext
 
 
@@ -19,12 +20,16 @@ def _screenshot(args: dict, ctx: ExecutionContext) -> dict:
 
 
 def _open_app(args: dict, ctx: ExecutionContext) -> dict:
-    return {"app": args.get("app"), "activated": True, "simulated": True}
+    data = {"app": args.get("app"), "activated": True, "simulated": True}
+    return simulated_verified_receipt(
+        target=str(args.get("app")), effect="frontmost app matches requested app", data=data)
 
 
 def _browser_search(args: dict, ctx: ExecutionContext) -> dict:
-    return {"url": f"https://www.google.com/search?q={args.get('query', '')}",
+    data = {"url": f"https://www.google.com/search?q={args.get('query', '')}",
             "simulated": True}
+    return simulated_verified_receipt(
+        target="browser search", effect="browser search URL opened", data=data)
 
 
 def _phoenix_search(args: dict, ctx: ExecutionContext) -> dict:
@@ -45,11 +50,15 @@ def _phoenix_search(args: dict, ctx: ExecutionContext) -> dict:
 
 
 def _open_note(args: dict, ctx: ExecutionContext) -> dict:
-    return {"path": args.get("path"), "opened_via": "obsidian_url", "simulated": True}
+    data = {"path": args.get("path"), "opened_via": "obsidian_url", "simulated": True}
+    return simulated_verified_receipt(
+        target=str(args.get("path")), effect="requested note opened", data=data)
 
 
 def _clipboard_set(args: dict, ctx: ExecutionContext) -> dict:
-    return {"chars": len(str(args.get("text", ""))), "simulated": True}
+    data = {"chars": len(str(args.get("text", ""))), "simulated": True}
+    return simulated_verified_receipt(
+        target="clipboard", effect="clipboard hash matches payload hash", data=data)
 
 
 def _ax_snapshot(args: dict, ctx: ExecutionContext) -> dict:
@@ -67,33 +76,45 @@ def _ax_snapshot(args: dict, ctx: ExecutionContext) -> dict:
 
 
 def _click(args: dict, ctx: ExecutionContext) -> dict:
-    return {"ref": args.get("ref"), "via": "ax_press", "simulated": True}
+    data = {"ref": args.get("ref"), "via": "ax_press", "simulated": True}
+    return simulated_verified_receipt(
+        target=str(args.get("ref")), effect="fixture target state changed", data=data)
 
 
 def _type_text(args: dict, ctx: ExecutionContext) -> dict:
     text = str(args.get("text", ""))
-    return {
+    data = {
         "ref": args.get("ref"),
         "typed": len(text),
         "submitted": bool(args.get("submit", False)),
         "simulated": True,
     }
+    return simulated_verified_receipt(
+        target=str(args.get("ref")), effect="field value matches text", data=data)
 
 
 def _scroll(args: dict, ctx: ExecutionContext) -> dict:
-    return {"ref": args.get("ref"), "via": "ax_scroll", "simulated": True}
+    data = {"ref": args.get("ref"), "via": "ax_scroll", "simulated": True}
+    return simulated_verified_receipt(
+        target=str(args.get("ref")), effect="scroll position changed", data=data)
 
 
 def _hotkey(args: dict, ctx: ExecutionContext) -> dict:
-    return {"combo": args.get("combo"), "simulated": True}
+    data = {"combo": args.get("combo"), "simulated": True}
+    return simulated_verified_receipt(
+        target=str(args.get("combo")), effect="fixture effect predicate matched", data=data)
 
 
 def _focus_tab(args: dict, ctx: ExecutionContext) -> dict:
-    return {"focused": args.get("title"), "simulated": True}
+    data = {"focused": args.get("title"), "simulated": True}
+    return simulated_verified_receipt(
+        target=str(args.get("title")), effect="selected tab matches target", data=data)
 
 
 def _menu(args: dict, ctx: ExecutionContext) -> dict:
-    return {"pressed": list(args.get("path", [])), "simulated": True}
+    data = {"pressed": list(args.get("path", [])), "simulated": True}
+    return simulated_verified_receipt(
+        target=" > ".join(args.get("path", [])), effect="fixture menu effect matched", data=data)
 
 
 FAKE_EXECUTORS = {

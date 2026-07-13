@@ -84,7 +84,11 @@ def _qmd_command(qmd_bin: str) -> tuple[str, dict[str, str]]:
             "qmd_not_found: qmd is not on the daemon's PATH; "
             "set phoenix.qmd_bin to an absolute path in the config"
         )
-    env = dict(os.environ)
+    allowed = {
+        "HOME", "LANG", "LC_ALL", "LC_CTYPE", "PATH", "TMPDIR",
+        "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
+    }
+    env = {key: value for key, value in os.environ.items() if key in allowed}
     env["PATH"] = f"{Path(exe).parent}{os.pathsep}{env.get('PATH', '')}"
     return exe, env
 

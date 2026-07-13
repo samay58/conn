@@ -116,7 +116,7 @@ _EXTRA_CASES = [
             "gates": {"app_focus_tab": "auto"},
             "end_phase": ["done", "idle"],
             "approvals_asked": 0,
-            "tool_ok": {"app_focus_tab": True},
+            "tool_ok": {"app_focus_tab": False},
             "data_contains": {"app_focus_tab": [{"candidates": ["Alpha", "Alphas"]}]},
         },
     },
@@ -143,7 +143,7 @@ _EXTRA_CASES = [
             "gates": {"app_menu": "auto"},
             "end_phase": ["done", "idle"],
             "approvals_asked": 0,
-            "tool_ok": {"app_menu": True},
+            "tool_ok": {"app_menu": False},
             "data_contains": {"app_menu": [{"candidates": ["File", "Edit", "View"]}]},
         },
     },
@@ -349,7 +349,7 @@ async def _run_case(case: dict, cfg: Config) -> dict:
                 failures.append(f"{name} errors {got_errors} missing {want_error}")
     for name, wanted_items in expect.get("data_contains", {}).items():
         call_ids = [proposal["call_id"] for proposal in proposed if proposal["name"] == name]
-        actual_payloads = [results[call_id].get("data") for call_id in call_ids if call_id in results and results[call_id].get("ok")]
+        actual_payloads = [results[call_id].get("data") for call_id in call_ids if call_id in results]
         for wanted in wanted_items:
             if not any(_contains(payload, wanted) for payload in actual_payloads):
                 failures.append(f"{name} data {actual_payloads} missing {wanted}")
@@ -372,9 +372,9 @@ async def _run_case(case: dict, cfg: Config) -> dict:
         "tools": got_tools,
         "tool_data": {
             proposal["name"]: [
-                results[call_id]["data"]
+                results[call_id].get("data")
                 for call_id in [item["call_id"] for item in proposed if item["name"] == proposal["name"]]
-                if call_id in results and results[call_id].get("ok")
+                if call_id in results and results[call_id].get("data") is not None
             ]
             for proposal in proposed
         },

@@ -14,30 +14,22 @@
       <h1>Conn</h1>
       <span class="mode" id="mode-label">demo</span>
     </div>
-    <div class="bar-actions">
-      <button id="new-session" class="ghost" title="Fresh session, fresh context">New session</button>
-      <button id="stop" class="stop" title="Belay: cancel everything now">Stop</button>
-    </div>
+    <div class="bar-actions"><span class="mode">approvals only</span></div>
   </header>
 
   <div class="grant-banner" id="grant-banner" hidden></div>
 
   <section class="transcript" id="transcript" aria-live="polite">
-    <p class="hint" id="hint">Hold <kbd>Space</kbd> and speak, or type a command below.
-    Low-risk actions run immediately; anything risky shows a chip first.</p>
+    <p class="hint" id="hint">Diagnostic view. Use Conn.app for input, Stop, and session controls.</p>
   </section>
 
   <section class="chips" id="chips"></section>
 
-  <section class="command">
-    <button id="ptt" class="ptt" data-phase="idle">
+  <section class="command" aria-label="Current Conn state">
+    <div id="ptt" class="ptt" data-phase="idle">
       <span class="ptt-state" id="ptt-state">Idle</span>
-      <span class="ptt-sub" id="ptt-sub">hold to talk</span>
-    </button>
-    <form id="text-form" autocomplete="off">
-      <input id="text-input" type="text" placeholder="Type a command instead"
-             spellcheck="false" maxlength="500">
-    </form>
+      <span class="ptt-sub" id="ptt-sub">observe in Conn.app</span>
+    </div>
   </section>
 
   <footer class="meter">

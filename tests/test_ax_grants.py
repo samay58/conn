@@ -11,6 +11,7 @@ import pytest
 
 import conn.identity as identity_module
 from conn.app import ConnApp
+from conn.ax_bridge import APP_WEBSOCKET_PURPOSE, hmac_proof
 from conn.realtime.fake import FakeRealtimeAdapter
 from conn.tools.ax_input import FakeInputBackend, hotkey
 from conn.tools.base import ToolError
@@ -55,7 +56,13 @@ def test_app_attach_reports_app_lane(cfg, ctx, monkeypatch):
 
     async def run():
         await app.start()
-        app.ax_bridge.app_attached()
+        app.ax_bridge.expected_token = "test-token"
+        challenge = "test-websocket-challenge"
+        assert app.ax_bridge.authenticate_app_proof(
+            challenge,
+            hmac_proof("test-token", APP_WEBSOCKET_PURPOSE, challenge),
+            "test-app",
+        )
 
         async def fake_request():
             return {"accessibility": "not_granted"}

@@ -105,17 +105,15 @@ def _accessibility() -> dict:
         identity = describe_identity()
         if AXIsProcessTrusted():
             return _result("accessibility", OK,
-                           "window titles and selected text available "
+                           "optional Python AX grant is present for diagnostics "
                            f"(process image: {identity['grant_target']})")
-        return _result("accessibility", WARN,
-                       "not granted for this python. Context reads, hotkeys, and "
-                       "menu presses ride Conn.app's grant when the app is "
-                       "connected; only the grounded lane (snapshot, click, type) "
-                       "and app-less runs still need this exact artifact granted: "
-                       f"{identity['grant_target']} (System Settings, Privacy and "
-                       "Security, Accessibility, then relaunch the daemon). TCC "
-                       "checks the running process image, not the venv symlink; "
-                       f"the image here is {identity['image']}")
+        return _result(
+            "accessibility",
+            OK,
+            "Python AX grant is not required by the verified engine. Conn.app "
+            "owns production observation and action; its grant is reported when "
+            "the authenticated app attaches.",
+        )
     except Exception as e:
         return _result("accessibility", FAIL, str(e))
 
@@ -123,8 +121,6 @@ def _accessibility() -> dict:
 def _input_posting() -> dict:
     try:
         from .tools.ax_input import MacInputBackend
-
-        from .identity import grant_target
 
         if MacInputBackend().posting_capability():
             return _result(
@@ -134,10 +130,9 @@ def _input_posting() -> dict:
             )
         return _result(
             "input_posting",
-            FAIL,
-            "CGEvent posting probe failed for this process identity. Grant "
-            f"Accessibility to {grant_target()} and relaunch, or run doctor "
-            "the same way the daemon runs.",
+            OK,
+            "Python CGEvent posting is unavailable and not used in production. "
+            "Conn.app owns verified input dispatch.",
         )
     except Exception as e:
         return _result("input_posting", FAIL, str(e))
@@ -193,8 +188,7 @@ def _input_monitoring_note() -> dict:
     return _result("global_hotkey", WARN,
                    f"cannot be probed safely. If Right Option PTT stays dead, grant "
                    f"Input Monitoring to {host} and restart conn. Secure Keyboard "
-                   f"Entry (iTerm setting or any password field) also disables it. "
-                   f"Console hold-Space PTT works regardless")
+                   f"Entry (iTerm setting or any password field) also disables it")
 
 
 def format_report(checks: list[dict]) -> str:

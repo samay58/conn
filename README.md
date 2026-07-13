@@ -1,158 +1,218 @@
 # Conn
 
-Push-to-talk voice command surface for the Mac, built on the OpenAI Realtime
-API (gpt-realtime-2). Hold a key, say a command, release: Conn takes the
-smallest safe action through a local tool harness, shows an approval chip for
-anything risky, and leaves a trace and a cost receipt for every session.
+Conn is a push-to-talk voice command surface for the Mac, built on the OpenAI
+Realtime API. Hold a key, speak, and release. Python handles the model session,
+policy, approvals, traces, and cost. Conn.app performs macOS observation and
+actions through a verified semantic transaction.
 
-"You have the conn": the naval handoff of steering authority, spoken, bounded,
-revocable. The stop button is "belay that."
+The name comes from the naval handoff of steering authority: spoken, bounded,
+and revocable. The Stop control is `belay that`.
 
-Full design: [docs/gpt-realtime-2-computer-agent-spec.md](docs/gpt-realtime-2-computer-agent-spec.md)
+Current architecture and measured status:
+[docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md). Approved verified-action spec:
+[docs/2026-07-09-verified-action-engine-spec.md](docs/2026-07-09-verified-action-engine-spec.md).
 
-## The native app (primary surface)
-
-```bash
-cd macos && ./make-app.sh && open Conn.app
-```
-
-Menu-bar app whose primary surface is the notch island: a black surface
-that grows out of the notch on key-down with waveform, state word,
-transcript, and live cost, breathes quietly while listening, and retreats
-into the notch when the turn ends (spec:
-[docs/2026-07-05-ux-craft-spec.md](docs/2026-07-05-ux-craft-spec.md), plan:
-[docs/plans/2026-07-05-ux-craft-plan.md](docs/plans/2026-07-05-ux-craft-plan.md)).
-The app autolaunches the daemon if one is not running (live if a key
-resolves, demo otherwise). Hold Right Option to talk once Accessibility is
-granted to Conn.app (menu: Enable Global Hotkey). No Conn surface ever
-takes keyboard focus; approvals are deliberate clicks only. On non-notch
-displays the older floating panel is the fallback surface. Approve and
-Deny live inside the island itself (pointer clicks only, as does the
-Override once button on a budget hold); the web console at 127.0.0.1:8787
-stays as the engineer's debug surface. `Conn --preview` renders every
-state for design iteration, with a live token inspector beside the
-cycler: sliders and color wells for the motion, personality, and palette
-tokens, Replay for the summon morph, and Write Back to land tuned values
-in DesignTokens.swift.
-
-### Stable signing (one-time, keeps TCC grants across rebuilds)
-
-TCC binds grants to the code signature. An ad-hoc signature changes on
-every build, so each reinstall silently kills Conn.app's Accessibility
-grant while the Settings toggle still shows on. Create a persistent
-self-signed identity once and make-app.sh uses it automatically:
-
-1. Keychain Access > Certificate Assistant > Create a Certificate
-2. Name: `Conn Dev Signing`, Identity Type: Self-Signed Root,
-   Certificate Type: Code Signing. Check "Let me override defaults" and
-   set validity to 3650 days so it does not quietly expire in a year.
-3. Rebuild with `./make-app.sh install` and grant Accessibility once; every rebuild after that keeps the grant.
-
-Without the identity the script falls back to ad hoc and prints a warning that grants will reset on install.
-
-## Second Mac in one command
+## Native app
 
 ```bash
-git clone https://github.com/samay58/conn.git ~/conn && ~/conn/bootstrap.sh
+cd /Users/samaydhawan/conn/macos
+./make-app.sh install
+open /Applications/Conn.app
 ```
 
-`bootstrap.sh` builds the per-machine venv, verifies the daemon (tests,
-evals, doctor), builds and installs the app, then prints the only steps
-that never travel: key material and TCC grants. Idempotent; rerun it after
-any `git pull`. Machine-specific values and the full checklist:
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+The Swift menu-bar app owns the notch island, global Right Option
+push-to-talk, production Accessibility observations, semantic target
+resolution, dispatch, and effect verification. On non-notch displays it uses
+the floating panel fallback. No Conn surface takes keyboard focus. Approval is
+a deliberate pointer click.
 
-## Quickstart (demo, no credentials)
+The Python daemon owns the Realtime connection, pure state machine, tool
+policy, approval decision, provenance, mutation scheduling, traces, and cost.
+It does not silently fall back to Python AX or input execution in production.
+
+The local web console is a read-only engineering surface.
+It is disabled unless started with its own local console capability. It cannot
+claim the Conn.app control role, answer native RPC, initiate actions, or approve
+plans. Approvals live only in the signed Conn app.
+
+## What verified means
+
+For every state-changing computer action, Conn:
+
+1. observes the current app, window, target, and baseline
+2. resolves the target against current native state
+3. prepares a bounded plan with effect predicates and allowed strategies
+4. applies Python risk policy and pointer approval to that exact plan
+5. revalidates and dispatches through Conn.app
+6. observes again and classifies the result from evidence
+
+Native API success is only a dispatch fact. It is not proof of the intended
+effect.
+
+Only `verified` produces `ok: true` for a mutation and the user-facing word
+`Done.` A dispatch that cannot be confirmed says `Sent, not confirmed.` Every
+other unsuccessful outcome says `Did not run.` A possibly-dispatched action is
+never retried automatically.
+
+Current semantic operations cover app open/switch, clipboard write, tab focus,
+scroll, non-secure text entry, element press, lazy menu action, and allowlisted
+key chords. Menu actions, raw key chords, and submit report dispatch-only when
+no target-bound effect survives. Secure fields and denied bundles remain
+blocked. Visual coordinate control is not implemented.
+
+## Stable signing
+
+macOS privacy grants bind to code identity. `make-app.sh` uses the persistent
+`Conn Dev Signing` identity when it is available so Accessibility grants
+survive rebuilds.
+
+Check the identity:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+If this machine does not have it, create it once in Keychain Access:
+
+1. Open Keychain Access, then Certificate Assistant, then Create a Certificate.
+2. Name it `Conn Dev Signing`.
+3. Choose Self-Signed Root and Code Signing.
+4. Override defaults and set validity to 3650 days.
+5. Run `./make-app.sh install` and grant Accessibility to Conn.app once.
+
+If Keychain asks whether `codesign` may use the identity, choose **Always
+Allow**. Do not treat an ad-hoc build as proof that TCC grants will survive.
+
+Verify the installed app:
+
+```bash
+codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
+```
+
+## Quickstart without credentials
 
 ```bash
 cd /Users/samaydhawan/conn
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --demo --simulate-tools
-# open http://127.0.0.1:8787
+PYTHONPATH=src .venv/bin/python -m conn --demo --simulate-tools
 ```
 
-Type "find the transformer paper notes in my vault and open it", or hold Space
-and speak (demo mode maps any speech to the default scenario). Watch the pill
-walk through listening, thinking, acting, speaking, done; expand the footer
-for the live trace and receipt. `--demo` without `--simulate-tools` runs the
-scripted model against the real executors, so apps and notes actually open.
+This runs the real state machine, policy, trace, and receipt paths against
+scripted model events and simulated evidence-backed tool receipts, with no side
+effects. `--demo` without `--simulate-tools` uses real executors and may open
+apps.
 
 ## Live mode
 
 ```bash
-export OPENAI_API_KEY=...   # daemon-side only; the browser never sees it
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
+cd /Users/samaydhawan/conn
+export OPENAI_API_KEY=...
+PYTHONPATH=src .venv/bin/python -m conn
 ```
 
-Defaults: model gpt-realtime-2, voice marin, reasoning effort low, session
-cap $1.00 with a hard stop, warning at $0.50, idle disconnect after five
-minutes. All tunable in `config.toml`. `--no-audio` runs live with typed
-input only; `--no-hotkey` skips the global key.
+Defaults are model `gpt-realtime-2`, voice `marin`, low reasoning effort, a
+$1.00 session hard cap, warning at $0.50, and five-minute idle disconnect.
+`--no-audio` runs typed-input mode. `--no-hotkey` skips the global key.
 
-## Permissions (TCC), in order of need
+The API key stays daemon-side. It never enters config, the app bridge, the web
+console, or traces.
 
-Everything attaches to the app that launches the daemon (Terminal, iTerm,
-Ghostty). Pick one host and stay with it.
+## Permissions
 
-1. Microphone: auto-prompts on first launch. Required for voice.
-2. Input Monitoring: only for the global Right Option hotkey. Grant manually
-   in System Settings, Privacy and Security, then restart conn. Secure
-   Keyboard Entry (an iTerm setting, or any focused password field) silently
-   disables it. Console hold-Space PTT works without any of this.
-3. Accessibility: optional. Adds window title and selected text to
-   computer_get_context; without it you get the app name only.
-4. Screen Recording: optional. Without it, computer_screenshot captures only
-   the wallpaper and your own windows.
+Grant permissions to `/Applications/Conn.app` after the persistent install:
 
-Check the machine any time:
+1. **Microphone** for voice.
+2. **Accessibility** for global push-to-talk and all production semantic
+   observation and action.
+3. **Screen Recording** only for the old local screenshot tool. It is not
+   needed by the semantic action engine and no visual action lane is enabled.
+
+Production semantic control does not require an Accessibility grant for the
+Python interpreter.
+
+Check the environment:
 
 ```bash
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor
+cd /Users/samaydhawan/conn
+PYTHONPATH=src .venv/bin/python -m conn --doctor
 ```
+
+## Tests, evals, and build
+
+```bash
+cd /Users/samaydhawan/conn
+PYTHONPATH=src .venv/bin/python -m pytest tests -q
+PYTHONPATH=src .venv/bin/python -m conn --eval
+PYTHONPATH=src .venv/bin/python -m conn --doctor
+
+cd /Users/samaydhawan/conn/macos
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
+./make-app.sh
+```
+
+Latest measured results: 461 Python tests passed with 2 existing dependency
+warnings, 13 of 13 harness evals passed, 102 Swift tests passed, and the release
+Swift build passed. A 1,000-transaction in-memory native-engine stress test
+recorded zero wrong targets and zero false verified outcomes. It is not the
+real fixture acceptance gate. See
+[docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md) for the full measured bars.
+
+## Installation smoke probes
+
+The Mac must be unlocked and the current persistent-signed app installed.
+
+```bash
+cd /Users/samaydhawan/conn
+PYTHONPATH=src .venv/bin/python -m conn --action-probe fixture
+PYTHONPATH=src .venv/bin/python -m conn --action-probe terminal
+PYTHONPATH=src .venv/bin/python -m conn --action-probe safari
+PYTHONPATH=src .venv/bin/python -m conn --action-probe chrome
+PYTHONPATH=src .venv/bin/python -m conn --action-probe notes
+PYTHONPATH=src .venv/bin/python -m conn --action-probe obsidian
+```
+
+Artifacts go to `data/action-probes/`. The fixture probe checks one accepted
+press with no visible effect against its independent truth log. Real-app probes
+compare the engine result with WindowServer's top visible window. Missing apps
+or unproven signing identities block before dispatch.
+
+These commands test installation and app switching. They do not satisfy the
+real fixture matrix or six-app semantic-action acceptance bar.
+
+The remaining human product gate is 30 ordinary commands across three work
+sessions. Use [docs/LIVE_EVAL_CHECKLIST.md](docs/LIVE_EVAL_CHECKLIST.md).
+
+## Second Mac
+
+```bash
+git clone https://github.com/samay58/conn.git ~/conn
+~/conn/bootstrap.sh
+```
+
+Full setup and portability notes:
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Environment contract
 
-| Variable / file | Purpose |
+| Variable or path | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | Live sessions. Environment only; never in config or logs |
-| `config.toml` | Hotkey, model, voice, budget, allowlists, vault paths, pricing table, server port |
-| `data/` | Gitignored: traces (JSONL per session), receipts, eval results, session screenshots |
-
-## Evals and tests
-
-```bash
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 162 tests, no hardware needed
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # 6 harness evals, writes artifacts
-```
-
-Live model quality has a manual checklist: [docs/LIVE_EVAL_CHECKLIST.md](docs/LIVE_EVAL_CHECKLIST.md).
-Running Conn on a second machine (Mac Mini): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
-## Safety in one paragraph
-
-The model proposes; the harness disposes. Low-risk tools (read context,
-search, open allowlisted apps and notes) run at once. Anything escalated
-shows a chip with the exact action and waits; 30 seconds without an answer is
-a denial. Disabled tools (UI clicks, typing, hotkeys, accessibility tree)
-return structured refusals. The daemon withholds the model's continuation
-until every tool call has a real result, so it cannot claim something
-happened before it did. Stop kills the turn and the session. The budget cap
-is a hard stop, with per-turn costs visible live.
+| `OPENAI_API_KEY` or `~/.config/openai/key` | Live Realtime session secret |
+| `config.toml` | Model, voice, budget, allowlists, vault paths, pricing, semantic timeouts |
+| `CONN_PROJECT_ROOT`, `CONN_PYTHON` | App-to-daemon path overrides |
+| `CONN_CONSOLE_CAPABILITY` | Optional local read-only console capability |
+| `data/` | Gitignored traces, receipts, evals, screenshots, and action probes |
 
 ## Project layout
 
-```
-src/conn/            daemon: state machine, harness, adapters, audio, hotkey, server
-console/             the web console (vanilla, no build step)
-src/conn/realtime/scenarios/   demo scripts
-evals/tasks.json     harness eval cases
-docs/                spec + live eval checklist
-data/                traces, receipts, evals (gitignored)
+```text
+src/conn/                         Python daemon and policy plane
+src/conn/tools/native_actions.py Python semantic request compiler
+macos/Sources/Conn/              Native UI, observation, dispatch, verification
+macos/Sources/ConnActionFixture/ Independent native test fixture
+console/                         Read-only engineering surface
+evals/tasks.json                 Harness eval cases
+docs/                            Specs, state, roadmap, and live checklist
+data/                            Local evidence artifacts, gitignored
 ```
 
-## Relationship to phoenix-voice-delegate
-
-`01-active/projects/phoenix-voice-delegate/` is a different product lane: an
-offline phone-call delegation lab (mission packets, fixtures, slot engine).
-It stays archived in place. Conn inherits its discipline (traces, policy
-gates, cost as part of the benchmark, the GPT-Realtime-2 notes in its
-provider scorecard) but shares no code.
+The neighboring `phoenix-voice-delegate` project shares safety discipline but
+no code.

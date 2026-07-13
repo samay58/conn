@@ -1,12 +1,12 @@
 {
   "id": "switch-then-menu",
-  "spoken": "switch to Chrome and open a new tab",
-  "match": ["switch", "chrome", "new tab"],
+  "spoken": "switch to Safari and open a new tab",
+  "match": ["switch", "safari", "new tab"],
   "segments": [
     {
-      "say": "Switching to Chrome.",
+      "say": "Switching to Safari.",
       "tools": [
-        {"name": "app_switch", "arguments": {"app": "Google Chrome"}}
+        {"name": "app_switch", "arguments": {"app": "Safari"}}
       ],
       "usage": {
         "input_tokens": 600, "output_tokens": 42,
@@ -18,7 +18,7 @@
     {
       "say": "Opening a new tab.",
       "tools": [
-        {"name": "app_menu", "arguments": {"app": "Google Chrome", "path": ["File", "New Tab"]}}
+        {"name": "app_menu", "arguments": {"app": "Safari", "path": ["File", "New Tab"]}}
       ],
       "usage": {
         "input_tokens": 660, "output_tokens": 42,
@@ -28,7 +28,7 @@
       }
     },
     {
-      "say": "Done. New tab open in Chrome.",
+      "say": "Done. New tab open in Safari.",
       "usage": {
         "input_tokens": 720, "output_tokens": 42,
         "input_token_details": {"text_tokens": 560, "audio_tokens": 160, "cached_tokens": 460,

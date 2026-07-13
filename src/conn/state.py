@@ -9,7 +9,7 @@ structurally unable to narrate an outcome it has not received.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from .events import (
@@ -18,11 +18,19 @@ from .events import (
     EndSession, ExecTool, FlushPlayback, Gate, MachineInput, ModelSpeaking,
     OpenMic, PlaybackDrained, PttDown, PttUp, QueueApproval, ResetTick,
     RejectInput, ResponseCancelled, ResponseDone, SendText, SendToolResult,
-    TextCommand, ToolCall, ToolFinished, ToolProposed, UserStop, WatchdogTick,
-    WsFailed, WsReconnected,
+    ResponseProvenance, TextCommand, ToolCall, ToolFinished, ToolProposed,
+    UserStop, WatchdogTick, WsFailed, WsReconnected,
 )
-
-
+from .actions import (
+    ActionEvidence,
+    ActionOutcome,
+    ActionReceipt,
+    DispatchState,
+    ambiguous_receipt,
+    blocked_receipt,
+    dispatch_only_receipt,
+    uncertain_failure_receipt,
+)
 class Phase(StrEnum):
     IDLE = "idle"
     LISTENING = "listening"
@@ -39,14 +47,19 @@ class CallStatus(StrEnum):
     PROPOSED = "proposed"
     RUNNING = "running"
     COMPLETED = "completed"
+    VERIFIED = "verified"
+    UNVERIFIED = "unverified"
+    NO_EFFECT = "no_effect"
+    AMBIGUOUS = "ambiguous"
     FAILED = "failed"
     DENIED = "denied"
     TIMEOUT = "timeout"
     BLOCKED = "blocked"
 
 
-RESOLVED = {CallStatus.COMPLETED, CallStatus.FAILED, CallStatus.DENIED,
-            CallStatus.TIMEOUT, CallStatus.BLOCKED}
+RESOLVED = {CallStatus.COMPLETED, CallStatus.VERIFIED, CallStatus.UNVERIFIED,
+            CallStatus.NO_EFFECT, CallStatus.AMBIGUOUS, CallStatus.FAILED,
+            CallStatus.DENIED, CallStatus.TIMEOUT, CallStatus.BLOCKED}
 
 
 @dataclass
@@ -57,7 +70,56 @@ class LedgerEntry:
 
 
 @dataclass
+class PendingResponse:
+    provenance: ResponseProvenance
+    cancelled: bool = False
+
+
+@dataclass
+class ResponseProvenanceLedger:
+    pending: list[PendingResponse] = field(default_factory=list)
+    bindings: dict[str, ResponseProvenance] = field(default_factory=dict)
+    active_response_id: str | None = None
+    retired_response_ids: set[str] = field(default_factory=set)
+
+    def request(self, provenance: ResponseProvenance) -> None:
+        self.pending.append(PendingResponse(provenance))
+
+    def cancel_current(self) -> None:
+        if self.pending:
+            self.pending[-1].cancelled = True
+            return
+        if self.active_response_id is not None:
+            self.retire(self.active_response_id)
+
+    def created(self, response_id: str) -> ResponseProvenance | None:
+        if not response_id or response_id in self.bindings or not self.pending:
+            return None
+        pending = self.pending.pop(0)
+        self.bindings[response_id] = pending.provenance
+        if pending.cancelled:
+            self.retired_response_ids.add(response_id)
+        else:
+            if self.active_response_id is not None:
+                self.retired_response_ids.add(self.active_response_id)
+            self.active_response_id = response_id
+        return pending.provenance
+
+    def resolve(self, response_id: str | None) -> ResponseProvenance | None:
+        if (not response_id or response_id != self.active_response_id
+                or response_id in self.retired_response_ids):
+            return None
+        return self.bindings.get(response_id)
+
+    def retire(self, response_id: str) -> None:
+        self.retired_response_ids.add(response_id)
+        if self.active_response_id == response_id:
+            self.active_response_id = None
+
+
+@dataclass
 class SessionStateMachine:
+    computer_mutations: frozenset[str]
     tap_threshold_ms: int = 300
     watchdog_timeout_s: float = 600
     phase: Phase = Phase.IDLE
@@ -66,11 +128,13 @@ class SessionStateMachine:
     _ptt_down_ms: int | None = None
     _response_open: bool = False   # a response.create is in flight upstream
     _batch_had_calls: bool = False  # current response proposed at least one tool call
+    _mutation_reserved: bool = False
+    _mutation_chain_closed: bool = False
+    _execution_seq: int = 0
     _transition_seq: int = 0       # bumped on every real phase transition
     _watchdog_armed_seq: int | None = None
     _watchdog_armed_ts_ms: int | None = None
 
-    # ---------- public ----------
 
     def handle(self, ev: MachineInput) -> list[Command]:
         old_phase = self.phase
@@ -91,14 +155,19 @@ class SessionStateMachine:
             case ToolProposed():
                 return self._tool_proposed(ev.call)
             case ToolFinished():
-                return self._resolve(ev.call_id,
-                                     CallStatus.COMPLETED if ev.ok else CallStatus.FAILED,
-                                     ev.output, ok=ev.ok)
+                return self._tool_finished(ev)
             case ApprovalDecision():
                 return self._approval(ev)
             case ApprovalTimeout():
+                entry = self.ledger.get(ev.call_id)
+                output = (
+                    self._predispatch_failure_output(entry.call, "approval_timeout")
+                    if entry is not None
+                    and self._is_computer_mutation(entry.call.name)
+                    else '{"ok": false, "error": "approval_timeout"}'
+                )
                 return self._resolve(ev.call_id, CallStatus.TIMEOUT,
-                                     '{"ok": false, "error": "approval_timeout"}', ok=False)
+                                     output, ok=False)
             case ModelSpeaking():
                 if self.phase is Phase.THINKING:
                     self.phase = Phase.SPEAKING
@@ -142,9 +211,18 @@ class SessionStateMachine:
     def unresolved_calls(self) -> list[LedgerEntry]:
         return self._unresolved()
 
+    def _is_computer_mutation(self, name: str) -> bool:
+        return name in self.computer_mutations
+
     def snapshot(self) -> dict:
+        action_outcomes = [
+            self._outcome_for_status(entry.status).value
+            for entry in self.ledger.values()
+            if self._outcome_for_status(entry.status) is not None
+        ]
         return {
             "phase": self.phase.value,
+            "last_action_outcome": action_outcomes[-1] if action_outcomes else None,
             "ledger": [
                 {"call_id": e.call.call_id, "name": e.call.name,
                  "preview": e.call.preview, "gate": e.call.gate.value,
@@ -153,7 +231,37 @@ class SessionStateMachine:
             ],
         }
 
-    # ---------- transitions ----------
+    @staticmethod
+    def _status_for_result(ev: ToolFinished) -> CallStatus:
+        match ev.action_outcome:
+            case ActionOutcome.VERIFIED:
+                return CallStatus.VERIFIED
+            case ActionOutcome.DISPATCH_ONLY:
+                return CallStatus.UNVERIFIED
+            case ActionOutcome.NO_EFFECT:
+                return CallStatus.NO_EFFECT
+            case ActionOutcome.AMBIGUOUS:
+                return CallStatus.AMBIGUOUS
+            case ActionOutcome.BLOCKED:
+                return CallStatus.BLOCKED
+            case ActionOutcome.FAILED:
+                return CallStatus.FAILED
+            case None:
+                return CallStatus.COMPLETED if ev.ok else CallStatus.FAILED
+
+    @staticmethod
+    def _outcome_for_status(status: CallStatus) -> ActionOutcome | None:
+        return {
+            CallStatus.VERIFIED: ActionOutcome.VERIFIED,
+            CallStatus.UNVERIFIED: ActionOutcome.DISPATCH_ONLY,
+            CallStatus.NO_EFFECT: ActionOutcome.NO_EFFECT,
+            CallStatus.AMBIGUOUS: ActionOutcome.AMBIGUOUS,
+            CallStatus.BLOCKED: ActionOutcome.BLOCKED,
+            CallStatus.DENIED: ActionOutcome.BLOCKED,
+            CallStatus.FAILED: ActionOutcome.FAILED,
+            CallStatus.TIMEOUT: ActionOutcome.FAILED,
+        }.get(status)
+
 
     def _ptt_down(self, ev: PttDown) -> list[Command]:
         if self.phase in (Phase.IDLE, Phase.DONE):
@@ -190,19 +298,60 @@ class SessionStateMachine:
     def _tool_proposed(self, call: ToolCall) -> list[Command]:
         if self.phase in (Phase.IDLE, Phase.FAILED, Phase.BUDGET_HOLD):
             return []  # stray proposal outside a turn: ignore, adapter noise
+        if call.call_id in self.ledger:
+            return []
         self._batch_had_calls = True
+        if self._is_computer_mutation(call.name):
+            if self._mutation_chain_closed:
+                output = self._blocked_action_output(
+                    call, "mutation_chain_closed: fresh user turn required")
+                self.ledger[call.call_id] = LedgerEntry(
+                    call, CallStatus.BLOCKED, output)
+                cmds = [SendToolResult(call.call_id, False, output)]
+                cmds.extend(self._maybe_continue())
+                self._refresh_phase()
+                return cmds
+            if self._mutation_reserved:
+                output = self._blocked_action_output(
+                    call,
+                    "sequential_action_required: propose one mutation after observing the prior outcome",
+                )
+                self._mutation_chain_closed = True
+                self.ledger[call.call_id] = LedgerEntry(call, CallStatus.BLOCKED, output)
+                cmds = [SendToolResult(call.call_id, False, output)]
+                cmds.extend(self._maybe_continue())
+                self._refresh_phase()
+                return cmds
+            self._mutation_reserved = True
         cmds: list[Command] = []
         match call.gate:
             case Gate.AUTO:
-                self.ledger[call.call_id] = LedgerEntry(call, CallStatus.RUNNING)
-                cmds.append(ExecTool(call))
+                running_call = self._start_execution(call)
+                self.ledger[call.call_id] = LedgerEntry(
+                    running_call, CallStatus.RUNNING)
+                cmds.append(ExecTool(running_call))
             case Gate.CONFIRM:
                 self.ledger[call.call_id] = LedgerEntry(call, CallStatus.PROPOSED)
                 cmds.append(QueueApproval(call))
             case Gate.BLOCKED:
                 reason = call.block_reason or "blocked_by_policy"
-                output = json.dumps({"ok": False, "error": reason})
-                self.ledger[call.call_id] = LedgerEntry(call, CallStatus.BLOCKED, output)
+                if self._is_computer_mutation(call.name):
+                    self._mutation_chain_closed = True
+                    prepared_failure = self._prepared_failure_receipt(call)
+                    if prepared_failure is not None:
+                        output = json.dumps(prepared_failure.as_dict())
+                        status = {
+                            ActionOutcome.AMBIGUOUS: CallStatus.AMBIGUOUS,
+                            ActionOutcome.BLOCKED: CallStatus.BLOCKED,
+                            ActionOutcome.FAILED: CallStatus.FAILED,
+                        }[prepared_failure.outcome]
+                    else:
+                        output = self._blocked_action_output(call, reason)
+                        status = CallStatus.BLOCKED
+                else:
+                    output = json.dumps({"ok": False, "error": reason})
+                    status = CallStatus.BLOCKED
+                self.ledger[call.call_id] = LedgerEntry(call, status, output)
                 cmds.append(SendToolResult(call.call_id, False, output))
                 cmds.extend(self._maybe_continue())
         self._refresh_phase()
@@ -213,22 +362,45 @@ class SessionStateMachine:
         if entry is None or entry.status is not CallStatus.PROPOSED:
             return []
         if ev.approved:
+            entry.call = self._start_execution(entry.call)
             entry.status = CallStatus.RUNNING
             self._refresh_phase()
             return [ExecTool(entry.call)]
-        return self._resolve(ev.call_id, CallStatus.DENIED,
-                             '{"ok": false, "error": "denied_by_user"}', ok=False)
+        output = (
+            self._blocked_action_output(entry.call, "denied_by_user")
+            if self._is_computer_mutation(entry.call.name)
+            else '{"ok": false, "error": "denied_by_user"}'
+        )
+        return self._resolve(ev.call_id, CallStatus.DENIED, output, ok=False)
 
     def _resolve(self, call_id: str, status: CallStatus, output: str, *, ok: bool) -> list[Command]:
         entry = self.ledger.get(call_id)
         if entry is None or entry.status in RESOLVED:
             return []
+        if (self._is_computer_mutation(entry.call.name)
+                and status is not CallStatus.VERIFIED):
+            self._mutation_chain_closed = True
         entry.status = status
         entry.output = output
         cmds: list[Command] = [SendToolResult(call_id, ok, output)]
         cmds.extend(self._maybe_continue())
         self._refresh_phase()
         return cmds
+
+    def _tool_finished(self, ev: ToolFinished) -> list[Command]:
+        entry = self.ledger.get(ev.call_id)
+        if entry is None or not self._completion_matches(entry.call, ev):
+            return []
+        status = self._status_for_result(ev)
+        output = ev.output
+        result_ok = ev.ok
+        if self._is_computer_mutation(entry.call.name):
+            receipt = self._validated_action_receipt(entry.call, ev)
+            status = self._status_for_result(replace(
+                ev, action_outcome=receipt.outcome, ok=receipt.ok))
+            output = json.dumps(receipt.as_dict())
+            result_ok = receipt.ok
+        return self._resolve(ev.call_id, status, output, ok=result_ok)
 
     def _response_done(self, ev: ResponseDone) -> list[Command]:
         self._response_open = False
@@ -304,10 +476,10 @@ class SessionStateMachine:
         self.phase = Phase.IDLE
         return cmds
 
-    # ---------- internals ----------
 
     def _begin_response(self) -> None:
         self._response_open = True
+        self._mutation_reserved = False
 
     def _new_turn(self) -> None:
         """Fresh turn: drop last turn's (fully resolved) ledger so stale chips
@@ -315,13 +487,159 @@ class SessionStateMachine:
         self.ledger.clear()
         self._response_open = False
         self._batch_had_calls = False
+        self._mutation_reserved = False
+        self._mutation_chain_closed = False
         self.phase = Phase.LISTENING
 
     def _reset_turn(self) -> None:
         self.ledger.clear()
         self._response_open = False
         self._batch_had_calls = False
+        self._mutation_reserved = False
         self._ptt_down_ms = None
+
+    def _start_execution(self, call: ToolCall) -> ToolCall:
+        self._execution_seq += 1
+        return replace(call, execution_id=self._execution_seq)
+
+    @staticmethod
+    def _blocked_action_output(call: ToolCall, reason: str) -> str:
+        return json.dumps(blocked_receipt(
+            target=call.preview or call.name,
+            summary=reason,
+            duration_ms=0,
+        ).as_dict())
+
+    @staticmethod
+    def _predispatch_failure_output(call: ToolCall, reason: str) -> str:
+        return json.dumps(ActionReceipt(
+            outcome=ActionOutcome.FAILED,
+            dispatch_state=DispatchState.NOT_DISPATCHED,
+            strategy="approval_gate",
+            lane="semantic",
+            target=call.preview or call.name,
+            effect="action was not dispatched",
+            evidence=(ActionEvidence(
+                kind="approval_gate",
+                summary=reason,
+                matched=False,
+            ),),
+            retry_safe=False,
+            duration_ms=0,
+            data={"error": reason},
+        ).as_dict())
+
+    @staticmethod
+    def _prepared_failure_receipt(call: ToolCall) -> ActionReceipt | None:
+        if not isinstance(call.prepared_failure, dict):
+            return None
+        try:
+            receipt = ActionReceipt.from_dict(call.prepared_failure)
+        except (KeyError, TypeError, ValueError):
+            return None
+        if (
+            receipt.outcome
+            not in {
+                ActionOutcome.AMBIGUOUS,
+                ActionOutcome.BLOCKED,
+                ActionOutcome.FAILED,
+            }
+            or receipt.dispatch_state is not DispatchState.NOT_DISPATCHED
+            or receipt.ok
+        ):
+            return None
+        return receipt
+
+    @staticmethod
+    def _validated_action_receipt(
+        call: ToolCall, result: ToolFinished
+    ) -> ActionReceipt:
+        try:
+            payload = json.loads(result.output)
+        except (TypeError, ValueError):
+            payload = None
+        if isinstance(payload, dict) and result.action_outcome is not None:
+            try:
+                receipt = ActionReceipt.from_dict(payload)
+            except (KeyError, TypeError, ValueError):
+                receipt = None
+            if receipt is not None and receipt.outcome is result.action_outcome:
+                return receipt
+
+        target = call.preview or call.name
+        duration_ms = (
+            payload.get("duration_ms", 0)
+            if isinstance(payload, dict)
+            and isinstance(payload.get("duration_ms", 0), int)
+            else 0
+        )
+        strategy = (
+            payload.get("strategy")
+            if isinstance(payload, dict)
+            and isinstance(payload.get("strategy"), str)
+            else "unclassified_executor_result"
+        )
+        summary = (
+            payload.get("error")
+            if isinstance(payload, dict)
+            and isinstance(payload.get("error"), str)
+            else "executor returned no valid action receipt"
+        )
+        match result.action_outcome:
+            case ActionOutcome.NO_EFFECT:
+                return ActionReceipt(
+                    outcome=ActionOutcome.NO_EFFECT,
+                    dispatch_state=DispatchState.DISPATCHED,
+                    strategy=strategy,
+                    lane="semantic",
+                    target=target,
+                    effect="requested effect was not observed",
+                    evidence=(ActionEvidence(
+                        kind="effect_observation",
+                        summary=summary,
+                        matched=False,
+                    ),),
+                    retry_safe=False,
+                    duration_ms=duration_ms,
+                    data={"error": summary},
+                )
+            case ActionOutcome.AMBIGUOUS:
+                data = payload if isinstance(payload, dict) else {"error": summary}
+                return ambiguous_receipt(
+                    target=target, data=data, duration_ms=duration_ms)
+            case ActionOutcome.BLOCKED:
+                return blocked_receipt(
+                    target=target, summary=summary, duration_ms=duration_ms)
+            case ActionOutcome.FAILED:
+                return uncertain_failure_receipt(
+                    target=target,
+                    strategy=strategy,
+                    duration_ms=duration_ms,
+                    summary=summary,
+                )
+            case ActionOutcome.VERIFIED | ActionOutcome.DISPATCH_ONLY | None:
+                if result.action_outcome is None and not result.ok:
+                    return uncertain_failure_receipt(
+                        target=target,
+                        strategy=strategy,
+                        duration_ms=duration_ms,
+                        summary=summary,
+                    )
+                return dispatch_only_receipt(
+                    target=target,
+                    strategy=strategy,
+                    duration_ms=duration_ms,
+                )
+
+    @staticmethod
+    def _completion_matches(call: ToolCall, result: ToolFinished) -> bool:
+        return (
+            result.execution_id is not None
+            and result.turn_id == call.turn_id
+            and result.response_epoch == call.response_epoch
+            and result.observation_epoch == call.observation_epoch
+            and result.execution_id == call.execution_id
+        )
 
     def _unresolved(self) -> list[LedgerEntry]:
         return [e for e in self.ledger.values() if e.status not in RESOLVED]

@@ -9,9 +9,14 @@ let package = Package(
             name: "Conn",
             path: "Sources/Conn"
         ),
+        .executableTarget(
+            name: "ConnActionFixture",
+            path: "Sources/ConnActionFixture",
+            exclude: ["Info.plist"]
+        ),
         .testTarget(
             name: "ConnTests",
-            dependencies: ["Conn"],
+            dependencies: ["Conn", "ConnActionFixture"],
             path: "Tests/ConnTests"
         )
     ]

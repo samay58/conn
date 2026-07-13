@@ -9,6 +9,10 @@ from conn.events import (
     UserStop, WsFailed, WsReconnected,
 )
 from conn.state import CallStatus, Phase, SessionStateMachine
+from conn.tools.registry import build_registry, computer_mutation_names
+
+
+MUTATIONS = computer_mutation_names(build_registry())
 
 
 def call(call_id="c1", gate=Gate.AUTO, name="app_open"):
@@ -20,9 +24,22 @@ def kinds(cmds):
     return [type(c).__name__ for c in cmds]
 
 
+def finished(m, call_id="c1", *, ok=True, output="{}"):
+    running = m.ledger[call_id].call
+    return ToolFinished(
+        call_id=call_id,
+        ok=ok,
+        output=output,
+        turn_id=running.turn_id,
+        response_epoch=running.response_epoch,
+        observation_epoch=running.observation_epoch,
+        execution_id=running.execution_id,
+    )
+
+
 @pytest.fixture
 def m():
-    return SessionStateMachine()
+    return SessionStateMachine(computer_mutations=MUTATIONS)
 
 
 def start_turn(m, t0=1000, t1=2000):
@@ -59,9 +76,9 @@ class TestPtt:
         assert m.handle(PttUp()) == []
 
 
-def ToolProposedFactory(call_id="c1", gate=Gate.AUTO):
+def ToolProposedFactory(call_id="c1", gate=Gate.AUTO, name="app_open"):
     from conn.events import ToolProposed
-    return ToolProposed(call=call(call_id=call_id, gate=gate))
+    return ToolProposed(call=call(call_id=call_id, gate=gate, name=name))
 
 
 class TestTextInput:
@@ -86,7 +103,7 @@ class TestAutoTool:
     def test_tool_finishes_before_response_done_waits_for_close(self, m):
         start_turn(m)
         m.handle(ToolProposedFactory())
-        cmds = m.handle(ToolFinished(call_id="c1", ok=True, output='{"ok": true}'))
+        cmds = m.handle(finished(m, output='{"ok": true}'))
         assert kinds(cmds) == ["SendToolResult"]  # response still open: no continuation
         cmds = m.handle(ResponseDone(had_tool_calls=True))
         assert kinds(cmds) == ["CreateResponse"]
@@ -96,7 +113,7 @@ class TestAutoTool:
         start_turn(m)
         m.handle(ToolProposedFactory())
         assert m.handle(ResponseDone(had_tool_calls=True)) == []
-        cmds = m.handle(ToolFinished(call_id="c1", ok=True, output='{"ok": true}'))
+        cmds = m.handle(finished(m, output='{"ok": true}'))
         assert kinds(cmds) == ["SendToolResult", "CreateResponse"]
         assert m.phase is Phase.THINKING
 
@@ -104,17 +121,17 @@ class TestAutoTool:
         start_turn(m)
         m.handle(ToolProposedFactory())
         m.handle(ResponseDone(had_tool_calls=True))
-        m.handle(ToolFinished(call_id="c1", ok=True, output="{}"))
-        assert m.handle(ToolFinished(call_id="c1", ok=True, output="{}")) == []
+        m.handle(finished(m))
+        assert m.handle(finished(m)) == []
 
     def test_multi_call_single_continuation(self, m):
         start_turn(m)
-        m.handle(ToolProposedFactory("c1"))
-        m.handle(ToolProposedFactory("c2"))
+        m.handle(ToolProposedFactory("c1", name="computer_get_context"))
+        m.handle(ToolProposedFactory("c2", name="computer_get_context"))
         m.handle(ResponseDone(had_tool_calls=True))
-        first = m.handle(ToolFinished(call_id="c1", ok=True, output="{}"))
+        first = m.handle(finished(m, "c1"))
         assert kinds(first) == ["SendToolResult"]  # c2 still unresolved
-        second = m.handle(ToolFinished(call_id="c2", ok=True, output="{}"))
+        second = m.handle(finished(m, "c2"))
         assert kinds(second) == ["SendToolResult", "CreateResponse"]
 
 
@@ -155,8 +172,8 @@ class TestApproval:
 
     def test_mixed_gates_approval_takes_display_priority(self, m):
         start_turn(m)
-        m.handle(ToolProposedFactory("c1", gate=Gate.AUTO))
-        m.handle(ToolProposedFactory("c2", gate=Gate.CONFIRM))
+        m.handle(ToolProposedFactory("c1", gate=Gate.AUTO, name="computer_get_context"))
+        m.handle(ToolProposedFactory("c2", gate=Gate.CONFIRM, name="computer_get_context"))
         assert m.phase is Phase.AWAITING_APPROVAL
         m.handle(ApprovalDecision(call_id="c2", approved=True))
         assert m.phase is Phase.ACTING
@@ -200,7 +217,7 @@ class TestSpeakingAndDone:
         start_turn(m)
         m.handle(ToolProposedFactory())
         m.handle(ResponseDone(had_tool_calls=True))
-        m.handle(ToolFinished(call_id="c1", ok=True, output="{}"))
+        m.handle(finished(m))
         m.handle(ResponseDone(had_tool_calls=False))
         assert m.phase is Phase.DONE
         m.handle(PttDown(ts_ms=9000))

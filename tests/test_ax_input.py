@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from conn.config import Config
-from conn.doctor import FAIL, OK
+from conn.doctor import OK
 import conn.doctor as doctor
 from conn.tools.ax import FakeAxBackend, RawNode, SnapshotStore
 from conn.tools.base import ToolError
@@ -507,7 +507,7 @@ def test_menu_returns_available_titles_at_failing_level(cfg, ctx):
     assert input_backend.actions == []
 
 
-def test_doctor_posting_capability_check_reports_same_launch_context(monkeypatch):
+def test_doctor_does_not_require_python_posting_in_verified_engine(monkeypatch):
     import conn.tools.ax_input as ax_input
 
     class ProbeBackend:
@@ -519,8 +519,8 @@ def test_doctor_posting_capability_check_reports_same_launch_context(monkeypatch
     result = doctor._input_posting()
 
     assert result["check"] == "input_posting"
-    assert result["status"] == FAIL
-    assert "same way the daemon runs" in result["detail"]
+    assert result["status"] == OK
+    assert "not used in production" in result["detail"]
 
 
 def test_fake_executors_cover_all_grounded_input_tools(ctx):
@@ -536,29 +536,30 @@ def test_fake_executors_cover_all_grounded_input_tools(ctx):
 
     assert expected.issubset(FAKE_EXECUTORS)
     assert FAKE_EXECUTORS["computer_ax_snapshot"]({}, ctx)["simulated"] is True
-    assert FAKE_EXECUTORS["computer_click"]({"ref": "e2"}, ctx)["ref"] == "e2"
-    assert FAKE_EXECUTORS["computer_type_text"]({"text": "hello", "submit": True}, ctx) == {
+    assert FAKE_EXECUTORS["computer_click"]({"ref": "e2"}, ctx)["data"]["ref"] == "e2"
+    typed = FAKE_EXECUTORS["computer_type_text"]({"text": "hello", "submit": True}, ctx)
+    assert typed["outcome"] == "verified"
+    assert typed["data"] == {
         "ref": None,
         "typed": 5,
         "submitted": True,
         "simulated": True,
     }
-    assert FAKE_EXECUTORS["computer_scroll"]({"ref": "e2"}, ctx)["via"] == "ax_scroll"
-    assert FAKE_EXECUTORS["computer_hotkey"]({"combo": "cmd+shift+t"}, ctx)["combo"] == "cmd+shift+t"
-    assert FAKE_EXECUTORS["app_focus_tab"]({"title": "Kaku"}, ctx)["focused"] == "Kaku"
-    assert FAKE_EXECUTORS["app_menu"]({"path": ["File", "New Tab"]}, ctx)["pressed"] == ["File", "New Tab"]
+    assert FAKE_EXECUTORS["computer_scroll"]({"ref": "e2"}, ctx)["data"]["via"] == "ax_scroll"
+    assert FAKE_EXECUTORS["computer_hotkey"]({"combo": "cmd+shift+t"}, ctx)["data"]["combo"] == "cmd+shift+t"
+    assert FAKE_EXECUTORS["app_focus_tab"]({"title": "Kaku"}, ctx)["data"]["focused"] == "Kaku"
+    assert FAKE_EXECUTORS["app_menu"]({"path": ["File", "New Tab"]}, ctx)["data"]["pressed"] == ["File", "New Tab"]
 
 
-def test_named_app_frontmost_matches_bundle_tail():
+def test_named_app_frontmost_uses_known_exact_bundle():
     from conn.tools.ax_input import _require_named_app_frontmost
 
-    # Apps outside the alias map match on the bundle id's last component.
     _require_named_app_frontmost({"app": "Terminal"}, "com.apple.Terminal")
-    _require_named_app_frontmost({"app": "kaku"}, "com.example.Kaku")
-    # Alias map still works, and a real mismatch still refuses.
     _require_named_app_frontmost({"app": "Google Chrome"}, "com.google.Chrome")
     with pytest.raises(ToolError, match="app_not_frontmost: Safari"):
         _require_named_app_frontmost({"app": "Safari"}, "com.google.Chrome")
+    with pytest.raises(ToolError, match="app_not_frontmost: Terminal"):
+        _require_named_app_frontmost({"app": "Terminal"}, "evil.Terminal")
 
 def test_menu_walks_through_the_untitled_ax_menu_interposer(cfg, ctx):
     # Real macOS menus: AXMenuBar -> AXMenuBarItem(titled) -> AXMenu("") ->

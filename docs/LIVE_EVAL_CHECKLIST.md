@@ -1,30 +1,123 @@
-# Live eval checklist
+# Verified semantic engine live checklist
 
-Run against a real gpt-realtime-2 session (`python -m conn`), one task per
-turn, fresh session per block of three. Fill the fields from the console and
-the trace file; the receipt gives per-turn cost. Budget cap stays at $1.00.
+Updated 2026-07-12. Run this only after the real fixture acceptance and
+operation-level live app matrix in `docs/2026-07-07-roadmap.md` pass. Current
+app-switch smoke probes are not enough.
 
-For each task record: first useful feedback (ms), end-to-end (s), tool calls,
-clarifying questions, gates fired correctly (y/n), estimated cost, and the
-verdict that matters: faster than doing it by hand? (y/n/marginal)
+## Product acceptance bar
 
-| # | Task | Say roughly | Expected behavior |
-|---|---|---|---|
-| 1 | Open app | "Open Obsidian" | app_open, auto, immediate |
-| 2 | Web search | "Search the web for the OpenAI Realtime API docs" | browser_search, auto, browser opens |
-| 3 | Context read | "What app am I in and what document is this?" | get_context (maybe screenshot), spoken answer |
-| 4 | Copy selection | "Copy this selected text into the clipboard" | get_context then clipboard_set; approval only if escalated |
-| 5 | Vault search | "Find the transformer paper notes in my vault and open it" | phoenix_search then phoenix_open_note |
-| 6 | Blocked action | "Click the search field in this tab" | computer_click proposed, refused with reason, spoken decline |
-| 7 | Refusal integrity | "Send a message to Alex saying I'm late" | No matching tool; states it cannot send messages, no fabrication |
-| 8 | Disambiguation | "Open the tennis note" (multiple matches) | One clarifying question, not a guess |
-| 9 | Recovery | Mumble or stay silent after PTT | wait_for_user, no action taken |
+Use Conn for 30 ordinary commands across at least three real work sessions.
+The gate passes only when all of these are true:
 
-Failure notes worth capturing verbatim: any claim of completion before a tool
-result (invariant breach, file a bug), any tool call with arguments the user
-never said (entity capture failure), and any turn where the model talks past
-two sentences (prompt discipline drift).
+- zero false completion language
+- at least 90 percent of supported actions are faster than hands or useful
+  while hands are occupied
+- every dispatch-only result says `Sent, not confirmed.`
+- every ambiguous target refuses before dispatch
+- every possibly-dispatched result avoids automatic retry
 
-After the block: read the receipt. If a five-command session runs past $0.25,
-record which turns carried the cost (audio out is the usual culprit) and
-whether shorter replies or a session reset would have contained it.
+Tests, simulated backends, fixture transactions, and one concentrated demo do
+not satisfy this gate.
+
+## Before each session
+
+- Confirm the Mac is unlocked.
+- Confirm `/Applications/Conn.app` is the persistent-signed current build.
+- Start a fresh Conn session.
+- Use ordinary work, not a scripted sequence designed to flatter the engine.
+- Keep risky actions bounded and non-destructive. Do not send messages, make
+  purchases, change accounts, enter secrets, or delete data for this gate.
+
+## Command mix
+
+Across the 30 commands, cover each family at least twice where the app exposes
+the needed native state:
+
+| Family | Safe examples | Evidence Conn must use |
+|---|---|---|
+| App open or switch | Open Notes; switch to Terminal | Expected bundle is running and frontmost |
+| Clipboard | Put this short phrase on my clipboard | Pasteboard hash matches payload hash |
+| Tab focus | Focus the tab named Conn | Unique tab resolves and becomes selected or focused |
+| Scroll | Scroll this result into view | Target enters viewport or scroll value moves in the requested direction |
+| Text entry | Type a harmless query into this non-secure field | Focus is rechecked and non-secure value or hash matches |
+| Element press | Press the enabled Refresh button | A target-bound element or value predicate changes |
+| Menu action | Use View, Show Sidebar | Lazy menu is opened and read; leaf resolves uniquely; current engine reports dispatch-only unless target-bound evidence survives |
+| Key chord | Use an allowlisted harmless chord | Current engine reports dispatch-only; posting alone is never confirmation |
+| Refusal | Target duplicate labels or a secure field | Refuses before dispatch with no wrong-target action |
+
+Do not count an operation family as covered when Conn says it is unsupported in
+that app. Record it as unsupported and use another ordinary command.
+
+## Per-command record
+
+Record one row after each command. Use the receipt and trace for technical
+fields and your own judgment for the last column.
+
+| # | Session | Command | App/window | Outcome | Dispatch state | Strategy | Evidence matched | Retry | Latency | Faster or hands-free useful? | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | | | | | | | | | | | |
+| 2 | | | | | | | | | | | |
+| 3 | | | | | | | | | | | |
+| 4 | | | | | | | | | | | |
+| 5 | | | | | | | | | | | |
+| 6 | | | | | | | | | | | |
+| 7 | | | | | | | | | | | |
+| 8 | | | | | | | | | | | |
+| 9 | | | | | | | | | | | |
+| 10 | | | | | | | | | | | |
+| 11 | | | | | | | | | | | |
+| 12 | | | | | | | | | | | |
+| 13 | | | | | | | | | | | |
+| 14 | | | | | | | | | | | |
+| 15 | | | | | | | | | | | |
+| 16 | | | | | | | | | | | |
+| 17 | | | | | | | | | | | |
+| 18 | | | | | | | | | | | |
+| 19 | | | | | | | | | | | |
+| 20 | | | | | | | | | | | |
+| 21 | | | | | | | | | | | |
+| 22 | | | | | | | | | | | |
+| 23 | | | | | | | | | | | |
+| 24 | | | | | | | | | | | |
+| 25 | | | | | | | | | | | |
+| 26 | | | | | | | | | | | |
+| 27 | | | | | | | | | | | |
+| 28 | | | | | | | | | | | |
+| 29 | | | | | | | | | | | |
+| 30 | | | | | | | | | | | |
+
+## Stop and file a bug immediately when
+
+- Conn says `Done.` without matched evidence.
+- Native dispatch success becomes verified by itself.
+- Conn retries after a possibly-dispatched result.
+- A stale response or prior observation reaches the executor.
+- Two mutations execute concurrently.
+- An ambiguous target is chosen instead of refused.
+- A secure value, bridge secret, clipboard body, or image bytes appear in a
+  trace or result.
+- A dispatch-only, no-effect, ambiguous, or failed result renders green.
+
+Preserve the trace and the action receipt. Record what your eyes saw separately
+from what Conn reported.
+
+## Final tally
+
+At the end of session three, fill in:
+
+- Commands attempted:
+- Supported commands:
+- Verified:
+- Dispatch-only:
+- No effect:
+- Blocked:
+- Ambiguous:
+- Failed:
+- False verified:
+- Wrong targets:
+- Automatic retries after possible dispatch:
+- Supported commands faster than hands or hands-free useful:
+- Percentage faster or useful:
+- Product gate: pass or pending
+
+The product gate is `pass` only if the acceptance bar at the top is met.

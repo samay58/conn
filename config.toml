@@ -28,6 +28,17 @@ tap_threshold_ms = 300    # a press shorter than this is an accidental tap: disc
 [apps]
 allowlist = ["Obsidian", "Google Chrome", "Safari", "Finder", "Notes", "Terminal"]
 
+[apps.bundle_ids]
+Obsidian = "md.obsidian"
+"Google Chrome" = "com.google.Chrome"
+Safari = "com.apple.Safari"
+Finder = "com.apple.finder"
+Notes = "com.apple.Notes"
+Terminal = "com.apple.Terminal"
+
+[apps.team_ids]
+Obsidian = "6JSW4SJWN9"
+
 [browser]
 search_url = "https://www.google.com/search?q={q}"
 

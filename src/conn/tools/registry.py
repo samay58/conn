@@ -36,13 +36,65 @@ class ToolSpec:
     risk: RiskLevel
     preview: Callable[[dict], str]
     executor: Executor
+    computer_mutation: bool = False
+    semantic_operation: str | None = None
     timeout_s: float = 10.0
     good_examples: tuple[str, ...] = ()
     rejected_examples: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if self.computer_mutation != (self.semantic_operation is not None):
+            raise ValueError(
+                "computer mutation and semantic operation must be declared together"
+            )
+
 
 def _obj(properties: dict, required: list[str]) -> dict:
     return {"type": "object", "properties": properties, "required": required}
+
+
+_EFFECT_PREDICATE_KINDS = [
+    "frontmost_bundle_equals",
+    "window_count_delta",
+    "window_title_equals",
+    "window_title_changes",
+    "element_exists",
+    "element_disappears",
+    "element_attribute_equals",
+    "element_attribute_changes",
+    "focused_element_equals",
+    "text_contains",
+    "text_hash_equals",
+    "clipboard_hash_equals",
+    "notification",
+]
+
+_DESIRED_EFFECT = {
+    "type": "object",
+    "properties": {
+        "mode": {"type": "string", "enum": ["all", "any"]},
+        "predicates": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": _EFFECT_PREDICATE_KINDS},
+                    "ref": {"type": "string"},
+                    "attribute": {"type": "string"},
+                    "expected": {},
+                    "delta": {"type": "integer"},
+                    "notification": {"type": "string"},
+                },
+                "required": ["kind"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["predicates"],
+    "additionalProperties": False,
+}
 
 
 def build_registry() -> dict[str, ToolSpec]:
@@ -50,9 +102,9 @@ def build_registry() -> dict[str, ToolSpec]:
         ToolSpec(
             name="computer_get_context",
             description=(
-                "Read the current foreground context: frontmost app, window title, "
-                "and selected text when accessibility access is granted. Call this "
-                "before acting when the target is ambiguous."
+                "Read the current foreground context: frontmost app and window. "
+                "Selected text is excluded by default. Call this before acting "
+                "when the target is ambiguous."
             ),
             parameters=_obj({}, []),
             risk=RiskLevel.READ,
@@ -83,6 +135,8 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Open app: {a.get('app', '?')}",
             executor=mac.open_app,
+            computer_mutation=True,
+            semantic_operation="open",
             good_examples=('{"name": "app_open", "arguments": {"app": "Obsidian"}}',),
             rejected_examples=('{"app": "Disk Utility"} when Disk Utility is not on the allowlist',),
         ),
@@ -93,6 +147,8 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Switch to app: {a.get('app', '?')}",
             executor=mac.switch_app,
+            computer_mutation=True,
+            semantic_operation="switch",
             good_examples=('{"name": "app_switch", "arguments": {"app": "Google Chrome"}}',),
         ),
         ToolSpec(
@@ -102,6 +158,8 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Search the web: {a.get('query', '?')}",
             executor=mac.browser_search,
+            computer_mutation=True,
+            semantic_operation="open_url",
             good_examples=('{"name": "browser_search", "arguments": {"query": "openai realtime api docs"}}',),
         ),
         ToolSpec(
@@ -127,6 +185,8 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Open note: {a.get('path', '?')}",
             executor=phoenix.open_note,
+            computer_mutation=True,
+            semantic_operation="open_url",
             good_examples=('{"name": "phoenix_open_note", "arguments": {"path": "01-active/tasks.md"}}',),
             rejected_examples=('{"path": "../../etc/hosts"} resolves outside the vault and is blocked',),
         ),
@@ -137,6 +197,8 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: "Copy to clipboard",
             executor=mac.clipboard_set,
+            computer_mutation=True,
+            semantic_operation="clipboard_write",
             good_examples=('{"name": "clipboard_set", "arguments": {"text": "qmd search ..."}}',),
         ),
         ToolSpec(
@@ -162,10 +224,16 @@ def build_registry() -> dict[str, ToolSpec]:
         ToolSpec(
             name="computer_click",
             description="Click a UI element by grounded snapshot reference.",
-            parameters=_obj({"snapshot_id": {"type": "string"}, "ref": {"type": "string"}}, ["snapshot_id", "ref"]),
+            parameters=_obj({
+                "snapshot_id": {"type": "string"},
+                "ref": {"type": "string"},
+                "desired_effect": _DESIRED_EFFECT,
+            }, ["snapshot_id", "ref"]),
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: f"Click element: {a.get('ref', '?')}",
             executor=click,
+            computer_mutation=True,
+            semantic_operation="press",
         ),
         ToolSpec(
             name="computer_type_text",
@@ -182,14 +250,23 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: "Type text",
             executor=type_text,
+            computer_mutation=True,
+            semantic_operation="set_text",
         ),
         ToolSpec(
             name="computer_scroll",
-            description="Scroll a grounded element into view.",
-            parameters=_obj({"snapshot_id": {"type": "string"}, "ref": {"type": "string"}}, ["snapshot_id", "ref"]),
+            description="Scroll a grounded element into view or move its scroll value.",
+            parameters=_obj({
+                "snapshot_id": {"type": "string"},
+                "ref": {"type": "string"},
+                "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
+                "amount": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+            }, ["snapshot_id", "ref"]),
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Scroll to element: {a.get('ref', '?')}",
             executor=scroll,
+            computer_mutation=True,
+            semantic_operation="scroll",
         ),
         ToolSpec(
             name="computer_hotkey",
@@ -200,10 +277,15 @@ def build_registry() -> dict[str, ToolSpec]:
                 "super mean cmd). Non-allowlisted combos are refused; use "
                 "app_menu for menu actions instead."
             ),
-            parameters=_obj({"combo": {"type": "string"}}, ["combo"]),
+            parameters=_obj({
+                "combo": {"type": "string"},
+                "desired_effect": _DESIRED_EFFECT,
+            }, ["combo"]),
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: f"Press keys: {a.get('combo', '?')}",
             executor=hotkey,
+            computer_mutation=True,
+            semantic_operation="key_chord",
         ),
         ToolSpec(
             name="app_focus_tab",
@@ -212,6 +294,8 @@ def build_registry() -> dict[str, ToolSpec]:
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Focus tab: {a.get('title', '?')}",
             executor=focus_tab,
+            computer_mutation=True,
+            semantic_operation="focus_tab",
         ),
         ToolSpec(
             name="app_menu",
@@ -220,12 +304,15 @@ def build_registry() -> dict[str, ToolSpec]:
                 {
                     "path": {"type": "array", "items": {"type": "string"}, "minItems": 1},
                     "app": {"type": "string"},
+                    "desired_effect": _DESIRED_EFFECT,
                 },
                 ["path"],
             ),
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: f"Use menu: {' > '.join(a.get('path', [])) or '?'}",
             executor=menu,
+            computer_mutation=True,
+            semantic_operation="invoke_menu",
         ),
     ]
     return {s.name: s for s in specs}
@@ -236,3 +323,8 @@ def export_openai(registry: dict[str, ToolSpec]) -> list[dict]:
         {"type": "function", "name": s.name, "description": s.description, "parameters": s.parameters}
         for s in registry.values()
     ]
+
+
+def computer_mutation_names(registry: dict[str, ToolSpec]) -> frozenset[str]:
+    return frozenset(name for name, spec in registry.items()
+                     if spec.computer_mutation)

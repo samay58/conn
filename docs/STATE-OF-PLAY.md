@@ -1,347 +1,179 @@
 # Conn: state of play
 
-Written 2026-07-06. A single "where we are" document for Conn, separate from the
-design specs (intent) and the orchestration ledger (token accounting and gate
-results). Read this first to reload the project; then go to the specs for the
-why and the plan for the packet-by-packet how.
+Updated 2026-07-12. Read this first. Use `docs/2026-07-07-roadmap.md`
+for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 
-## What Conn is, in one paragraph
+## Current verdict
 
-Conn is a push-to-talk voice command surface for the Mac, built on the OpenAI
-Realtime API (gpt-realtime-2). You hold a key, say a command, release. Conn
-understands the target, takes the smallest safe action through a local tool
-harness, shows an approval chip for anything risky, and leaves a trace and a
-cost receipt for every session. No always-on mic, no ambient screen watching,
-no chatbot. The name is the naval handoff of steering authority: "you have the
-conn" is spoken, bounded, revocable command. Push-to-talk is taking the conn;
-the stop button is "belay that."
+Conn's semantic action engine is implemented, hardened, and mechanically
+green. Production mutations run through Conn.app as bounded transactions.
+Python owns policy and orchestration. Raw Accessibility, LaunchServices,
+pasteboard, key-event, or bridge success cannot produce `Done.`
 
-## Why it exists (the product thesis)
+The signed app is installed and basic live smoke probes work. The semantic
+acceptance gate is still open. Current live probes cover app switching and one
+no-effect fixture action. They do not cover the required operation matrix or
+1,000 real fixture transactions. The 30-command product gate has not started.
 
-Voice is worth using only where it beats the keyboard. Conn bets on three spots
-first: app switching while your hands are mid-task, vault search without
-breaking focus, and read-back of current context. The safety model is the whole
-point: the model proposes, the harness disposes. Low-risk actions run at once;
-risky actions wait behind a crisp approval chip stating exactly what will
-happen; disabled actions return structured refusals so the model learns the
-boundary. Every session is traced and priced, so you can prove where voice
-actually beat the keyboard rather than demo it once.
+## Runtime shape
 
-The north star, recorded for scope honesty: Conn is meant to become a general,
-flexible computer tool. The current rounds build the surface, the speed
-discipline, and the reliability spine that generality will ride on. Capability
-breadth (arbitrary UI control, per-app profiles, a write lane into Phoenix)
-stays deliberately out until traces show the need.
+Python owns:
 
-## The three hard safety invariants
+- Realtime session and prompt
+- pure state machine and provenance ledger
+- risk, approval, mutation serialization, traces, and cost
+- native plan preparation and receipt validation
 
-These are never traded away, in any packet:
+Conn.app owns:
 
-1. **The harness owns permissions; the model only proposes.** Risk levels map
-   to gates: `read` and `act_low` run immediately, `act_confirm` shows a chip
-   and waits (30s then denied), `blocked` returns a structured refusal. Config
-   can escalate any tool but can never unblock a v0-disabled tool.
-2. **Continuations are withheld until tool results are real.** The model cannot
-   speak about a tool outcome until the daemon sends the function result and
-   issues the next `response.create`. A pending-call ledger enforces
-   all-calls-resolved-before-continuation. This is the anti-hallucination
-   invariant: there is no window where the model can claim something happened
-   before it did.
-3. **The budget cap is a hard stop.** `response.create` is the only spend
-   trigger and the daemon owns every one, so the budget gate is one function in
-   one place. Default $1.00/session hard cap, warn at $0.50.
+- current app, window, and Accessibility observations
+- target identity and execution-time re-resolution
+- plan fingerprints and signer-bound app launch
+- dispatch, effect verification, and retry certainty
 
-Two more rules earned from incidents: **approvals are pointer-only** (a stray
-Return keystroke once silently approved a real action, so the panel/island
-never takes keyboard focus), and as of the July 5 round, **the loop never lies
-about being alive** (any death of the transport, upstream session, or daemon
-becomes user-visible state within one second, and no surface reports health it
-has not verified).
+The web console can observe state and approve or deny an exact pending plan.
+It cannot initiate actions, claim the app role, or answer native RPC. No Conn
+surface takes keyboard focus. Approval remains pointer-only.
 
-## Architecture
+## Action contract
 
-One Python daemon owns everything; thin views render it.
+Every mutation follows this path:
 
-- **The daemon** (Phoenix `.venv`, single asyncio loop) holds the WebSocket to
-  OpenAI, the API key, PTT-gated mic capture, audio playback, the tool harness,
-  approvals, traces, and the cost meter. A native process owning raw audio is
-  the documented WebSocket case, so there is no ephemeral-token dance and no
-  client that could leak the key. Sideband by construction.
-- **The web console** (vanilla HTML/CSS/JS at 127.0.0.1:8787) is a pure view
-  and approval surface. It never talks to OpenAI. It is now frozen as the
-  engineer's debug surface.
-- **The native macOS app** (`macos/`, SwiftUI + AppKit menu-bar app) is the
-  primary surface. It speaks the daemon's WebSocket protocol, autolaunches the
-  daemon if none is running, owns the Right Option hold-to-talk through its own
-  Accessibility grant, and installs to /Applications via `make-app.sh install`.
-- **Push-to-talk is dual**: hold Space in the console (zero TCC grants, always
-  works) or hold Right Option globally via the app's hotkey. Console PTT is the
-  foundation; the global hotkey is the upgrade.
-- **Typed input is a peer of voice**, not scaffolding: the same conversation-
-  item path drives live sessions, giving a free degraded mode when audio breaks.
-- **Demo mode swaps one adapter**: a scripted fake plays scenario files through
-  the identical machine, harness, trace, and cost paths, with zero credentials
-  and (with `--simulate-tools`) zero side effects.
+1. Observe current app, window, target, and baseline.
+2. Resolve the target against current native state.
+3. Prepare one bounded plan and effect predicate.
+4. Apply Python risk policy and pointer approval.
+5. Revalidate the approved plan.
+6. Dispatch one strategy.
+7. Observe again and classify the outcome.
+8. Continue the model only after every call is resolved.
 
-### The state machine
+Internal outcomes are `verified`, `dispatch_only`, `no_effect`, `blocked`,
+`ambiguous`, and `failed`. Mutation `ok` is true only for `verified`.
 
-Nine phases: idle, listening, thinking, acting, awaiting_approval, speaking,
-done, failed, budget_hold. The machine is pure (no I/O) and exhaustively tested,
-including barge-in, sub-300ms tap abort (zero spend), denial and timeout paths,
-budget hold, reconnect, reject-input, and any-phase watchdog.
+- `Done.` means verified effect evidence.
+- `Sent, not confirmed.` means dispatch happened without confirmation.
+- `Did not run.` covers every unsuccessful outcome.
 
-### Tool contract (v0 surface)
+One equivalent fallback is allowed only after proven `not_dispatched`.
+`possibly_dispatched` never retries automatically. Effects already true before
+dispatch refuse instead of manufacturing success. AX notifications remain
+trace hints and cannot verify an action without targeted state evidence.
 
-Executable now: `computer_get_context` (frontmost app, window title, selected
-text via AX), `computer_screenshot` (local, deleted at session end),
-`app_open`/`app_switch` (allowlisted), `browser_search`, `phoenix_search` (qmd
-BM25), `phoenix_open_note` (obsidian:// URL, must resolve inside the vault),
-`clipboard_set`, `wait_for_user`.
+## Supported semantic operations
 
-Specced and **blocked** in v0, schemas exported so the refusal path teaches the
-model: `computer_click`, `computer_type_text`, `computer_hotkey`,
-`computer_ax_tree`. These are the road to the general-tool north star and need
-per-app profiles with named, validated targets before they open. Zero
-`osascript` anywhere means zero Automation prompts. The shell allowlist ships
-empty.
+- app open and switch by exact bundle and code-signing identity
+- clipboard write with hash readback
+- tab focus
+- scroll-to-visible and bounded directional value movement
+- non-secure text entry; submit runs only after text and focus revalidation
+- element press
+- lazy menu traversal and leaf dispatch
+- allowlisted key chords
 
-## Where the code lives (standalone as of 2026-07-07)
+Menu commands, raw key chords, and submit without a surviving target-bound
+effect return `dispatch_only`. Global window changes and bounded-tree absence
+do not count as proof because unrelated activity can produce both.
 
-- **Standalone repo:** `~/conn`, its own git repository with its own `.venv`,
-  published at `github.com/samay58/conn`. Extracted from a private personal
-  monorepo on 2026-07-07 (the idea-ledger next step, executed); history starts
-  fresh at the extraction. Earlier development history stays in the private
-  monorepo, where a symlink at the old path keeps internal references working.
-- **Earlier mirror:** an earlier `samay58/conn` was published by `git subtree
-  push` from the monorepo and was retired on 2026-07-07; this repo replaces it
-  with a clean, self-contained history. Never reuse the retired mirror's
-  history.
+Secure fields, denied bundles, ambiguous targets, stale plans, and legacy
+native mutation RPC refuse before dispatch. Production has no Python AX/input
+fallback. Visual coordinates, OCR, screenshots-to-model, macros, and a second
+computer-use model remain outside this slice.
 
-## What has been built
+## Measured evidence
 
-### v0, shipped 2026-07-02
+Latest mechanical run:
 
-The full daemon spine, harness, adapters, audio, hotkey, console, demo mode,
-cost model, receipts, traces, six harness evals, and the native menu-bar app
-with a floating voice panel, all in one day. Design captured in
-`docs/gpt-realtime-2-computer-agent-spec.md`. This is the reference the later
-rounds renegotiate from, not replace.
-
-### The July 5 UX-craft round (specs + Phases 0 and 1 executed)
-
-After a live test drive surfaced a two-day daemon wedge (stuck in `thinking`,
-healthz lying, PTT dead silently), the project opened a craft-and-reliability
-round. Two design docs govern it:
-
-- `docs/2026-07-05-ux-craft-spec.md`: the notch island becomes the primary
-  surface on the built-in display; the panel is demoted to non-notch fallback.
-  Every value is verifiable (a latency number a trace computes, an enumerated
-  state, a motion token, or a screenshot-checkable rule). Adds the reliability
-  invariant and a defect ledger of 8 verified `file:line` defects.
-- `docs/plans/2026-07-05-ux-craft-plan.md`: 19 packets across 6 phases, each
-  dispatched to a model tier, TDD-enforced, with mechanical + adversarial +
-  taste gates at every phase boundary.
-
-**Phase 0 (measure and stop lying, daemon) is complete.** Trace schema v2 with
-client timestamps, upstream-close honesty, state-machine effects (reject-input,
-any-phase watchdog), reliability wiring (healthz staleness fields, incremental
-receipts, send-failure disconnect path), latency spans and `--latency-report`,
-plus the launcher log file / zombie-adoption policy / toolchain probe. All 8
-reliability defects from the ledger addressed on the daemon side. Adversarial
-review caught a watchdog false-positive and non-atomic receipt writes, both
-remediated.
-
-**Phase 1 (island structure, Swift) is complete.** DesignTokens.swift plus a
-magic-number guard test, IslandGeometry derived from notch metrics (unit-tested,
-returns nil on non-notch screens), the IslandController nonactivating shell,
-client timing acks, and surface routing (island on notch displays, panel
-elsewhere, `CONN_FORCE_PANEL=1` forces the old panel). Adversarial review caught
-an invisible-island cgcolor bug (`Color.cgColor` is Optional and could no-op to
-black on a transparent panel), fixed inline.
-
-### The July 5 cleanup pass (C1 to C4, executed same evening)
-
-A narrow tightening pass before Phase 2, governed by
-`docs/2026-07-05-cleanup-execution-spec.md` and its adversarial review:
-
-- **C1:** a `ConnSurface` protocol; `AppDelegate` picks one `primarySurface` at
-  launch; the fallback panel is constructed lazily only when its debug action is
-  used or no island geometry exists. Removes the extra live surface on the
-  island path.
-- **C2:** `Conn --preview` rewritten around the island, not the old panel, so
-  the tuning loop optimizes the right surface.
-- **C3:** a daemon-launch path resolver (env override, then the known Phoenix
-  path, then clear failure) so a second machine no longer requires editing
-  source.
-- **C4:** the `events.py` boundary named (wire/protocol dataclasses only; no
-  behavior, timers, or policy) with a drift-visibility test.
-
-The app is installed to /Applications with the brass speaking-trumpet icon
-(Samay's pick) and pinned to the Dock.
-
-## Current state (as of 2026-07-08, post identity and audio round)
-
-- **Tests: 334 Python + 40 Swift** (`ConnTests`, including the geometry,
-  island-motion, panel-focus, waveform-tick, token-writeback, ax-grants,
-  and ax-action-engine suites); design-token guard and demo evals 13/13
-  green.
-- **Phases 0 and 1: done and gate-green.** Cleanup C1 to C4: done.
-- **Phase 2 is complete, including the STOP 2 refinements.** Packet I6
-  (IslandView rendering all nine phases plus toast, budget-hold override,
-  and refusal pulse) landed 2026-07-06. The remainder landed 2026-07-07: I7
-  promoted the state-gated island waveform into WaveformView.swift under
-  the token guard, I8 put the interactive approve/deny chip inside the
-  island silhouette (pointer-only, the approve click sends after a 120ms
-  confirm settle so the daemon phase change never clips the
-  acknowledgment), and I9 retargeted PreviewWindow at the canonical
-  IslandView and added the `--shoot` screenshot rig. STOP 2 ran 2026-07-07:
-  pass, with four refinements ordered; all four landed the same day in
-  commit `91b1460` (lilac signature accent with the thinking ellipsis
-  beat, the acting tool capsule with humanized labels, chip previews
-  budgeted daemon-side to fit whole, and the gold budget-hold identity
-  with a real Override once outline button).
-- **Packet I12 (tuning playground) landed 2026-07-07.** DesignTokens is a
-  runtime store behind the same static names; the preview grew an
-  inspector with every raw motion, personality, and palette token as a
-  live control, derived values read-only, and Write Back regenerating
-  DesignTokens.swift from a template plus a spec-table diff on stdout. A
-  round-trip test pins the template to the file on disk byte for byte.
-- **Notch-island refine (2026-07-07):** the built-in-display island was
-  repaired from an oversized clipped pill to a notch-flush surface, synthetic
-  geometry adopts the measured menu-bar inset, and summon gained a restrained
-  breathe-open. Verified live; commit `conn: refine notch island`.
-- **Island personality motion (2026-07-07, commit 7361b6c):** the substance
-  of Phase 3 packets I10 and I11, executed ahead of I7-I9 by Samay's
-  directive. Squash-and-stretch summon (width leads height by 40ms, per-axis
-  spring damping derived from the 2% and 4% overshoot tokens), breath while
-  listening (plus or minus 1.5%, 3.2s, TimelineView paused in every other
-  phase), exhale on done, and a mirrored staggered retract on every
-  dismissal path; all scaled by `aliveness` (0 renders fully static,
-  verified both ways). The spec's whimsy ceiling was renegotiated for the
-  summon and retract beats in the same commit. Verified live with
-  frame-level analysis of a screen recording; Samay's hand-on-hotkey
-  judgment is the open taste gate.
-- **Standalone repo published** (see "Where the code lives"); the old subtree
-  mirror is retired and replaced by this repo's clean history.
-
-### Open items
-
-- **STOP 1 (Phase 0 hands-on reliability drill): done 2026-07-07 with
-  findings.** Samay drove real commands live. Verdict: latency and
-  snappiness strong, clipboard lane worked. Findings, all fixed same day
-  in `14d1d83`: phoenix_search dead under the app-spawned daemon's minimal
-  PATH (qmd/node resolution), frontmost gate falsely refusing apps outside
-  the alias map ("Terminal not frontmost"), bare `--latency-report`
-  rejecting its own drill instruction. Residue: the wifi-kill and
-  PTT-during-thinking steps of the scripted drill were not explicitly
-  exercised; fold into the next live session rather than a dedicated redo.
-- **STOP-G (capability round taste review): pending.** Gate G mechanical and
-  adversarial checks are green; the Fable taste review of
-  docs/2026-07-06-gate-g-fable-brief.md has not run. Per the ledger, X1, the
-  M packets, and P1 stay blocked behind it.
-- **Personality hand gate: pending.** Samay drives the hotkey and judges
-  cute versus fidget; `aliveness` and the overshoot tokens are the knobs.
-- **STOP 2 (Phase 2 screenshot review): done 2026-07-07, pass with four
-  refinements; refinements landed same day (`91b1460`).** Samay reviewed
-  the 11-PNG set and drove the cycler. The summon animation sets the bar
-  ("absolutely gorgeous"); typography and state vocabulary pass. The four
-  ordered changes (lilac signature accent with a distinct thinking
-  treatment, humanized tool capsule, whole-phrase chip previews, gold
-  budget-hold identity with a real Override once button) shipped with the
-  gates plus a fresh screenshot set as the verification, per the no
-  re-review decision.
-- **P0 reliability round (the frontmost spine): fixes landed 2026-07-08,
-  live verification pending.** The 2026-07-07 live drive registered four
-  bugs; all four are fixed and committed, with the discriminating test
-  run first per the contract. Root cause of the shared three:
-  NSWorkspace.frontmostApplication() is KVO-cached and never updates in
-  a daemon whose main thread never pumps a runloop, so every read served
-  the spawn-time app (Kaku) forever. Fixes: a per-call fresh frontmost
-  source from the window server with the S3 activation-policy filter
-  (tools/frontmost.py, both call sites); context reads routed through
-  the app's Accessibility grant over the existing websocket with python
-  fallback (S2 pulled forward, ax_bridge.py + AxContextReader.swift),
-  and doctor now names the exact python binary for the grounded-lane
-  grant; a switch-then-menu regression eval pinning the frontmost gate;
-  meta/super aliased to cmd with the combo grammar in the tool
-  description and cmd+t/w/n allowlisted at confirm tier; and the
-  Broadcaster writer-task leak fixed (the PaMacCore -50 teardown line is
-  ledgered, cosmetic). The round is green when Samay's live drive
-  confirms it; the quick-test menu in `docs/NEXT-SESSION.md` is the
-  script, and that file is deleted when the round closes.
-- **Identity and audio round: landed 2026-07-08, live verification
-  pending with the P0 round.** The first quick-test drive proved the
-  failing layer is beneath the harness: TCC grants bind to code identity
-  and Conn churned two identities per rebuild. Spec
-  `docs/2026-07-08-identity-audio-spec.md`. Landed in five commits:
-  doctor and refusals name the true process image from proc_pidpath
-  (Python.app, not the venv symlink the grant went to on the drive); an
-  ax_grants preflight traces and surfaces both lanes' Accessibility
-  state at session start and app attach (console banner, island amber
-  warning, refusals name the lane and the grant path); computer_hotkey
-  and app_menu actions ride Conn.app's grant over the websocket when
-  the app is attached (T4; the grounded lane stays python-side,
-  ledgered as T4b with a design sketch); a 400ms pre-roll ring stops
-  the first syllable dying between PTT keydown and gate-open, with
-  input device selection, a low-signal "barely heard you" hint, and a
-  transcription language pin ending the Spanish-fragment hallucination;
-  and make-app.sh signs with a persistent "Conn Dev Signing" identity
-  when the keychain has one, so reinstalls stop silently killing the
-  app grant (creating the certificate is Samay's one-time step on the
-  acceptance list).
-- **STOP 3 (hand tuning) follows the P0 round.** I12 is live: Samay
-  drives the playground and the hotkey until the motion is award-grade,
-  tuned values write back to DesignTokens.swift and the spec tables in
-  one commit. The deferred 12-principles adversarial pass and the Fable
-  taste pass on a recording land here too.
-
-## What's next
-
-Canonical forward sequence: `docs/2026-07-07-roadmap.md` (blocks A through
-E, with rationale and exit criteria). Summary as of the stock-take:
-
-- **STOP 3 (hand tuning):** Samay drives the playground (`Conn --preview`)
-  and the live hotkey until summon, breath, exhale, chip, and belay feel
-  award-grade; tuned values write back to tokens and spec tables in one
-  commit. The deferred adversarial 12-principles pass and
-  taste-on-recording from I10's done-definition land here. This closes
-  Block A.
-
-Phases 4 and 5 after that: sound and the AX-via-app migration, then the full
-live-eval proof run.
-
-## Key files
-
-| File | What it is |
+| Gate | Result |
 |---|---|
-| `README.md` | Run instructions, permissions, environment contract, layout |
-| `docs/gpt-realtime-2-computer-agent-spec.md` | The v0 design spec (product thesis, architecture, tool contract, safety, cost, evals) |
-| `docs/2026-07-05-ux-craft-spec.md` | The island round: surface, latency budgets, motion, typography, sound, reliability invariant |
-| `docs/plans/2026-07-05-ux-craft-plan.md` | 19-packet execution plan with phase gates |
-| `docs/orchestration-ledger.md` | Token accounting and gate results per phase (Fable doctrine) |
-| `docs/idea-ledger.md` | Rejected and deferred ideas with concrete revisit triggers |
-| `docs/DEPLOYMENT.md` | Running Conn on a second Mac |
-| `docs/LIVE_EVAL_CHECKLIST.md` | Manual model-quality checklist (nine tasks) |
-| `src/conn/` | The daemon: state machine, harness, adapters, audio, hotkey, server |
-| `macos/Sources/Conn/` | The native app: island, panel, tokens, geometry, hotkey, daemon client |
-| `console/` | The frozen web debug console |
+| Python | 461 passed; 2 existing dependency warnings |
+| Harness evals | 13 of 13 passed |
+| Swift | 102 passed |
+| Release build | passed with Xcode-beta toolchain |
+| Doctor | all substantive checks passed; optional global-hotkey probe warned |
+| Installed app | valid `Conn Dev Signing` signature, built 2026-07-12 |
 
-## How to run it
+An unlocked probe before the final rebuild received an empty Accessibility
+snapshot. The newest persistent-signed build installed and verified cleanly,
+but its fixture probe stopped before dispatch because the console was locked.
+Unlock the desktop and rerun. If the snapshot is still empty, toggle Conn off
+and on in System Settings, Privacy and Security, Accessibility, then relaunch
+it. Python doctor success does not prove the app's separate TCC grant.
 
-```bash
-# Native app (primary surface)
-cd macos && ./make-app.sh && open Conn.app
+The 1,000-transaction test uses the in-memory Swift
+`SemanticFixtureBackend`. It recorded 980 verified actions, 10 intentional
+no-effect outcomes, 10 ambiguity refusals, zero wrong targets, and zero false
+verified outcomes. It checks transaction logic and latency. It is not a real
+ConnActionFixture or Accessibility acceptance run.
 
-# Demo, no credentials
-cd /Users/samaydhawan/conn
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --demo --simulate-tools
+Live smoke evidence from 2026-07-12:
 
-# Live (key daemon-side only, never seen by the browser)
-export OPENAI_API_KEY=...
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn
+- ConnActionFixture no-effect action: 3 of 3 returned `no_effect`; independent
+  truth log agreed; no retry.
+- Terminal, Safari, Notes, and Obsidian app switches: first transition returned
+  `verified`; WindowServer's top visible window matched the expected bundle.
+- Repeating a switch while that app was already frontmost refused with
+  `effect_already_satisfied` before dispatch.
+- Google Chrome is not installed. Its signer is therefore unproven and Conn
+  blocks it before native preparation.
 
-# Tests and evals
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m pytest tests -q   # 334 tests
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --eval       # harness evals
-PYTHONPATH=src /Users/samaydhawan/conn/.venv/bin/python -m conn --doctor     # TCC/grant check
-```
+Those successful smoke records predate the final reinstall. The current signed
+binary still needs an unlocked live rerun. Refresh its Accessibility toggle
+only if that rerun returns an empty tree.
+
+These are installation and transaction smoke checks. They do not establish
+the spec's 95 percent six-app semantic-action bar.
+
+## Review findings closed on 2026-07-12
+
+Final consolidation fixed six classes of failure:
+
+- verification now needs target-bound state evidence, not an already-true
+  predicate, notification hint, tree omission, or unrelated global change
+- uncertain dispatch never falls back or retries, and raw success cannot become
+  `verified`
+- target identity stays bound across approval, dispatch, and verification by
+  process, window, semantic fingerprint, hierarchy, frame, and secure state
+- model arguments, Realtime terminal calls, receipt Booleans, plan
+  fingerprints, and privileged context identifiers fail closed
+- the app bridge is authenticated and replay-resistant; the browser console is
+  read-only; client queues are bounded; child processes receive no secrets
+- named applications bind to exact bundle IDs and, for third-party apps, a
+  locally proven signing team
+
+The final security scan reviewed 55 production and protocol files. It promoted
+15 candidates, fixed 14, suppressed one developer-fixture-only path, and left
+zero reportable findings. Regression tests pin every production fix. Obsidian
+is bound to team `6JSW4SJWN9`. Chrome stays blocked until its installed
+signature can be inspected.
+
+## Open gates
+
+Semantic acceptance still needs:
+
+- an unlocked current-build fixture rerun; refresh Conn.app Accessibility only
+  if the rerun returns an empty tree
+- a real ConnActionFixture matrix across each semantic operation
+- 1,000 real fixture transactions checked against the independent truth log
+- at least 95 percent first-try verified across observable actions in Terminal,
+  Safari, Chrome, Notes, and Obsidian
+- human verdicts recorded separately from engine receipts
+- Chrome installed and its signer pinned, or an explicit spec change removing
+  Chrome from the matrix
+
+Product acceptance then needs 30 ordinary commands across three work sessions,
+zero false completion language, and at least 90 percent of supported actions
+faster than hands or useful while hands are occupied.
+
+Do not call the semantic engine accepted for daily use until both gates pass.
+
+## Key documents
+
+| File | Purpose |
+|---|---|
+| `docs/2026-07-09-verified-action-engine-spec.md` | Approved architecture and acceptance bars |
+| `docs/agent-wargames/2026-07-09-verified-action-engine-wargame.md` | July 9 adversarial decision record |
+| `docs/2026-07-07-roadmap.md` | Remaining priorities |
+| `docs/NEXT-SESSION.md` | Next execution block |
+| `docs/LIVE_EVAL_CHECKLIST.md` | Human product gate |
+| `docs/orchestration-ledger.md` | Historical implementation record |

@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import secrets
 from pathlib import Path
+from urllib.parse import urlparse
 
 import uvicorn
 from starlette.applications import Starlette
@@ -15,27 +18,38 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from ..app import ConnApp
+from ..ax_bridge import (
+    APP_HEALTH_PURPOSE,
+    CONSOLE_WEBSOCKET_PURPOSE,
+    DAEMON_WEBSOCKET_PURPOSE,
+    hmac_proof,
+    valid_challenge,
+    verify_hmac_proof,
+)
 from ..events import now_ms
 
 CONSOLE_DIR = Path(__file__).resolve().parents[3] / "console"
+CLIENT_QUEUE_LIMIT = 256
 
 
 class Broadcaster:
     """Per-client ordered queues: one writer task per client, so console
-    messages can never arrive out of order (a delta racing past the previous
+    state can never arrive out of order (a delta racing past the previous
     turn's trace event garbles the transcript)."""
 
     def __init__(self):
-        self._clients: dict[WebSocket, tuple[asyncio.Queue[str], asyncio.Task]] = {}
+        self._clients: dict[
+            WebSocket, tuple[asyncio.Queue[str], asyncio.Task, str]
+        ] = {}
 
     @property
     def clients(self):
         return self._clients.keys()
 
-    def attach(self, ws: WebSocket) -> None:
-        queue: asyncio.Queue[str] = asyncio.Queue()
+    def attach(self, ws: WebSocket, role: str) -> None:
+        queue: asyncio.Queue[str] = asyncio.Queue(maxsize=CLIENT_QUEUE_LIMIT)
         task = asyncio.ensure_future(self._writer(ws, queue))
-        self._clients[ws] = (queue, task)
+        self._clients[ws] = (queue, task, role)
 
     def detach(self, ws: WebSocket) -> None:
         # Cancel the writer with its client, or loop teardown logs a
@@ -46,8 +60,15 @@ class Broadcaster:
 
     def publish(self, msg: dict) -> None:
         data = json.dumps(msg, default=str)
-        for queue, _task in self._clients.values():
-            queue.put_nowait(data)
+        native_rpc = msg.get("type") in {"ax_read", "ax_action"}
+        for ws, (queue, _task, role) in list(self._clients.items()):
+            if native_rpc and role != "app":
+                continue
+            try:
+                queue.put_nowait(data)
+            except asyncio.QueueFull:
+                self.detach(ws)
+                asyncio.ensure_future(ws.close(code=1013))
 
     async def _writer(self, ws: WebSocket, queue: asyncio.Queue[str]) -> None:
         try:
@@ -59,9 +80,13 @@ class Broadcaster:
             self.detach(ws)
 
 
-def build_server(app: ConnApp) -> Starlette:
+def build_server(app: ConnApp, *, console_capability: str | None = None) -> Starlette:
     bus = Broadcaster()
     app.publisher = bus.publish
+    if console_capability is None:
+        console_capability = os.environ.get("CONN_CONSOLE_CAPABILITY")
+    if not valid_console_capability(console_capability):
+        console_capability = None
 
     async def index(request):
         return FileResponse(CONSOLE_DIR / "index.html")
@@ -73,46 +98,106 @@ def build_server(app: ConnApp) -> Starlette:
             return JSONResponse({"error": "not found"}, status_code=404)
         return FileResponse(target)
 
-    async def healthz(request):
-        return JSONResponse({
+    def health_payload() -> dict:
+        return {
             "ok": True, "session_id": app.session_id,
             "phase": app.machine.phase.value,
             "live": app.adapter_is_live(),
             "phase_age_s": round(app.phase_age_s(), 3),
             "upstream_connected": app.adapter.connected,
+        }
+
+    async def healthz(request):
+        return JSONResponse(health_payload())
+
+    async def app_healthz(request):
+        expected = app.ax_bridge.expected_token
+        challenge = request.headers.get("x-conn-challenge")
+        if not expected or not valid_challenge(challenge):
+            return JSONResponse({"ok": False}, status_code=401)
+        return JSONResponse({
+            **health_payload(),
+            "bridge_proof": hmac_proof(
+                expected, APP_HEALTH_PURPOSE, challenge
+            ),
         })
 
     async def ws_endpoint(ws: WebSocket):
         await ws.accept()
-        bus.attach(ws)
-        app.publish_state()
-        app.publish({"type": "hello", "live": app.adapter_is_live(),
-                     "cap_usd": app.cfg.budget.session_cap_usd,
-                     "server_ts_ms": now_ms()})
-        is_app_client = False
+        challenge = secrets.token_urlsafe(32)
+        await ws.send_json({
+            "type": "auth_challenge",
+            "challenge": challenge,
+            "method": "hmac-sha256",
+        })
+        client_id = secrets.token_urlsafe(18)
+        role: str | None = None
         try:
+            raw = await asyncio.wait_for(ws.receive_text(), timeout=2.0)
+            try:
+                hello = json.loads(raw)
+            except ValueError:
+                await ws.close(code=1008)
+                return
+            role = client_role(hello)
+            proof = hello.get("proof") if isinstance(hello.get("proof"), str) else None
+            app_ok = role == "app" and app.ax_bridge.authenticate_app_proof(
+                challenge, proof, client_id
+            )
+            console_ok = (
+                role == "console"
+                and origin_allowed(ws.headers.get("origin"))
+                and console_capability is not None
+                and verify_hmac_proof(
+                    console_capability,
+                    CONSOLE_WEBSOCKET_PURPOSE,
+                    challenge,
+                    proof,
+                )
+            )
+            if not app_ok and not console_ok:
+                await ws.close(code=1008)
+                return
+
+            hello = {
+                "type": "hello", "live": app.adapter_is_live(),
+                "cap_usd": app.cfg.budget.session_cap_usd,
+                "server_ts_ms": now_ms(),
+            }
+            if role == "app":
+                hello["server_proof"] = hmac_proof(
+                    app.ax_bridge.expected_token,
+                    DAEMON_WEBSOCKET_PURPOSE,
+                    challenge,
+                )
+            await ws.send_json(hello)
+            bus.attach(ws, role)
+            app.publish_state()
+            if role == "app":
+                asyncio.ensure_future(app.publish_ax_grants())
             while True:
                 raw = await ws.receive_text()
                 try:
                     msg = json.loads(raw)
                 except ValueError:
                     continue
-                if client_role(msg) == "app" and not is_app_client:
-                    is_app_client = True
-                    app.ax_bridge.app_attached()
-                    asyncio.ensure_future(app.publish_ax_grants())
-                    continue
-                await handle_client(app, msg)
-        except WebSocketDisconnect:
+                await handle_client(
+                    app,
+                    msg,
+                    authenticated_role=role,
+                    client_id=client_id,
+                )
+        except (asyncio.TimeoutError, WebSocketDisconnect):
             pass
         finally:
-            if is_app_client:
-                app.ax_bridge.app_detached()
+            if role == "app" and app.ax_bridge.app_present:
+                app.ax_bridge.app_detached(client_id)
             bus.detach(ws)
 
     return Starlette(routes=[
         Route("/", index),
         Route("/healthz", healthz),
+        Route("/app-healthz", app_healthz),
         Route("/{name}", static),
         WebSocketRoute("/ws", ws_endpoint),
     ])
@@ -127,10 +212,56 @@ def client_role(msg: dict) -> str | None:
     return None
 
 
-async def handle_client(app: ConnApp, msg: dict) -> None:
+def origin_allowed(origin: str | None) -> bool:
+    if origin is None:
+        return False
+    try:
+        parsed = urlparse(origin)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.path in {"", "/"}
+        and not parsed.query
+        and not parsed.fragment
+    )
+
+
+def valid_console_capability(capability: object) -> bool:
+    return (
+        isinstance(capability, str)
+        and 16 <= len(capability) <= 256
+        and all(
+            character.isascii()
+            and (character.isalnum() or character in "-_")
+            for character in capability
+        )
+    )
+
+
+async def handle_client(app: ConnApp, msg: dict, *, authenticated_role: str | None = None,
+                        client_id: str | None = None) -> None:
+    if authenticated_role == "console":
+        return
+    if authenticated_role != "app":
+        return
     match msg.get("type"):
         case "ax_read_result" | "ax_action_result":
-            app.ax_bridge.resolve(str(msg.get("request_id", "")), msg.get("data"))
+            app.ax_bridge.resolve(
+                str(msg.get("request_id", "")),
+                msg.get("data"),
+                client_id=client_id,
+                turn_id=msg.get("turn_id") if isinstance(msg.get("turn_id"), str) else None,
+                observation_epoch=(
+                    msg.get("observation_epoch")
+                    if isinstance(msg.get("observation_epoch"), int)
+                    else None
+                ),
+                sequence=msg.get("sequence") if isinstance(msg.get("sequence"), int) else None,
+            )
         case "ptt_down":
             await app.on_ptt_down(client_ts_ms=msg.get("client_ts_ms"),
                                   source=str(msg.get("source", "console")))
@@ -155,7 +286,8 @@ async def handle_client(app: ConnApp, msg: dict) -> None:
 
 async def serve(app: ConnApp) -> None:
     server = uvicorn.Server(uvicorn.Config(
-        build_server(app), host=app.cfg.server.host, port=app.cfg.server.port,
+        build_server(app, console_capability=app.console_capability),
+        host=app.cfg.server.host, port=app.cfg.server.port,
         log_level="warning",
     ))
     await server.serve()

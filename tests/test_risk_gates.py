@@ -98,6 +98,28 @@ class TestGateDecisions:
         assert call.gate is Gate.BLOCKED
         assert "invalid_arguments" in harness.block_reason(call)
 
+    @pytest.mark.parametrize(
+        "arguments",
+        [
+            {"snapshot_id": "s", "ref": "r", "direction": "sideways", "amount": 1},
+            {"snapshot_id": "s", "ref": "r", "direction": "down", "amount": 0},
+            {"snapshot_id": "s", "ref": "r", "direction": "down", "amount": 11},
+        ],
+    )
+    def test_scroll_schema_enforces_direction_and_amount_bounds(self, harness, arguments):
+        call = gate(harness, "computer_scroll", arguments)
+
+        assert call.gate is Gate.BLOCKED
+        assert "invalid_arguments" in harness.block_reason(call)
+
+    def test_scroll_direction_and_amount_must_be_supplied_together(self, harness):
+        call = gate(harness, "computer_scroll", {
+            "snapshot_id": "s", "ref": "r", "direction": "down"
+        })
+
+        assert call.gate is Gate.BLOCKED
+        assert "required_together" in harness.block_reason(call)
+
     def test_wrong_arg_type_is_blocked(self, harness):
         call = gate(harness, "phoenix_search", {"query": 42})
         assert call.gate is Gate.BLOCKED

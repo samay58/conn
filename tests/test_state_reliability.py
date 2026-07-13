@@ -5,6 +5,10 @@ from conn.events import (
     ToolProposed, RejectInput, WatchdogTick,
 )
 from conn.state import Phase, SessionStateMachine
+from conn.tools.registry import build_registry, computer_mutation_names
+
+
+MUTATIONS = computer_mutation_names(build_registry())
 
 
 def call(call_id="c1", gate=Gate.AUTO, name="app_open"):
@@ -16,9 +20,22 @@ def kinds(cmds):
     return [type(c).__name__ for c in cmds]
 
 
+def finished(machine, call_id: str) -> ToolFinished:
+    running = machine.ledger[call_id].call
+    return ToolFinished(
+        call_id=call_id,
+        ok=True,
+        output="{}",
+        turn_id=running.turn_id,
+        response_epoch=running.response_epoch,
+        observation_epoch=running.observation_epoch,
+        execution_id=running.execution_id,
+    )
+
+
 @pytest.fixture
 def m():
-    return SessionStateMachine()
+    return SessionStateMachine(computer_mutations=MUTATIONS)
 
 
 def start_turn(m, t0=1000, t1=2000):
@@ -55,7 +72,7 @@ class TestRejectInput:
 
 class TestWatchdog:
     def test_watchdog_forces_failed_path_when_stuck_in_thinking(self):
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         assert m.phase is Phase.THINKING
 
@@ -70,7 +87,7 @@ class TestWatchdog:
         assert m.ledger == {}
 
     def test_watchdog_does_not_fire_before_timeout_elapses(self):
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         m.handle(WatchdogTick(ts_ms=2000))
         cmds = m.handle(WatchdogTick(ts_ms=2000 + 1_000))
@@ -83,7 +100,7 @@ class TestWatchdog:
         assert m.phase is Phase.IDLE
 
     def test_watchdog_in_awaiting_approval_is_noop(self):
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         m.handle(ToolProposed(call=call(gate=Gate.CONFIRM)))
         assert m.phase is Phase.AWAITING_APPROVAL
@@ -93,7 +110,7 @@ class TestWatchdog:
         assert m.phase is Phase.AWAITING_APPROVAL
 
     def test_watchdog_does_not_fire_while_a_call_is_running(self):
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         m.handle(ToolProposed(call=call(gate=Gate.AUTO)))
         assert m.phase is Phase.ACTING
@@ -103,7 +120,7 @@ class TestWatchdog:
         assert m.phase is Phase.ACTING
 
     def test_watchdog_rearms_after_a_real_transition(self):
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         m.handle(WatchdogTick(ts_ms=2000))  # arm baseline in THINKING
         # A real transition happens (barge-in style not applicable here, so use
@@ -123,7 +140,7 @@ class TestWatchdog:
         # THINKING) between two ticks was invisible to the watchdog, even
         # though a real transition happened in between. A live session doing
         # normal tool-call work must never get force-failed.
-        m = SessionStateMachine(watchdog_timeout_s=60)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=60)
         start_turn(m, t0=1000, t1=2000)
         assert m.phase is Phase.THINKING
 
@@ -132,9 +149,10 @@ class TestWatchdog:
 
         for i in range(5):
             t += 30_000  # 30s per round; 5 rounds pushes well past the 60s timeout
-            m.handle(ToolProposed(call=call(call_id=f"c{i}")))
+            m.handle(ToolProposed(call=call(
+                call_id=f"c{i}", name="computer_get_context")))
             assert m.phase is Phase.ACTING
-            m.handle(ToolFinished(call_id=f"c{i}", ok=True, output="{}"))
+            m.handle(finished(m, f"c{i}"))
             m.handle(ResponseDone(had_tool_calls=True))
             assert m.phase is Phase.THINKING
             # The watchdog samples THINKING every round; each round crossed a
@@ -145,7 +163,7 @@ class TestWatchdog:
             assert m.phase is Phase.THINKING
 
     def test_watchdog_fires_exactly_once_then_stays_silent(self):
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         m.handle(WatchdogTick(ts_ms=2000))  # arm baseline
 
@@ -162,7 +180,7 @@ class TestWatchdog:
 
     def test_watchdog_never_fires_in_failed_phase(self):
         from conn.events import WsFailed
-        m = SessionStateMachine(watchdog_timeout_s=5)
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
         start_turn(m, t0=1000, t1=2000)
         m.handle(WsFailed(reason="socket closed"))
         assert m.phase is Phase.FAILED

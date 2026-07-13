@@ -21,17 +21,22 @@ APP_BUNDLE_ALIASES = {
     "Google Chrome": {"com.google.Chrome"},
     "Safari": {"com.apple.Safari"},
     "Obsidian": {"md.obsidian"},
+    "Finder": {"com.apple.finder"},
+    "Notes": {"com.apple.Notes"},
+    "Terminal": {"com.apple.Terminal"},
 }
 
 
-def app_matches_bundle(app: str, bundle_id: str) -> bool:
-    if app == bundle_id or bundle_id in APP_BUNDLE_ALIASES.get(app, set()):
+def app_matches_bundle(
+    app: str,
+    bundle_id: str,
+    configured_bundle_ids: dict[str, str] | None = None,
+) -> bool:
+    if app == bundle_id:
         return True
-    # The model names apps the human way ("Terminal", "Kaku"); the alias map
-    # cannot enumerate every app, so match the bundle id's last component
-    # against the normalized name.
-    tail = bundle_id.rsplit(".", 1)[-1].lower()
-    return bool(tail) and tail == app.lower().replace(" ", "")
+    if configured_bundle_ids is not None:
+        return configured_bundle_ids.get(app) == bundle_id
+    return bundle_id in APP_BUNDLE_ALIASES.get(app, set())
 
 
 @dataclass

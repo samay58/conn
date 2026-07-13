@@ -8,10 +8,11 @@ so the python fallback never pays a timeout.
 """
 
 import asyncio
+import os
 import threading
 from unittest.mock import patch
 
-from conn.ax_bridge import AxBridge
+from conn.ax_bridge import APP_WEBSOCKET_PURPOSE, AxBridge, hmac_proof
 from conn.tools import mac
 
 
@@ -19,7 +20,21 @@ def run_loop_test(coro):
     return asyncio.run(coro)
 
 
+def attach_app(bridge: AxBridge, client_id: str = "test-app") -> str:
+    challenge = "test-websocket-challenge"
+    assert bridge.expected_token is not None
+    proof = hmac_proof(bridge.expected_token, APP_WEBSOCKET_PURPOSE, challenge)
+    assert bridge.authenticate_app_proof(challenge, proof, client_id)
+    return client_id
+
+
 class TestAxBridge:
+    def test_environment_token_is_captured_then_removed(self):
+        with patch.dict(os.environ, {"CONN_BRIDGE_TOKEN": "environment-token"}):
+            bridge = AxBridge()
+            assert bridge.expected_token == "environment-token"
+            assert "CONN_BRIDGE_TOKEN" not in os.environ
+
     def test_no_app_attached_returns_none_without_publishing(self):
         published = []
 
@@ -43,15 +58,27 @@ class TestAxBridge:
 
         async def scenario():
             loop = asyncio.get_running_loop()
-            bridge = AxBridge(timeout_s=1.0)
+            bridge = AxBridge(timeout_s=1.0, expected_token="test-token")
             bridge.bind(loop, published.append)
-            bridge.app_attached()
+            client_id = attach_app(bridge)
 
             def answer():
                 while not published:
                     pass
                 request_id = published[0]["request_id"]
-                loop.call_soon_threadsafe(bridge.resolve, request_id, payload)
+                sequence = published[0]["sequence"]
+                turn_id = published[0]["turn_id"]
+                observation_epoch = published[0]["observation_epoch"]
+                loop.call_soon_threadsafe(
+                    lambda: bridge.resolve(
+                        request_id,
+                        payload,
+                        client_id=client_id,
+                        sequence=sequence,
+                        turn_id=turn_id,
+                        observation_epoch=observation_epoch,
+                    )
+                )
 
             threading.Thread(target=answer).start()
             return await asyncio.to_thread(bridge.request_context_sync)
@@ -62,9 +89,9 @@ class TestAxBridge:
 
     def test_timeout_returns_none(self):
         async def scenario():
-            bridge = AxBridge(timeout_s=0.05)
+            bridge = AxBridge(timeout_s=0.05, expected_token="test-token")
             bridge.bind(asyncio.get_running_loop(), lambda msg: None)
-            bridge.app_attached()
+            attach_app(bridge)
             return await asyncio.to_thread(bridge.request_context_sync)
 
         assert run_loop_test(scenario()) is None
@@ -73,14 +100,123 @@ class TestAxBridge:
         published = []
 
         async def scenario():
-            bridge = AxBridge(timeout_s=0.5)
+            bridge = AxBridge(timeout_s=0.5, expected_token="test-token")
             bridge.bind(asyncio.get_running_loop(), published.append)
-            bridge.app_attached()
-            bridge.app_detached()
+            client_id = attach_app(bridge)
+            bridge.app_detached(client_id)
             return await asyncio.to_thread(bridge.request_context_sync)
 
         assert run_loop_test(scenario()) is None
         assert published == []
+
+    def test_reply_must_match_turn_observation_and_sequence(self):
+        async def scenario():
+            published = []
+            bridge = AxBridge(timeout_s=1.0, expected_token="test-token")
+            bridge.bind(asyncio.get_running_loop(), published.append)
+            client_id = attach_app(bridge)
+            request_task = asyncio.create_task(bridge.request())
+            while not published:
+                await asyncio.sleep(0)
+            request = published[0]
+
+            bridge.resolve(
+                request["request_id"],
+                {"app": "wrong turn"},
+                client_id=client_id,
+                turn_id="wrong-turn",
+                observation_epoch=request["observation_epoch"],
+                sequence=request["sequence"],
+            )
+            await asyncio.sleep(0)
+            assert not request_task.done()
+
+            bridge.resolve(
+                request["request_id"],
+                {"app": "wrong observation"},
+                client_id=client_id,
+                turn_id=request["turn_id"],
+                observation_epoch=request["observation_epoch"] + 1,
+                sequence=request["sequence"],
+            )
+            await asyncio.sleep(0)
+            assert not request_task.done()
+
+            bridge.resolve(
+                request["request_id"],
+                {"app": "Safari"},
+                client_id=client_id,
+                turn_id=request["turn_id"],
+                observation_epoch=request["observation_epoch"],
+                sequence=request["sequence"],
+            )
+            return await request_task, bridge.rejected_replies
+
+        result, rejected = run_loop_test(scenario())
+        assert result == {"app": "Safari"}
+        assert rejected == 2
+
+    def test_replayed_sequence_cannot_resolve_next_request(self):
+        async def scenario():
+            published = []
+            bridge = AxBridge(timeout_s=1.0, expected_token="test-token")
+            bridge.bind(asyncio.get_running_loop(), published.append)
+            client_id = attach_app(bridge)
+
+            first_task = asyncio.create_task(bridge.request())
+            while len(published) < 1:
+                await asyncio.sleep(0)
+            first = published[0]
+            bridge.resolve(
+                first["request_id"], {"app": "Safari"},
+                client_id=client_id,
+                turn_id=first["turn_id"],
+                observation_epoch=first["observation_epoch"],
+                sequence=first["sequence"],
+            )
+            await first_task
+
+            second_task = asyncio.create_task(bridge.request())
+            while len(published) < 2:
+                await asyncio.sleep(0)
+            second = published[1]
+            bridge.resolve(
+                second["request_id"], {"app": "stale"},
+                client_id=client_id,
+                turn_id=second["turn_id"],
+                observation_epoch=second["observation_epoch"],
+                sequence=first["sequence"],
+            )
+            await asyncio.sleep(0)
+            assert not second_task.done()
+
+            bridge.resolve(
+                second["request_id"], {"app": "Notes"},
+                client_id=client_id,
+                turn_id=second["turn_id"],
+                observation_epoch=second["observation_epoch"],
+                sequence=second["sequence"],
+            )
+            return await second_task, bridge.rejected_replies
+
+        result, rejected = run_loop_test(scenario())
+        assert result == {"app": "Notes"}
+        assert rejected == 1
+
+    def test_detach_resolves_pending_request_fail_closed(self):
+        async def scenario():
+            published = []
+            bridge = AxBridge(timeout_s=1.0, expected_token="test-token")
+            bridge.bind(asyncio.get_running_loop(), published.append)
+            client_id = attach_app(bridge)
+            request_task = asyncio.create_task(bridge.request())
+            while not published:
+                await asyncio.sleep(0)
+
+            bridge.app_detached(client_id)
+            return await asyncio.wait_for(request_task, timeout=0.1)
+
+        assert run_loop_test(scenario()) is None
 
     def test_resolve_unknown_request_is_a_no_op(self):
         bridge = AxBridge()
@@ -150,7 +286,7 @@ class TestServerRouting:
                 def __init__(self, outer):
                     self.outer = outer
 
-                def resolve(self, request_id, data):
+                def resolve(self, request_id, data, **metadata):
                     self.outer.resolved = (request_id, data)
 
             @property
@@ -160,7 +296,8 @@ class TestServerRouting:
         stub = AppStub()
         asyncio.run(handle_client(stub, {"type": "ax_read_result",
                                          "request_id": "axread_1",
-                                         "data": {"app": "Safari"}}))
+                                         "data": {"app": "Safari"}},
+                                  authenticated_role="app", client_id="app"))
         assert stub.resolved == ("axread_1", {"app": "Safari"})
 
     def test_client_hello_reports_role(self):

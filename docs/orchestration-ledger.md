@@ -98,7 +98,7 @@ One solo session landing the four STOP 2 refinements as `91b1460`, then packet I
 - Refinements: lilac #C3B1E1 as the signature accent with the thinking ellipsis beat (a third gated timeline, pinned paused outside thinking by the extended waveform-tick test), the acting tool capsule with humanized labels (the daemon ledger already carried the tool name, so only the Swift Chip model grew a field), chip previews budgeted daemon-side (32-character word-boundary clamp in the harness covering both the registry lambdas and the risk.py resolution overrides, plus rewritten clipboard and type previews), and the gold #E0C060 budget-hold identity with a two-decimal cap figure and a real Override once outline button, pointer-only like Approve. Contrast checks ran: lilac 10.7:1 and gold 11.9:1 on black. One rendering finding: a stroked SwiftUI capsule draws seam ticks at its ends when the radius equals half the height, so the outline is a rounded rectangle at a 10pt token; recorded in the tokens file comment.
 - I12: DesignTokenStore behind the unchanged static names, InspectorView beside the cycler, Write Back regenerating DesignTokens.swift from the template in the new guard-excluded TokenWriteback.swift, spec-table diff to stdout. Round-trip pinned by test: render of a default store equals the file on disk byte for byte.
 - Mechanical gates, green before and after each commit: pytest 260 (4 new preview-budget tests), swift test 26 (1 waveform-tick extension, 6 write-back tests, motion suite untouched), evals 12/12, token guard green, fresh 11-PNG screenshot set eyeballed per state. App rebuilt and installed to /Applications.
-- Deviations: both parts executed solo on Fable per the session contract Samay wrote (no re-review round for the refinements; I12 was plan-tagged sonnet). No adversarial reviewer dispatched; the refinements were verified against the contract's per-change acceptance and the screenshot set, I12 against its round-trip and live-statics tests. The two recorded-not-fixed findings (unauthenticated localhost approval websocket, AXPress reachability) stand untouched, awaiting Samay.
+- Deviations: both parts executed solo on Fable per the session contract Samay wrote (no re-review round for the refinements; I12 was plan-tagged sonnet). No adversarial reviewer dispatched; the refinements were verified against the contract's per-change acceptance and the screenshot set, I12 against its round-trip and live-statics tests. At that session close, unauthenticated localhost approval and blind trust in AXPress remained open. The July 10 verified-engine round closed both with bridge authentication, a capability-authenticated approval-only console, and evidence-classified native transactions.
 
 ### Session log 2026-07-08 (P0 reliability round)
 
@@ -125,9 +125,149 @@ The round from `docs/2026-07-08-identity-audio-spec.md`, run solo on Fable per t
 - T4 (`2f43199`): the in-session scope amendment, executed as the severable half. computer_hotkey and app_menu (menu tree read plus press) through the app's grant via ax_action / ax_action_result and AppLaneInputBackend; python fallback when no app attached; wire failures refuse so a maybe-posted chord never posts twice. The grounded lane deliberately stayed python-side: its safety semantics run AX reads at execution time, so a full move is a remote AX backend, deferred as T4b in the idea ledger with a design sketch. Judged too large to land properly alongside the round; flagged for Samay's veto in the handoff. 12 python + 7 swift tests.
 - A1-A3 (`a146876`): 400ms pre-roll ring flushed ahead of live frames at gate open, cleared on close; input_device substring resolver with doctor listing inputs and marking the one in use; low_signal trace event and hint on both surfaces for quiet windows (5-frame floor so tap discards stay silent); transcription language pin riding the second session.update. 16 tests.
 - T3 (`58fff56`): make-app.sh signs with "Conn Dev Signing" when the keychain has it, ad hoc fallback with a loud warning (verified on a real build); README one-time recipe with ten-year validity. Grant survival across reinstall needs the certificate, which only Samay can create (GUI keychain step): step 0 on the acceptance list.
-- Gates at close: pytest 334 passed, evals 13/13, swift 40 passed, token guard green, slopcheck clean on every commit message and doc edit, fresh Conn.app built and installed to /Applications (ad hoc until the certificate exists, so the app grant needs one retoggle after install; called out in the handoff).
+- Historical gates at that session close: pytest 334 passed, evals 13/13, swift 40 passed, token guard green, slopcheck clean on every commit message and doc edit, fresh Conn.app built and installed to /Applications with an ad-hoc signature. The certificate now exists and the current installed app has a valid persistent signature; current counts are in the July 12 entry below.
 - Deviations: all packets executed solo on Fable (the round is TCC-identity-bound to this machine; no subagent can probe grants). The T4 scope split is the session's one judgment call against the discussed packet, recorded above and in the spec amendment.
 
-## Final report
+### Session log 2026-07-10 (verified semantic action engine)
 
-Written at project close: total spend by tier, Fable share of output tokens, counterfactual all-Fable estimate.
+The approved semantic-first slice from
+`docs/2026-07-09-verified-action-engine-spec.md` was implemented across packets
+VA0 through VA8. The wargame's narrowing held: native semantic observation,
+transaction outcomes, bridge authentication, strict retry safety, a fixture,
+and live-probe tooling landed; visual control, sound, motion, MCP, broad app
+profiles, and multi-action macros did not.
+
+- VA0 added `ConnActionFixture.app`, deterministic semantic surfaces, and an
+  independent truth log. The engine cannot read that log. The harness compares
+  receipts to fixture truth and pins the original failure class where AX
+  accepts a press but the intended state does not change.
+- VA1 added typed outcomes, dispatch certainty, bounded evidence, retry safety,
+  and receipt rendering. Mutation success is now equivalent to verified. The
+  island and console cannot render dispatch-only, no-effect, ambiguous, or
+  failed outcomes as green completion.
+- VA2 bound calls to turn, response, observation, and execution identity;
+  rejected stale response work; serialized mutations; preserved read-only
+  concurrency; and stopped a response's mutation chain after any non-verified
+  result.
+- VA3 replaced unauthenticated app-role registration with a 256-bit launch
+  secret, challenge-response authentication, one app control role, request
+  identity, monotonic sequence checks, local console capability, and
+  fail-closed disconnect behavior. The console cannot initiate actions or
+  answer native RPC; its only control is nonce-bound pointer approval for the
+  exact pending plan.
+- VA4 and VA5 moved production snapshot ownership, target resolution, plan
+  preparation, revalidation, dispatch, evidence predicates, and classification
+  into Conn.app. Python remains policy and orchestration. Production
+  composition cannot re-enable the legacy Python AX/input engine.
+- VA6 migrated app open/switch, clipboard, tab focus, scroll, non-secure text,
+  element press, lazy menu action, and allowlisted key chords to native
+  transaction receipts. There is no silent production lane fallback.
+- VA7 tightened model completion language, snapshot hygiene, traces, and Stop
+  behavior. Raw native success cannot produce verified or `Done.`
+- VA8 added `conn --action-probe` for the fixture, Terminal, Safari, Chrome,
+  Notes, and Obsidian, plus the deterministic 1,000-transaction acceptance
+  run.
+
+Mechanical close-out evidence:
+
+- `PYTHONPATH=src .venv/bin/python -m pytest tests -q`: 434 passed, 2 existing
+  dependency deprecation warnings.
+- `PYTHONPATH=src .venv/bin/python -m conn --eval`: 13 of 13 passed.
+- `PYTHONPATH=src .venv/bin/python -m conn --doctor`: every substantive check
+  passed; only the optional global-hotkey monitor warned in the noninteractive
+  environment.
+- Swift tests: 84 passed.
+- Release Swift build: passed using the full Xcode-beta toolchain.
+- Fixture acceptance: 1,000 transactions, 980 verified supported actions, 10
+  intentional no-effect results, 10 ambiguity refusals, zero wrong targets,
+  zero false verified outcomes, 100 percent ambiguity refusal, and no automatic
+  retry after possible dispatch.
+- Fixture latency assertions: p95 observation at or below 150ms and p95
+  dispatch plus verification at or below 800ms.
+
+Security review covered bridge role impersonation, console authorization,
+Stop races, uncertain dispatch, late result binding, stale response adoption,
+non-verified mutation chains, user-facing completion language, and missing
+upstream response identity. Validated findings were fixed and pinned by tests.
+
+Environment close-out:
+
+- `Conn Dev Signing` is a valid identity.
+- The installed `/Applications/Conn.app` has a valid persistent signature.
+- The final fresh signed install and all external AX live probes were blocked
+  because `IOConsoleLocked=true`. Locked-console artifacts record this as an
+  environment block before dispatch.
+- The fixture/native simulated acceptance is complete. External fixture and
+  five-app live artifacts are pending an unlocked desktop.
+- The product gate remains pending: 30 ordinary commands across at least three
+  sessions, zero false completion language, and at least 90 percent of
+  supported commands faster than hands or useful while hands are occupied.
+
+This session did not close the product. Exact sign-in, signing, install, probe,
+and human acceptance commands are in `docs/NEXT-SESSION.md`.
+
+### Session log 2026-07-12 (consolidation and hardening)
+
+The final diff review found gaps that the July 10 close-out missed. Work stopped
+before commit and push. Each finding received a regression test and fix:
+
+- pre-satisfied effects can no longer dispatch or verify
+- notification hints cannot satisfy `all` or `any` verification
+- generic AX failures become `possibly_dispatched`, preventing fallback
+- scroll-to-visible verifies visibility instead of an unrelated value delta
+- Conn.app rejects legacy native mutation operations
+- `ToolSpec` owns mutation and semantic-operation metadata
+- app launch requires an exact bundle ID and code-signing identity
+- fixture readiness and nanosecond artifact IDs make live evidence causal and
+  collision-free
+- global predicates cannot borrow a decorative target ref
+- verification stays bound to the original process and window
+- target omission cannot prove disappearance or attribute change
+- verified `any` receipts carry only supporting evidence
+- text submit and every key post recheck the actual frontmost app
+- bridge and console capabilities are removed before child processes run
+- the fixed-origin browser console is read-only; it cannot approve plans
+- secure state is rechecked after target resolution and before dispatch
+- semantic resolution confirms parent path, ancestor context, and frame drift
+- native receipt Boolean fields reject non-Boolean wire values
+- model context excludes free-form app and window labels
+- Realtime tool calls stay buffered until the response completes successfully
+- per-client broadcast queues are bounded and disconnect stalled readers
+- completed Realtime output is authoritative; omitted or conflicting buffered
+  calls cannot execute
+- path fallback preserves semantic identity, and native receipts must match the
+  approved plan fingerprint
+- schema bounds are enforced before policy, and qmd receives a non-secret
+  environment allowlist
+
+The final diff-scoped security scan reviewed 55 production and protocol files.
+Fourteen valid intermediate candidates were fixed and retested. One
+developer-fixture-only path was suppressed. Zero reportable findings remained.
+
+Measured gates after hardening:
+
+- Python: 461 passed, 2 existing dependency warnings
+- evals: 13 of 13 passed
+- Swift: 102 passed
+- release build: passed
+- doctor: every substantive check passed; optional global-hotkey probe warned
+- persistent-signed Conn.app installed and verified on 2026-07-12
+
+Live smoke evidence:
+
+- fixture no-effect press: 3 of 3 agreed with independent truth
+- first app transition to Terminal, Safari, Notes, and Obsidian: engine and
+  WindowServer agreed
+- repeated same-app requests refused as already satisfied before dispatch
+- Chrome remained blocked because it is absent and its signer is unproven
+
+Documentation now separates the in-memory 1,000-transaction stress test from
+the still-open real fixture acceptance gate. App-switch smoke probes no longer
+stand in for the required six-app semantic-operation matrix. Product acceptance
+remains pending.
+
+## Current report
+
+`docs/STATE-OF-PLAY.md` is the canonical current status. This ledger preserves
+historical packet records, including claims later corrected by measured live
+evidence.

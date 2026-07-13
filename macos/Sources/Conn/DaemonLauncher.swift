@@ -9,28 +9,86 @@ enum DaemonLauncher {
     static let defaultPython = "/Users/samaydhawan/conn/.venv/bin/python"
     static let defaultProjectRoot = "/Users/samaydhawan/conn"
     static let health = URL(string: "http://127.0.0.1:8787/healthz")!
+    static let appHealth = URL(string: "http://127.0.0.1:8787/app-healthz")!
     static let port = 8787
     static let logRetentionDays = 7
 
     static var process: Process?
 
-    static func ensureRunning(then done: @escaping @MainActor () -> Void) {
-        URLSession.shared.dataTask(with: health) { data, response, _ in
+    static func ensureRunning(bridgeToken: String, then done: @escaping @MainActor () -> Void) {
+        let challenge = BridgeToken.generate()
+        URLSession.shared.dataTask(with: authenticatedHealthRequest(challenge: challenge)) { data, response, _ in
             let statusOK = (response as? HTTPURLResponse)?.statusCode == 200
-            if statusOK, let data, shouldAdopt(healthzBody: data) {
-                DispatchQueue.main.async {
-                    Task { @MainActor in done() }
+            if statusOK, let data {
+                if shouldAdopt(
+                    healthzBody: data,
+                    bridgeToken: bridgeToken,
+                    challenge: challenge
+                ) {
+                    DispatchQueue.main.async {
+                        Task { @MainActor in done() }
+                    }
+                    return
                 }
-                return
-            }
-            if statusOK {
+                guard isAuthenticatedHealth(
+                    healthzBody: data,
+                    bridgeToken: bridgeToken,
+                    challenge: challenge
+                ) else {
+                    NSLog("Conn refused to adopt a daemon that failed bridge authentication")
+                    return
+                }
                 terminatePortOwner(port)
             }
-            launch()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                Task { @MainActor in done() }
-            }
+            launch(bridgeToken: bridgeToken)
+            waitUntilAuthenticated(
+                bridgeToken: bridgeToken,
+                attemptsRemaining: 10,
+                then: done
+            )
         }.resume()
+    }
+
+    static func authenticatedHealthRequest(challenge: String) -> URLRequest {
+        var request = URLRequest(url: appHealth)
+        request.timeoutInterval = 1
+        request.setValue(challenge, forHTTPHeaderField: "X-Conn-Challenge")
+        return request
+    }
+
+    private static func waitUntilAuthenticated(
+        bridgeToken: String,
+        attemptsRemaining: Int,
+        then done: @escaping @MainActor () -> Void
+    ) {
+        guard attemptsRemaining > 0 else {
+            NSLog("Conn daemon did not authenticate after launch")
+            return
+        }
+        let challenge = BridgeToken.generate()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) {
+            URLSession.shared.dataTask(with: authenticatedHealthRequest(challenge: challenge)) {
+                data, response, _ in
+                let statusOK = (response as? HTTPURLResponse)?.statusCode == 200
+                if statusOK,
+                   let data,
+                   shouldAdopt(
+                       healthzBody: data,
+                       bridgeToken: bridgeToken,
+                       challenge: challenge
+                   ) {
+                    DispatchQueue.main.async {
+                        Task { @MainActor in done() }
+                    }
+                    return
+                }
+                waitUntilAuthenticated(
+                    bridgeToken: bridgeToken,
+                    attemptsRemaining: attemptsRemaining - 1,
+                    then: done
+                )
+            }.resume()
+        }
     }
 
     static func resolveConfig(
@@ -49,13 +107,19 @@ enum DaemonLauncher {
         return nil
     }
 
-    /// Decides whether to adopt an already-running daemon based on its healthz body.
-    /// Absence of "phase_age_s"/"upstream_connected" (older daemon, pre-packet P0-D)
-    /// is treated as healthy for back-compat.
-    static func shouldAdopt(healthzBody data: Data) -> Bool {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return true
-        }
+    static func shouldAdopt(
+        healthzBody data: Data,
+        bridgeToken: String,
+        challenge: String
+    ) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let proof = json["bridge_proof"] as? String else { return false }
+        guard BridgeAuthentication.isValidProof(
+            proof,
+            token: bridgeToken,
+            context: BridgeAuthentication.healthContext,
+            challenge: challenge
+        ) else { return false }
         guard json["phase_age_s"] != nil || json["upstream_connected"] != nil else {
             return true
         }
@@ -66,10 +130,22 @@ enum DaemonLauncher {
         }
         let phaseAge: Double? = (json["phase_age_s"] as? Double)
             ?? (json["phase_age_s"] as? Int).map(Double.init)
-        if let phaseAge, phaseAge < 120 {
-            return true
-        }
-        return false
+        return phaseAge.map { $0 < 120 } ?? false
+    }
+
+    static func isAuthenticatedHealth(
+        healthzBody data: Data,
+        bridgeToken: String,
+        challenge: String
+    ) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let proof = json["bridge_proof"] as? String else { return false }
+        return BridgeAuthentication.isValidProof(
+            proof,
+            token: bridgeToken,
+            context: BridgeAuthentication.healthContext,
+            challenge: challenge
+        )
     }
 
     static func terminatePortOwner(_ port: Int) {
@@ -138,7 +214,14 @@ enum DaemonLauncher {
         return handle
     }
 
-    static func launch() {
+    static func launchEnvironment(base: [String: String], bridgeToken: String) -> [String: String] {
+        var env = base
+        env["PYTHONPATH"] = "src"
+        env["CONN_BRIDGE_TOKEN"] = bridgeToken
+        return env
+    }
+
+    static func launch(bridgeToken: String) {
         guard let config = resolveConfig() else {
             NSLog(
                 "Conn daemon launch skipped: set CONN_PROJECT_ROOT and CONN_PYTHON, or install Conn at \(defaultProjectRoot) with python at \(defaultPython)"
@@ -149,9 +232,10 @@ enum DaemonLauncher {
         proc.executableURL = URL(fileURLWithPath: config.python)
         proc.arguments = ["-m", "conn", "--no-hotkey"]
         proc.currentDirectoryURL = URL(fileURLWithPath: config.projectRoot)
-        var env = ProcessInfo.processInfo.environment
-        env["PYTHONPATH"] = "src"
-        proc.environment = env
+        proc.environment = launchEnvironment(
+            base: ProcessInfo.processInfo.environment,
+            bridgeToken: bridgeToken
+        )
 
         if let handle = openLogFileHandle(config: config) {
             proc.standardOutput = handle

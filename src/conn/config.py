@@ -4,7 +4,7 @@ import os
 import tomllib
 from pathlib import Path
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -43,6 +43,8 @@ class SessionCfg(BaseModel):
 
 class AppsCfg(BaseModel):
     allowlist: list[str] = Field(default_factory=list)
+    bundle_ids: dict[str, str] = Field(default_factory=dict)
+    team_ids: dict[str, str] = Field(default_factory=dict)
 
 
 class BrowserCfg(BaseModel):
@@ -71,6 +73,17 @@ class AxCfg(BaseModel):
     deny_bundles: list[str] = Field(
         default_factory=lambda: ["com.1password.1password", "com.apple.keychainaccess"]
     )
+
+
+class ActionsCfg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    semantic_verify_ms: int = 1200
+    launch_verify_ms: int = 4000
+    max_fallbacks: int = 1
+    require_verified_success: bool = True
+    visual_enabled: bool = False
+    keep_failure_artifacts: bool = False
 
 
 class InteractionsCfg(BaseModel):
@@ -103,6 +116,7 @@ class Config(BaseModel):
     screenshots: ScreenshotsCfg = ScreenshotsCfg()
     server: ServerCfg = ServerCfg()
     ax: AxCfg = AxCfg()
+    actions: ActionsCfg = ActionsCfg()
     interactions: InteractionsCfg = InteractionsCfg()
     risk_overrides: dict[str, str] = Field(default_factory=dict)
     pricing: PricingCfg = PricingCfg()
