@@ -174,6 +174,11 @@ def build_server(app: ConnApp, *, console_capability: str | None = None) -> Star
             bus.attach(ws, role)
             app.publish_state()
             if role == "app":
+                build = client_build(json.loads(raw))
+                if build is not None:
+                    app._app_build = build
+                    if hasattr(app, "trace"):
+                        app.trace.log("app_client", build=build)
                 asyncio.ensure_future(app.publish_ax_grants())
             while True:
                 raw = await ws.receive_text()
@@ -201,6 +206,21 @@ def build_server(app: ConnApp, *, console_capability: str | None = None) -> Star
         Route("/{name}", static),
         WebSocketRoute("/ws", ws_endpoint),
     ])
+
+
+def client_build(msg: dict) -> str | None:
+    build = msg.get("app_build")
+    if isinstance(build, str) and 0 < len(build) <= 64 and build.isprintable():
+        return build
+    return None
+
+
+def _safe_gesture_id(msg: dict) -> str | None:
+    gesture = msg.get("gesture_id")
+    if (isinstance(gesture, str) and 0 < len(gesture) <= 64
+            and all(c.isascii() and (c.isalnum() or c in "-_") for c in gesture)):
+        return gesture
+    return None
 
 
 def client_role(msg: dict) -> str | None:
@@ -264,10 +284,12 @@ async def handle_client(app: ConnApp, msg: dict, *, authenticated_role: str | No
             )
         case "ptt_down":
             await app.on_ptt_down(client_ts_ms=msg.get("client_ts_ms"),
-                                  source=str(msg.get("source", "console")))
+                                  source=str(msg.get("source", "app_hotkey")),
+                                  gesture_id=_safe_gesture_id(msg))
         case "ptt_up":
             await app.on_ptt_up(client_ts_ms=msg.get("client_ts_ms"),
-                                source=str(msg.get("source", "console")))
+                                source=str(msg.get("source", "app_hotkey")),
+                                gesture_id=_safe_gesture_id(msg))
         case "text":
             await app.on_text(str(msg.get("text", "")))
         case "approval":
@@ -282,12 +304,26 @@ async def handle_client(app: ConnApp, msg: dict, *, authenticated_role: str | No
             await app.new_session()
         case "ui_ack":
             await app.on_ui_ack(str(msg.get("moment", "")), msg.get("client_ts_ms"))
+        case "report_last_command":
+            await app.on_report_last_command()
+        case "shutdown":
+            await app.on_shutdown_request("app_quit")
 
 
-async def serve(app: ConnApp) -> None:
+async def serve(app: ConnApp, shutdown_event: asyncio.Event | None = None) -> None:
     server = uvicorn.Server(uvicorn.Config(
         build_server(app, console_capability=app.console_capability),
         host=app.cfg.server.host, port=app.cfg.server.port,
         log_level="warning",
     ))
-    await server.serve()
+    stopper = None
+    if shutdown_event is not None:
+        async def stop_when_signalled() -> None:
+            await shutdown_event.wait()
+            server.should_exit = True
+        stopper = asyncio.ensure_future(stop_when_signalled())
+    try:
+        await server.serve()
+    finally:
+        if stopper is not None:
+            stopper.cancel()

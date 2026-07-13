@@ -71,6 +71,50 @@ class ActionReceipt:
     def ok(self) -> bool:
         return self.outcome is ActionOutcome.VERIFIED
 
+    @property
+    def reason_code(self) -> str | None:
+        """Stable machine-readable failure class: the first token of the
+        error summary, e.g. 'stale_snapshot' or 'no_live_affordance'."""
+        error = (self.data or {}).get("error")
+        if not isinstance(error, str) or not error:
+            return None
+        return error.split(":", 1)[0].strip()
+
+    def safe_user_message(self) -> str:
+        """What Conn may say about this outcome: the safe reason and next
+        move, with no internal terminology."""
+        match self.outcome:
+            case ActionOutcome.VERIFIED:
+                return "Done."
+            case ActionOutcome.DISPATCH_ONLY:
+                return "I sent it, but could not confirm it worked."
+            case ActionOutcome.NO_EFFECT:
+                return "I sent it, but it did not take effect."
+            case ActionOutcome.AMBIGUOUS:
+                candidates = [str(item) for item
+                              in (self.data or {}).get("candidates", [])[:3]]
+                if candidates:
+                    return (f"I found more than one match: "
+                            f"{', '.join(candidates)}. Which one?")
+                return "I found more than one match. Which one?"
+            case ActionOutcome.BLOCKED:
+                return "That action is outside what Conn is allowed to do."
+        if self.dispatch_state is DispatchState.POSSIBLY_DISPATCHED:
+            return "The action may have been sent. Check before retrying."
+        reason = self.reason_code or ""
+        if reason.startswith("stale"):
+            return "The app changed before I could act. Try again."
+        if reason in {"native_app_unavailable", "native_app_disconnected",
+                      "native_bridge_timeout"}:
+            return "Conn lost its app connection before sending anything."
+        if reason == "no_live_affordance":
+            return "This app does not offer a way to do that."
+        if reason == "no_current_selection":
+            return "Nothing is selected to move from."
+        if reason == "no_relative_item":
+            return "There is no item in that direction."
+        return "It did not run."
+
     def as_dict(self) -> dict:
         payload = {
             "outcome": self.outcome.value,
@@ -83,6 +127,8 @@ class ActionReceipt:
             "evidence": [item.as_dict() for item in self.evidence],
             "retry_safe": self.retry_safe,
             "duration_ms": self.duration_ms,
+            "reason_code": self.reason_code,
+            "safe_user_message": self.safe_user_message(),
         }
         if self.data is not None:
             payload["data"] = self.data

@@ -1,0 +1,2646 @@
+{
+  "version": 1,
+  "reviewed": "2026-07-13 rev 5: app actions use off-target context; vague requests permit semantic reads; destructive requests require speech-only refusal",
+  "notes": "Top-20 ordinary command classes; authored paraphrases plus live July 12 transcripts. Slots with null values require presence only; list values accept any listed option.",
+  "items": [
+    {
+      "utterance": "Open Safari",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Launch Safari",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Start Safari for me",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Can you open Safari",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Bring up Safari",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open up Safari please",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Fire up Safari",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open Notes",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Launch the Notes app",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Open the Notes app",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "OpenNotes",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "live-2026-07-12",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Open Obsidian",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Obsidian"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Launch Obsidian",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Obsidian"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Start Obsidian",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Obsidian"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go to Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Jump over to Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Take me to Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Focus Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go back to Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch over to the Terminal",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to Safari",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Go to Safari",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Back to Safari",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open a new tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "New tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Make a new tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Create a new tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open another tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Give me a fresh tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open a new tab using the file menu",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Can you open a new tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Add a tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "One more tab please",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "descend. Open a new tab.",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "live-2026-07-12"
+    },
+    {
+      "utterance": "acquired. Open a new tab using file menu.",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "live-2026-07-12"
+    },
+    {
+      "utterance": "Open a new window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "New window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Make a new window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Create another window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Give me a second window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open one more window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Pop open a new window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Make a new note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Create a new note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "New note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Start a new note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Create a new document",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "New document please",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Make me a fresh note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Go to the next note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Next note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Move to the next note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Select the next note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Jump to the next item",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Show the next document",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Next item in the list",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go forward one note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "The next note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "in front mode Can you go to the next note?",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "live-2026-07-12",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Go to the previous note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Previous note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Back one note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Select the previous item",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Select the previous note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Move up one item",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "The one before this",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go to the next tab",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Next tab",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to the next tab",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Move one tab over",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Cycle to the next tab",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to the Gmail tab",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Focus the docs tab",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go to the GitHub tab",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Bring up the calendar tab",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Select the drive tab",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Jump to the pull request tab",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search the vault for the transformer paper",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Find my notes on quarterly planning",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Look up the meeting notes from last week in the vault",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Search phoenix for the interview prep doc",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Find the note about the tax checklist",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Search my notes for the reading list",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Where are my notes on the verified action engine",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open my tasks note",
+      "expect": {
+        "tool_any": [
+          "phoenix_search",
+          "phoenix_open_note"
+        ]
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open the daily journal note",
+      "expect": {
+        "tool_any": [
+          "phoenix_search",
+          "phoenix_open_note"
+        ]
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Pull up my reading list note",
+      "expect": {
+        "tool_any": [
+          "phoenix_search",
+          "phoenix_open_note"
+        ]
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open the note about conn",
+      "expect": {
+        "tool_any": [
+          "phoenix_search",
+          "phoenix_open_note"
+        ]
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Copy hello world to the clipboard",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Put my email address samay58@gmail.com on the clipboard",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Copy the phrase launch checklist to my clipboard",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Copy this to the clipboard: standup at ten",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What app am I in?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Which window is this?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What am I looking at?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Where am I right now?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's the active app?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What app is in front?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Read what's on the screen",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's on my screen?",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What buttons are on this window?",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "List the controls in this window",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What can you see in this app?",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search the web for openai realtime api docs",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Google the weather in san francisco",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Look up flights to new york on the web",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search online for swift concurrency tutorial",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Web search best espresso grinder",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Scroll down",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_scroll",
+          "computer_select_relative"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Scroll down a bit",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_scroll",
+          "computer_select_relative"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Scroll to the bottom of the list",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_scroll",
+          "computer_select_relative"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Scroll up in this window",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_scroll",
+          "computer_select_relative"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Type hello there into the search box",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_type_text"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Enter my name in the text field",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_type_text"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Write groceries in the search bar",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_type_text"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Click the save button",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_click"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Press the refresh button",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_click"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Hit the done button",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_click"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Click on submit",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_click"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Um, hold on a second",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Wait, never mind",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Hang on",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Uh, scratch that",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Take a screenshot",
+      "expect": {
+        "tool_any": [
+          "computer_screenshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Grab a screenshot of the screen",
+      "expect": {
+        "tool_any": [
+          "computer_screenshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Screenshot this",
+      "expect": {
+        "tool_any": [
+          "computer_screenshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Would you open a new tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Tab, new one",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Spin up a new tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open a tab next to this one",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Another tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Skip to the next one",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Move along to the next entry",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Advance one item",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Next one please",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "On to the next note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open Google Chrome",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Google Chrome"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Launch Chrome",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Google Chrome"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open Chrome for me",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Google Chrome"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Tell me which app is focused",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What window am I on?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Dig up my notes about the roadmap",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Find the packet plan in my vault",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search my knowledge base for daily focus",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Copy the words follow up tomorrow",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Clipboard: ship the report",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search for the caltrain schedule",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Look up the exchange rate for yen",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Step back one note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Previous item",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go back one entry",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative",
+          "computer_ax_snapshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "I need another window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open a second window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Jot down a new note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Start a blank note",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Open a blank document",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": [
+            "note",
+            "document"
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Sorry, one moment",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Forget it",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Switch to the tab called invoices",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Focus the tab named metrics",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to Notes",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Go over to Notes",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Bring Notes to the front",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Notes"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Capture the screen",
+      "expect": {
+        "tool_any": [
+          "computer_screenshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Please open Safari for me",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Get Safari going",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Safari"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open the Finder",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Finder"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Launch Finder",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Finder"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open Terminal",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Start a Terminal session",
+      "expect": {
+        "tool_any": [
+          "app_open",
+          "app_switch"
+        ],
+        "slots": {
+          "app": "Terminal"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to Obsidian",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Obsidian"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Head over to Obsidian",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Obsidian"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Flip back to Finder",
+      "expect": {
+        "tool_any": [
+          "app_switch",
+          "app_open"
+        ],
+        "slots": {
+          "app": "Finder"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "New tab in Safari",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open a tab in Safari",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Make a tab",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open a fresh tab for me",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "A new window please",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open a new Safari window",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "window"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Create a folder",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "folder"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Make a new folder",
+      "expect": {
+        "tool_any": [
+          "computer_create"
+        ],
+        "slots": {
+          "kind": "folder"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Next",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative",
+          "wait_for_user"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go to the note after this one",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Select the following note",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "next"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "The note before",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Back to the previous tab",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Cycle back one tab",
+      "expect": {
+        "tool_any": [
+          "computer_select_relative"
+        ],
+        "slots": {
+          "relation": "previous",
+          "kind": "tab"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search my vault for the deployment guide",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Find that note about latency budgets",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Look in my notes for the packing list",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Vault search: reliability spec",
+      "expect": {
+        "tool_any": [
+          "phoenix_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Copy good morning to the clipboard",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Put the address five hundred howard street on my clipboard",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Copy that phrase: belay that",
+      "expect": {
+        "tool_any": [
+          "clipboard_set"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What is the frontmost application?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Which app has focus right now?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Whats the current window title?",
+      "expect": {
+        "tool_any": [
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Describe the current window",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What links are on this page?",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Search the internet for gpt realtime pricing",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Web: santa cruz surf report",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Look up the Ace Hotel Brooklyn online",
+      "expect": {
+        "tool_any": [
+          "browser_search"
+        ],
+        "slots": {
+          "query": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Scroll down the page",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_scroll",
+          "computer_select_relative"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Scroll this list",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_scroll"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Type standup notes into the field",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_type_text"
+        ]
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Fill the search box with conn",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_type_text"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Press cancel",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_click"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Click the blue button",
+      "expect": {
+        "tool_any": [
+          "computer_ax_snapshot",
+          "computer_click"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Er, one sec",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Actually cancel that thought",
+      "expect": {
+        "tool_any": [
+          "wait_for_user"
+        ],
+        "allow_no_tool": true
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Screenshot the window",
+      "expect": {
+        "tool_any": [
+          "computer_screenshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Take a picture of my screen",
+      "expect": {
+        "tool_any": [
+          "computer_screenshot"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Switch to the tab with the spreadsheet",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Focus the tab that says billing",
+      "expect": {
+        "tool_any": [
+          "app_focus_tab"
+        ],
+        "slots": {
+          "title": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Delete the selected note",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_any": ["can't", "cannot", "can’t", "won't", "not supported"],
+        "speech_equals": "I can't help with destructive actions yet.",
+        "speech_max_chars": 240,
+        "speech_max_sentences": 1
+      },
+      "source": "live-2026-07-13",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Remove this file",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_any": ["can't", "cannot", "can’t", "won't", "not supported"],
+        "speech_equals": "I can't help with destructive actions yet.",
+        "speech_max_chars": 240,
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Close this without saving",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_any": ["can't", "cannot", "can’t", "won't", "not supported"],
+        "speech_equals": "I can't help with destructive actions yet.",
+        "speech_max_chars": 240,
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Overwrite the existing document",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_any": ["can't", "cannot", "can’t", "won't", "not supported"],
+        "speech_equals": "I can't help with destructive actions yet.",
+        "speech_max_chars": 240,
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
+    }
+  ]
+}

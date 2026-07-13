@@ -39,6 +39,10 @@ class ToolSpec:
     computer_mutation: bool = False
     semantic_operation: str | None = None
     timeout_s: float = 10.0
+    # Diagnostic tools keep their gates and allowlists but are hidden from
+    # the default Realtime tool surface: the model describes goals, it does
+    # not choose raw menu paths or key chords.
+    diagnostic: bool = False
     good_examples: tuple[str, ...] = ()
     rejected_examples: tuple[str, ...] = ()
 
@@ -53,48 +57,8 @@ def _obj(properties: dict, required: list[str]) -> dict:
     return {"type": "object", "properties": properties, "required": required}
 
 
-_EFFECT_PREDICATE_KINDS = [
-    "frontmost_bundle_equals",
-    "window_count_delta",
-    "window_title_equals",
-    "window_title_changes",
-    "element_exists",
-    "element_disappears",
-    "element_attribute_equals",
-    "element_attribute_changes",
-    "focused_element_equals",
-    "text_contains",
-    "text_hash_equals",
-    "clipboard_hash_equals",
-    "notification",
-]
-
-_DESIRED_EFFECT = {
-    "type": "object",
-    "properties": {
-        "mode": {"type": "string", "enum": ["all", "any"]},
-        "predicates": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 3,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "kind": {"type": "string", "enum": _EFFECT_PREDICATE_KINDS},
-                    "ref": {"type": "string"},
-                    "attribute": {"type": "string"},
-                    "expected": {},
-                    "delta": {"type": "integer"},
-                    "notification": {"type": "string"},
-                },
-                "required": ["kind"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["predicates"],
-    "additionalProperties": False,
-}
+def _native_only(args: dict, ctx: ExecutionContext) -> dict:
+    raise ToolError("native_app_unavailable: Conn.app is required for computer actions")
 
 
 def build_registry() -> dict[str, ToolSpec]:
@@ -222,12 +186,56 @@ def build_registry() -> dict[str, ToolSpec]:
             good_examples=('{"name": "computer_ax_snapshot", "arguments": {"query": "send"}}',),
         ),
         ToolSpec(
+            name="computer_create",
+            description=(
+                "Create a new item in the current app: a tab, window, "
+                "document, note, or folder. Conn discovers the native way to "
+                "do it; name only what to create."
+            ),
+            parameters=_obj({
+                "kind": {"type": "string",
+                         "enum": ["tab", "window", "document", "note", "folder"]},
+                "app": {"type": "string"},
+            }, ["kind"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: f"Create a new {a.get('kind', 'item')}",
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="semantic_intent",
+            good_examples=('{"name": "computer_create", "arguments": {"kind": "tab"}}',),
+            rejected_examples=(
+                'Menu paths or shortcuts as arguments: Conn compiles the mechanism itself.',
+            ),
+        ),
+        ToolSpec(
+            name="computer_select_relative",
+            description=(
+                "Select the item next to the current selection: the next or "
+                "previous tab, note, document, or list item."
+            ),
+            parameters=_obj({
+                "relation": {"type": "string", "enum": ["next", "previous"]},
+                "kind": {"type": "string",
+                         "enum": ["tab", "document", "note", "item"]},
+                "app": {"type": "string"},
+            }, ["relation"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: (
+                f"Select the {a.get('relation', 'next')} {a.get('kind', 'item')}"
+            ),
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="semantic_intent",
+            good_examples=(
+                '{"name": "computer_select_relative", "arguments": {"relation": "next", "kind": "note"}}',
+            ),
+        ),
+        ToolSpec(
             name="computer_click",
             description="Click a UI element by grounded snapshot reference.",
             parameters=_obj({
                 "snapshot_id": {"type": "string"},
                 "ref": {"type": "string"},
-                "desired_effect": _DESIRED_EFFECT,
             }, ["snapshot_id", "ref"]),
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: f"Click element: {a.get('ref', '?')}",
@@ -279,13 +287,13 @@ def build_registry() -> dict[str, ToolSpec]:
             ),
             parameters=_obj({
                 "combo": {"type": "string"},
-                "desired_effect": _DESIRED_EFFECT,
             }, ["combo"]),
             risk=RiskLevel.ACT_CONFIRM,
             preview=lambda a: f"Press keys: {a.get('combo', '?')}",
             executor=hotkey,
             computer_mutation=True,
             semantic_operation="key_chord",
+            diagnostic=True,
         ),
         ToolSpec(
             name="app_focus_tab",
@@ -304,7 +312,6 @@ def build_registry() -> dict[str, ToolSpec]:
                 {
                     "path": {"type": "array", "items": {"type": "string"}, "minItems": 1},
                     "app": {"type": "string"},
-                    "desired_effect": _DESIRED_EFFECT,
                 },
                 ["path"],
             ),
@@ -313,15 +320,18 @@ def build_registry() -> dict[str, ToolSpec]:
             executor=menu,
             computer_mutation=True,
             semantic_operation="invoke_menu",
+            diagnostic=True,
         ),
     ]
     return {s.name: s for s in specs}
 
 
-def export_openai(registry: dict[str, ToolSpec]) -> list[dict]:
+def export_openai(registry: dict[str, ToolSpec],
+                  include_diagnostic: bool = False) -> list[dict]:
     return [
         {"type": "function", "name": s.name, "description": s.description, "parameters": s.parameters}
         for s in registry.values()
+        if include_diagnostic or not s.diagnostic
     ]
 
 

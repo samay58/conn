@@ -12,6 +12,7 @@ import asyncio
 import base64
 import json
 import uuid
+from dataclasses import dataclass
 
 import websockets
 
@@ -24,6 +25,24 @@ from .base import (
 
 WS_URL = "wss://api.openai.com/v1/realtime?model={model}"
 
+# The live API rejects item IDs longer than 32 characters. Client IDs stay in
+# use (deletion and error correlation both need to name the item before the
+# server acknowledges it), so they are minted under the limit by construction.
+ITEM_ID_MAX = 32
+
+
+@dataclass
+class _ItemRecord:
+    """Acknowledged-item ledger entry. An item may be deleted only from
+    `created`; a failed create is dropped outright; a delete requested
+    before the ack arrives is `doomed` and sent on acknowledgement. Event
+    IDs are kept so both the ledger and the error-correlation map shrink on
+    every acknowledgement instead of growing for the session's lifetime."""
+    state: str  # create_sent | created | delete_sent
+    doomed: bool = False
+    create_event_id: str | None = None
+    delete_event_id: str | None = None
+
 
 class OpenAIRealtimeAdapter:
     def __init__(self, cfg: Config, tools: list[dict], instructions: str):
@@ -34,6 +53,9 @@ class OpenAIRealtimeAdapter:
         self._closing = False
         self._pending_calls: dict[str, dict[str, RtToolCall]] = {}
         self._semantic_item_id: str | None = None
+        self._items: dict[str, _ItemRecord] = {}
+        self._event_causes: dict[str, tuple[str, str]] = {}
+        self._active_response_id: str | None = None
 
     @property
     def connected(self) -> bool:
@@ -46,6 +68,9 @@ class OpenAIRealtimeAdapter:
         self._closing = False
         self._semantic_item_id = None
         self._pending_calls.clear()
+        self._items.clear()
+        self._event_causes.clear()
+        self._active_response_id = None
         self._ws = await websockets.connect(
             WS_URL.format(model=self.cfg.realtime.model),
             additional_headers={"Authorization": f"Bearer {key}"},
@@ -114,7 +139,14 @@ class OpenAIRealtimeAdapter:
         await self._send({"type": "response.create"})
 
     async def cancel_response(self) -> None:
-        await self._send({"type": "response.cancel"})
+        """Cancel is bound: it names the active response and is never sent
+        without one. Late events from an uncancellable response are dropped
+        by the app-side provenance ledger instead."""
+        response_id = self._active_response_id
+        if response_id is None:
+            return
+        await self._send({"type": "response.cancel",
+                          "response_id": response_id})
 
     async def send_text(self, text: str) -> None:
         await self._send({
@@ -123,23 +155,50 @@ class OpenAIRealtimeAdapter:
                      "content": [{"type": "input_text", "text": text}]},
         })
 
+    @staticmethod
+    def _new_item_id() -> str:
+        item_id = f"ctx_{uuid.uuid4().hex[:24]}"
+        assert len(item_id) <= ITEM_ID_MAX
+        return item_id
+
+    async def _create_item(self, item_id: str, item: dict) -> None:
+        event_id = f"evt_{uuid.uuid4().hex[:16]}"
+        self._items[item_id] = _ItemRecord(state="create_sent",
+                                           create_event_id=event_id)
+        self._event_causes[event_id] = ("item_create", item_id)
+        await self._send({
+            "type": "conversation.item.create",
+            "event_id": event_id,
+            "item": {**item, "id": item_id},
+        })
+
+    async def _delete_item(self, item_id: str) -> None:
+        record = self._items.get(item_id)
+        if record is None or record.state == "delete_sent":
+            return
+        if record.state == "create_sent":
+            record.doomed = True
+            return
+        record.state = "delete_sent"
+        event_id = f"evt_{uuid.uuid4().hex[:16]}"
+        record.delete_event_id = event_id
+        self._event_causes[event_id] = ("item_delete", item_id)
+        await self._send({"type": "conversation.item.delete",
+                          "event_id": event_id, "item_id": item_id})
+
     async def clear_semantic_context(self) -> None:
         if self._semantic_item_id is None:
             return
         item_id, self._semantic_item_id = self._semantic_item_id, None
-        await self._send({"type": "conversation.item.delete", "item_id": item_id})
+        await self._delete_item(item_id)
 
     async def upsert_semantic_context(self, text: str) -> None:
         await self.clear_semantic_context()
-        item_id = f"ctx_{uuid.uuid4().hex}"
-        await self._send({
-            "type": "conversation.item.create",
-            "item": {
-                "id": item_id,
-                "type": "message",
-                "role": "system",
-                "content": [{"type": "input_text", "text": text}],
-            },
+        item_id = self._new_item_id()
+        await self._create_item(item_id, {
+            "type": "message",
+            "role": "system",
+            "content": [{"type": "input_text", "text": text}],
         })
         self._semantic_item_id = item_id
 
@@ -152,18 +211,14 @@ class OpenAIRealtimeAdapter:
         data = payload.get("data") if isinstance(payload, dict) else None
         if isinstance(data, dict) and isinstance(data.get("snapshot_id"), str):
             await self.clear_semantic_context()
-            item_id = f"ctx_{uuid.uuid4().hex}"
-        await self._send({
-            "type": "conversation.item.create",
-            "item": {
-                **({"id": item_id} if item_id else {}),
-                "type": "function_call_output",
-                "call_id": call_id,
-                "output": output,
-            },
-        })
+            item_id = self._new_item_id()
+        item = {"type": "function_call_output", "call_id": call_id,
+                "output": output}
         if item_id:
+            await self._create_item(item_id, item)
             self._semantic_item_id = item_id
+        else:
+            await self._send({"type": "conversation.item.create", "item": item})
 
     # ---- server events ----
 
@@ -209,8 +264,17 @@ class OpenAIRealtimeAdapter:
         match kind:
             case "session.created":
                 return [RtSessionReady(session_id=msg.get("session", {}).get("id", "?"))]
+            case "conversation.item.created":
+                self._on_item_created(msg.get("item", {}).get("id"))
+                return []
+            case "conversation.item.deleted":
+                record = self._items.pop(msg.get("item_id"), None)
+                if record is not None and record.delete_event_id:
+                    self._event_causes.pop(record.delete_event_id, None)
+                return []
             case "response.created":
                 self._pending_calls.setdefault(response_id, {})
+                self._active_response_id = response_id
                 return [RtResponseCreated(response_id=response_id)]
             case "response.output_audio.delta" | "response.audio.delta":
                 return [RtAudioDelta(pcm=base64.b64decode(msg.get("delta", "")),
@@ -240,14 +304,58 @@ class OpenAIRealtimeAdapter:
             case "response.cancelled":
                 response_id = msg.get("response_id")
                 self._pending_calls.pop(response_id, None)
+                if self._active_response_id == response_id:
+                    self._active_response_id = None
                 return [RtResponseCancelled(response_id=response_id)]
             case "error":
                 err = msg.get("error", {})
                 message = err.get("message", str(err))
+                related = self._resolve_error_cause(err.get("event_id"))
                 # Server-side validation gripes are logged, not fatal; the
                 # socket dying is what fatal means here.
-                return [RtError(message=message, fatal=False)]
+                return [RtError(message=message, fatal=False, related=related)]
         return []
+
+    def _on_item_created(self, item_id: str | None) -> None:
+        record = self._items.get(item_id) if item_id else None
+        if record is None:
+            return
+        record.state = "created"
+        if record.create_event_id:
+            self._event_causes.pop(record.create_event_id, None)
+            record.create_event_id = None
+        if record.doomed:
+            record.doomed = False
+            asyncio.ensure_future(self._flush_doomed(item_id))
+
+    async def _flush_doomed(self, item_id: str) -> None:
+        """Deferred delete for an item superseded before its create ack. The
+        socket may have died in between; that is reconnect territory, not an
+        unretrieved task exception."""
+        try:
+            await self._delete_item(item_id)
+        except Exception:
+            pass
+
+    def _resolve_error_cause(self, event_id: object) -> str | None:
+        """Bind a nonfatal server error back to the client event that caused
+        it, and keep the item ledger truthful: a failed create never becomes
+        current context, and its ID is never deleted later."""
+        if not isinstance(event_id, str):
+            return None
+        cause = self._event_causes.pop(event_id, None)
+        if cause is None:
+            return None
+        kind, item_id = cause
+        if kind == "item_create":
+            # A failed create has no server-side item: drop the record
+            # entirely so nothing ever targets or retains it.
+            self._items.pop(item_id, None)
+            if self._semantic_item_id == item_id:
+                self._semantic_item_id = None
+        elif kind == "item_delete":
+            self._items.pop(item_id, None)
+        return f"{kind}:{item_id}"
 
     @staticmethod
     def _missing_response_id(kind: str) -> RtError:
@@ -260,6 +368,8 @@ class OpenAIRealtimeAdapter:
         response = msg.get("response", {})
         response_id = response.get("id")
         status = response.get("status", "completed")
+        if self._active_response_id == response_id:
+            self._active_response_id = None
         pending = self._pending_calls.pop(response_id, {})
         if status == "cancelled":
             return [RtResponseCancelled(response_id=response_id)]

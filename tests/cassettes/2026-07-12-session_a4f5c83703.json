@@ -1,0 +1,332 @@
+{
+  "source": "data/traces/2026-07-12/session_a4f5c83703.jsonl",
+  "session_id": "session_a4f5c83703",
+  "window": "session start through the first 60-minute upstream duration close",
+  "sanitized": "command transcripts and tool arguments only; no audio, secrets, or secure values",
+  "totals": {
+    "ptt_cycles": 16,
+    "input_transcripts": 11,
+    "model_responses": 21,
+    "upstream_errors": 41
+  },
+  "failure_stage_distribution": {
+    "turn_or_context_transport": 15
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "transcript": "Yeah, yeah, yeah",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "wait_for_user",
+          "arguments": {},
+          "gate": "auto",
+          "block_reason": null
+        }
+      ],
+      "upstream_errors": [
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 2,
+      "transcript": null,
+      "hold_ms": null,
+      "responses": 0,
+      "tool_calls": [],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_fd3eb5b9689046989c6ba715747bb148' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 3,
+      "transcript": null,
+      "hold_ms": null,
+      "responses": 0,
+      "tool_calls": [],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_d4477c67bee74a7aafc3ed7a86280cff' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 4,
+      "transcript": null,
+      "hold_ms": null,
+      "responses": 0,
+      "tool_calls": [],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_cc147635bacc4f73b04a09e18a029a54' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 5,
+      "transcript": "What app am I in?",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "computer_get_context",
+          "arguments": {},
+          "gate": "auto",
+          "block_reason": null
+        }
+      ],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_362869757309467ca56a9117c6ec0f50' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead.",
+        "Error deleting item: the item with id 'ctx_e1f590ac5c8341f4a3748a25dc5b84b7' does not exist."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 6,
+      "transcript": "OpenNotes",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "app_open",
+          "arguments": {
+            "app": "Notes"
+          },
+          "gate": "auto",
+          "block_reason": null
+        }
+      ],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_60d0fc2cfa31484b85f60e34b7dcd173' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 7,
+      "transcript": "in front mode Can you go to the next note?",
+      "hold_ms": null,
+      "responses": 1,
+      "tool_calls": [],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_dc55325839fa46288e43860665e68693' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 8,
+      "transcript": "The next note",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "computer_hotkey",
+          "arguments": {
+            "combo": "cmd+`"
+          },
+          "gate": "blocked",
+          "block_reason": "hotkey_not_allowlisted: cmd+`. Allowed: cmd+t, cmd+w, cmd+n. Use app_menu for other menu actions"
+        }
+      ],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_ed6033e9b8d547e88a16e3c912e1ba2d' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 9,
+      "transcript": "So it didn't wrap. Sure",
+      "hold_ms": null,
+      "responses": 1,
+      "tool_calls": [],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_39e7f0ad9c6c4b0fa1b51442992a3af3' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 10,
+      "transcript": "It didn't use the menu then instead.",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "app_menu",
+          "arguments": {
+            "path": [
+              "Window",
+              "Next Window"
+            ],
+            "app": "Notes",
+            "desired_effect": {
+              "predicates": [
+                {
+                  "kind": "window_title_changes"
+                }
+              ]
+            }
+          },
+          "gate": "blocked",
+          "block_reason": "invalid_effect_target"
+        }
+      ],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_bdb2fd13fc384a4d81bc6b7e7410fdc2' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 11,
+      "transcript": "descend. OpenSafari",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "app_open",
+          "arguments": {
+            "app": "Safari"
+          },
+          "gate": "auto",
+          "block_reason": null
+        }
+      ],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_46231aedf7564ac1865974c5556ef662' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 12,
+      "transcript": "Open a new tab.",
+      "hold_ms": null,
+      "responses": 3,
+      "tool_calls": [
+        {
+          "name": "computer_hotkey",
+          "arguments": {
+            "combo": "cmd+n",
+            "desired_effect": {
+              "predicates": [
+                {
+                  "kind": "window_count_delta",
+                  "delta": 1
+                }
+              ]
+            }
+          },
+          "gate": "blocked",
+          "block_reason": "invalid_effect_target"
+        },
+        {
+          "name": "app_menu",
+          "arguments": {
+            "path": [
+              "File",
+              "New Tab"
+            ],
+            "app": "Safari",
+            "desired_effect": {
+              "predicates": [
+                {
+                  "kind": "window_title_changes"
+                }
+              ]
+            }
+          },
+          "gate": "blocked",
+          "block_reason": "invalid_effect_target"
+        }
+      ],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_537c28c793714dbcb98526432eafeab8' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 13,
+      "transcript": "acquired. Open a new tab using file menu.",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "app_menu",
+          "arguments": {
+            "path": [
+              "File",
+              "New Tab"
+            ],
+            "app": "Safari",
+            "desired_effect": {
+              "predicates": [
+                {
+                  "kind": "window_title_changes"
+                }
+              ]
+            }
+          },
+          "gate": "blocked",
+          "block_reason": "invalid_effect_target"
+        }
+      ],
+      "upstream_errors": [
+        "Cancellation failed: no active response found",
+        "Error deleting item: the item with id 'ctx_981fa8e142ca49b3a334eda84a0c4d47' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 14,
+      "transcript": "Open a new tab.",
+      "hold_ms": null,
+      "responses": 2,
+      "tool_calls": [
+        {
+          "name": "computer_get_context",
+          "arguments": {},
+          "gate": "auto",
+          "block_reason": null
+        }
+      ],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_2b97283058f14de4ad0079e58ad0dc69' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead.",
+        "Error deleting item: the item with id 'ctx_529feb79c68b45c795dc5b092143bdf3' does not exist."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    },
+    {
+      "turn": 15,
+      "transcript": null,
+      "hold_ms": null,
+      "responses": 0,
+      "tool_calls": [],
+      "upstream_errors": [
+        "Error deleting item: the item with id 'ctx_d8438a8e5c164cc88a2b22fdbae4cea1' does not exist.",
+        "Invalid 'item.id': string too long. Expected a string with maximum length 32, but got a string with length 36 instead.",
+        "Your session hit the maximum duration of 60 minutes."
+      ],
+      "failure_stage": "turn_or_context_transport"
+    }
+  ]
+}

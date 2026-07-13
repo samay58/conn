@@ -75,6 +75,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         binding.submenu = choices
         menu.addItem(binding)
         menu.addItem(makeItem("Open Console", #selector(openConsole), ""))
+        menu.addItem(makeItem("Report Last Command", #selector(reportLastCommand), "r"))
         menu.addItem(.separator())
         menu.addItem(makeItem("Quit Conn", #selector(quit), "q"))
         return menu
@@ -117,6 +118,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func openConsole() {
         NSWorkspace.shared.open(URL(string: "http://127.0.0.1:8787")!)
+    }
+
+    @objc private func reportLastCommand() {
+        client.send(["type": "report_last_command"])
     }
 
     @objc private func quit() {

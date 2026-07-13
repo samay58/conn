@@ -43,7 +43,7 @@ enum DaemonLauncher {
             launch(bridgeToken: bridgeToken)
             waitUntilAuthenticated(
                 bridgeToken: bridgeToken,
-                attemptsRemaining: 10,
+                attemptsRemaining: 40,
                 then: done
             )
         }.resume()
@@ -62,7 +62,14 @@ enum DaemonLauncher {
         then done: @escaping @MainActor () -> Void
     ) {
         guard attemptsRemaining > 0 else {
-            NSLog("Conn daemon did not authenticate after launch")
+            // The daemon we spawned is slow, not foreign: connect anyway.
+            // A refused socket lands in DaemonClient's reconnect loop, which
+            // re-runs ensureRunning until the health check answers, so a
+            // slow upstream handshake can never strand the app disconnected.
+            NSLog("Conn daemon slow to authenticate; connecting optimistically")
+            DispatchQueue.main.async {
+                Task { @MainActor in done() }
+            }
             return
         }
         let challenge = BridgeChallenge.generate()
@@ -218,6 +225,9 @@ enum DaemonLauncher {
         var env = base
         env["PYTHONPATH"] = "src"
         env["CONN_BRIDGE_TOKEN"] = bridgeToken
+        // Ownership lease: the daemon exits on bounded grace after this
+        // process dies, so a quit app never strands a port-squatting daemon.
+        env["CONN_PARENT_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         return env
     }
 

@@ -15,11 +15,58 @@ Traces are local, gitignored, and readable line by line.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
 from datetime import datetime
 from pathlib import Path
+
+TRACE_SCHEMA_VERSION = 3
+
+
+def _git_commit(start: Path) -> str | None:
+    """Best-effort HEAD commit without a subprocess: walk up to the repo
+    root, then follow .git/HEAD through loose refs or packed-refs."""
+    for parent in (start, *start.parents):
+        git_dir = parent / ".git"
+        if git_dir.is_dir():
+            break
+    else:
+        return None
+    try:
+        head = (git_dir / "HEAD").read_text().strip()
+        if not head.startswith("ref: "):
+            return head if len(head) == 40 else None
+        ref = head[len("ref: "):]
+        loose = git_dir / ref
+        if loose.exists():
+            return loose.read_text().strip() or None
+        packed = git_dir / "packed-refs"
+        if packed.exists():
+            for line in packed.read_text().splitlines():
+                if line.endswith(ref) and not line.startswith(("#", "^")):
+                    return line.split(" ", 1)[0]
+    except OSError:
+        return None
+    return None
+
+
+def runtime_identity(config_path: Path | None) -> dict:
+    """The identity block every session trace starts with: which process,
+    which code, which config. Fields are None when unknowable, never absent."""
+    fingerprint = None
+    if config_path is not None:
+        path = Path(config_path)
+        if path.exists():
+            fingerprint = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {
+        "pid": os.getpid(),
+        "parent_pid": os.getppid(),
+        "trace_schema": TRACE_SCHEMA_VERSION,
+        "commit": _git_commit(Path(__file__).resolve()),
+        "config_fingerprint": fingerprint,
+    }
 
 
 class TraceWriter:

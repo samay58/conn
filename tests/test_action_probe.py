@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import threading
 import time
 
@@ -102,3 +103,21 @@ def test_verified_probe_records_locked_console_block(monkeypatch, tmp_path) -> N
     assert payload["outcome"] == "blocked"
     assert payload["reason"] == "console_locked"
     assert payload["engine_outcome"] is None
+
+
+def test_probe_artifact_filename_carries_actual_outcome(tmp_path) -> None:
+    from conn.action_probe import _write_verified_probe
+
+    record = {"target": "fixture", "outcome": "no_effect",
+              "engine_outcome": "no_effect"}
+    payload = _write_verified_probe(tmp_path, "fixture", record)
+    name = Path(payload["artifact"]).name
+    assert "no_effect" in name
+    assert "verified" not in name
+
+
+def test_probe_artifact_filename_defaults_to_unclassified(tmp_path) -> None:
+    from conn.action_probe import _write_verified_probe
+
+    payload = _write_verified_probe(tmp_path, "safari", {"target": "safari"})
+    assert "unclassified" in Path(payload["artifact"]).name

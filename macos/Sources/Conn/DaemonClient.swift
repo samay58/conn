@@ -36,6 +36,21 @@ enum BridgeAuthentication {
     }
 }
 
+enum AppBuildIdentity {
+    /// Build identity the daemon traces alongside its own commit and config
+    /// fingerprint: the signed executable's modification time, which the
+    /// persistent-signing workflow changes on every rebuild.
+    static let stamp: String = {
+        guard let executable = Bundle.main.executableURL,
+              let attributes = try? FileManager.default.attributesOfItem(
+                  atPath: executable.path),
+              let modified = attributes[.modificationDate] as? Date else {
+            return "unknown"
+        }
+        return ISO8601DateFormatter().string(from: modified)
+    }()
+}
+
 struct DaemonHandshake {
     private let bridgeToken: String
     private var currentConnection: UUID?
@@ -75,6 +90,7 @@ struct DaemonHandshake {
         return [
             "type": "client_hello",
             "role": "app",
+            "app_build": AppBuildIdentity.stamp,
             "proof": BridgeAuthentication.proof(
                 token: bridgeToken,
                 context: BridgeAuthentication.webSocketContext,
@@ -141,6 +157,14 @@ struct NativeRequestReplayGuard {
         lastSequence = sequence
         requestIDs.insert(requestID)
         return true
+    }
+}
+
+/// Wire-safe gesture identity: one ID per physical PTT press, shared by both
+/// edges so the daemon can correlate down and up without inferring pairs.
+enum PttGesture {
+    static func newID() -> String {
+        UUID().uuidString.lowercased()
     }
 }
 
@@ -245,14 +269,28 @@ final class DaemonClient {
     }
 
     /// Sends a ui_ack after the render pass that first shows `moment`
-    /// ("listening" | "thinking" | "chip"). The console calls this today; the
-    /// island render wire that calls it lands with the per-state IslandView.
+    /// ("listening" | "thinking" | "approval" | "terminal" | "chip").
     func sendUiAck(moment: String) {
         send([
             "type": "ui_ack",
             "moment": moment,
             "client_ts_ms": Self.monotonicMs(),
         ])
+    }
+
+    /// Which ui_ack moments a phase transition produces on the primary
+    /// surface. State application and the SwiftUI render for it share one
+    /// main-actor turn, so acking at apply time stamps the same pass the
+    /// user sees.
+    nonisolated static func ackMoments(from oldPhase: String, to newPhase: String) -> [String] {
+        guard oldPhase != newPhase else { return [] }
+        switch newPhase {
+        case "listening": return ["listening"]
+        case "thinking": return ["thinking"]
+        case "awaiting_approval": return ["approval"]
+        case "done", "failed": return ["terminal"]
+        default: return []
+        }
     }
 
     private func handleAuthenticatedSideband(
@@ -394,7 +432,11 @@ final class DaemonClient {
                 return false
             }
             handleAuthenticatedSideband(msg, on: task, connection: connection)
+            let oldPhase = state.phase
             state.apply(msg)
+            for moment in Self.ackMoments(from: oldPhase, to: state.phase) {
+                sendUiAck(moment: moment)
+            }
         }
         return true
     }

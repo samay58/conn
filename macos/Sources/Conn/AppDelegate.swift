@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var island: IslandController?
     var primarySurface: ConnSurface!
     private var panelAutoReflectPhases = true
+    private var currentGestureID: String?
     private let bridgeToken = BridgeToken.generate()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -43,11 +44,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         hotkey.onDown = { [weak self] in
-            self?.client.send(["type": "ptt_down"])
-            self?.primarySurface.show()
+            guard let self else { return }
+            let gesture = PttGesture.newID()
+            self.currentGestureID = gesture
+            self.client.send(["type": "ptt_down", "source": "app_hotkey",
+                              "gesture_id": gesture])
+            self.primarySurface.show()
         }
         hotkey.onUp = { [weak self] in
-            self?.client.send(["type": "ptt_up"])
+            guard let self else { return }
+            let gesture = self.currentGestureID ?? PttGesture.newID()
+            self.currentGestureID = nil
+            self.client.send(["type": "ptt_up", "source": "app_hotkey",
+                              "gesture_id": gesture])
         }
         hotkey.start()
 
@@ -58,6 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkey.stop()
+        client.send(["type": "shutdown"])
+        // Give the shutdown frame a moment to flush before the socket dies;
+        // the daemon's parent-loss lease is the backstop if this races.
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
         client.close()
     }
 

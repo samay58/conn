@@ -557,11 +557,13 @@ class ToolHarness:
                 summary="native_plan_invalid",
             ))
 
+        plan_timeout = plan.get("timeout_ms")
         response = await bridge.execute_action(
             fingerprint,
             turn_id=call.turn_id or "",
             response_epoch=int(call.response_epoch or 0),
             observation_epoch=int(call.observation_epoch or 0),
+            timeout_ms=plan_timeout if isinstance(plan_timeout, int) else None,
         )
         duration_ms = int((time.monotonic() - started) * 1000)
         if isinstance(response.data, dict):

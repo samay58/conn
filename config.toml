@@ -24,6 +24,8 @@ hard_stop = true          # false downgrades the cap to warn-only
 idle_timeout_s = 300      # close the upstream session after this long in IDLE
 done_flash_ms = 1500      # how long the "done" state lingers before returning to idle
 tap_threshold_ms = 300    # a press shorter than this is an accidental tap: discarded, zero spend
+reconnect_window_s = 300  # keep a dropped upstream session visibly reconnecting for five minutes
+reconnect_max_delay_s = 30 # cap exponential retry spacing so recovery stays responsive
 
 [apps]
 allowlist = ["Obsidian", "Google Chrome", "Safari", "Finder", "Notes", "Terminal"]

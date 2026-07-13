@@ -30,5 +30,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["hardware: needs a live audio device or TCC grants; skipped by default"]
-addopts = "-m 'not hardware'"
+markers = [
+    "hardware: needs a live audio device or TCC grants; skipped by default",
+    "lifecycle: spawns real daemon processes on a test port; run with -m lifecycle",
+]
+addopts = "-m 'not hardware and not lifecycle'"

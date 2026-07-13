@@ -255,7 +255,7 @@ class TestRegistryShape:
 
     def test_every_spec_exports_valid_openai_tool(self):
         registry = build_registry()
-        exported = export_openai(registry)
+        exported = export_openai(registry, include_diagnostic=True)
         assert len(exported) == len(registry)
         for tool in exported:
             assert tool["type"] == "function"

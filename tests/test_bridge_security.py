@@ -480,3 +480,28 @@ def test_console_unverified_outcomes_have_explicit_non_green_styles() -> None:
         selector = f'.ptt[data-phase="done"][data-outcome="{outcome}"]'
         assert selector in stylesheet
     assert "background: var(--red-soft);" in stylesheet
+
+
+def test_app_hello_build_identity_is_traced() -> None:
+    app = _ServerApp()
+    logged: list[tuple[str, dict]] = []
+
+    class _Trace:
+        def log(self, kind, **payload):
+            logged.append((kind, payload))
+
+    app.trace = _Trace()
+    client = TestClient(build_server(app))
+    with client.websocket_connect("/ws") as websocket:
+        challenge = websocket.receive_json()["challenge"]
+        websocket.send_json({
+            "type": "client_hello",
+            "role": "app",
+            "app_build": "2026-07-13T01:00:00Z",
+            "proof": _proof("correct", "conn-app-websocket-v1", challenge),
+        })
+        assert websocket.receive_json()["type"] == "hello"
+
+    kinds = dict(logged)
+    assert "app_client" in kinds
+    assert kinds["app_client"]["build"] == "2026-07-13T01:00:00Z"

@@ -86,7 +86,6 @@ def test_native_plan_preparation_precedes_policy_gate(harness, ctx):
                 "ref": "element_2",
             },
             "payload": None,
-            "desired_effect": None,
             "risk": "act_confirm",
             "strategy_ceiling": "semantic_only",
             "timeout_ms": 1200,
@@ -159,6 +158,7 @@ def test_prepared_action_executes_only_approved_fingerprint(harness, ctx):
             "turn_id": "turn_current",
             "response_epoch": 3,
             "observation_epoch": 7,
+            "timeout_ms": None,
         },
     )]
 
@@ -447,6 +447,10 @@ def test_realtime_keeps_only_one_semantic_context_item():
     async def scenario():
         await adapter.upsert_semantic_context("app=Safari window=Docs")
         first_id = adapter._semantic_item_id
+        # The server acknowledges the create; only acknowledged items may be
+        # deleted (R1 ledger rule).
+        adapter._normalize({"type": "conversation.item.created",
+                            "item": {"id": first_id}})
         await adapter.send_tool_result(
             "call_snapshot",
             json.dumps({
@@ -459,10 +463,8 @@ def test_realtime_keeps_only_one_semantic_context_item():
     first_id = asyncio.run(scenario())
 
     assert adapter.sent[0]["type"] == "conversation.item.create"
-    assert adapter.sent[1] == {
-        "type": "conversation.item.delete",
-        "item_id": first_id,
-    }
+    assert adapter.sent[1]["type"] == "conversation.item.delete"
+    assert adapter.sent[1]["item_id"] == first_id
     assert adapter.sent[2]["item"]["type"] == "function_call_output"
     assert adapter._semantic_item_id == adapter.sent[2]["item"]["id"]
 
@@ -502,9 +504,18 @@ def test_prompt_treats_only_verified_as_completion():
     from conn.prompt import INSTRUCTIONS
 
     assert "only when the result outcome is verified" in INSTRUCTIONS
-    assert "sent but not confirmed" in INSTRUCTIONS
+    assert "safe_user_message" in INSTRUCTIONS
     assert "Retry only when the result says retry_safe=true" in INSTRUCTIONS
+    assert "never repeat the same failed one" in INSTRUCTIONS
     assert "at most one state-changing computer action" in INSTRUCTIONS
+
+
+def test_prompt_declines_destructive_requests_before_inspection():
+    from conn.prompt import INSTRUCTIONS
+
+    assert "Delete, remove, close without saving, and overwrite" in INSTRUCTIONS
+    assert "Do not call tools for them" in INSTRUCTIONS
+    assert '"I can\'t help with destructive actions yet."' in INSTRUCTIONS
 
 
 def test_native_ambiguous_plan_is_preserved_as_predispatch_outcome(harness, ctx):

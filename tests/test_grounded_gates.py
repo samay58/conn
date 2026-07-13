@@ -432,7 +432,7 @@ def test_verified_live_main_does_not_construct_python_ax_store(monkeypatch, tmp_
         async def stop(self):
             return None
 
-    async def fake_serve(app):
+    async def fake_serve(app, shutdown_event=None):
         return None
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")

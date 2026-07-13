@@ -12,6 +12,10 @@ enum NativeActionOperation: String, CaseIterable {
     case press
     case menu = "invoke_menu"
     case keyChord = "key_chord"
+    // Bounded semantic intent: the caller names a goal (create a tab, select
+    // the next document); the engine lowers it onto one of the operations
+    // above from live affordances before any plan exists.
+    case semanticIntent = "semantic_intent"
 
     init?(wireValue: String) {
         let aliases: [String: Self] = [
@@ -370,11 +374,15 @@ struct NativeActionPayload {
     var keys: [String]
     var menuPath: [String]
     var submit: Bool
+    var intentFamily: String?
+    var intentKind: String?
+    var intentRelation: String?
 
     static func parse(_ value: Any?) -> Self {
         if let text = value as? String {
             return Self(text: text, bundleID: nil, teamID: nil, appName: nil, url: nil,
-                        direction: nil, amount: nil, keys: [], menuPath: [], submit: false)
+                        direction: nil, amount: nil, keys: [], menuPath: [], submit: false,
+                        intentFamily: nil, intentKind: nil, intentRelation: nil)
         }
         let dictionary = value as? [String: Any] ?? [:]
         return Self(
@@ -388,7 +396,10 @@ struct NativeActionPayload {
             keys: dictionary["keys"] as? [String] ?? [],
             menuPath: dictionary["menu_path"] as? [String]
                 ?? dictionary["titles"] as? [String] ?? [],
-            submit: dictionary["submit"] as? Bool ?? false
+            submit: dictionary["submit"] as? Bool ?? false,
+            intentFamily: dictionary["family"] as? String,
+            intentKind: dictionary["kind"] as? String,
+            intentRelation: dictionary["relation"] as? String
         )
     }
 
@@ -398,6 +409,7 @@ struct NativeActionPayload {
             direction ?? "", amount.map { String($0) } ?? "",
             keys.joined(separator: ","), menuPath.joined(separator: ">"),
             String(submit),
+            intentFamily ?? "", intentKind ?? "", intentRelation ?? "",
         ].joined(separator: "\u{1f}"))
     }
 }

@@ -8,6 +8,7 @@ response.create is the only spend trigger and every one flows through _exec.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import shutil
@@ -20,9 +21,9 @@ from .ax_bridge import AxBridge
 from .config import Config
 from .cost import CostMeter
 from .events import (
-    ApprovalDecision, BudgetOverride, BudgetTripped, CancelResponse,
+    AckTurn, ApprovalDecision, BudgetOverride, BudgetTripped, CancelResponse,
     ClearInput, CloseMic, Command, CommitInput, CreateResponse, EndSession,
-    ExecTool, FlushPlayback, MachineInput, ModelSpeaking, OpenMic,
+    ExecTool, FlushPlayback, Gate, MachineInput, ModelSpeaking, OpenMic,
     PlaybackDrained, PttDown, PttUp, QueueApproval, ResetTick, ResponseDone,
     RejectInput, ResponseCancelled, ResponseProvenance, SendText, SendToolResult, TextCommand,
     ToolFinished, ToolProposed, UserStop, WatchdogTick, WsFailed,
@@ -36,9 +37,23 @@ from .realtime.base import (
 from .state import Phase, ResponseProvenanceLedger, SessionStateMachine
 from .provenance import TurnContext
 from .tools.harness import ToolHarness
-from .trace import TraceWriter, write_receipt
+from .trace import TraceWriter, runtime_identity, write_receipt
 
 WATCHDOG_INTERVAL_S = 60
+RECONNECT_INITIAL_DELAY_S = 0.5
+
+
+def reconnect_delays(*, window_s: float, initial_s: float,
+                     max_delay_s: float):
+    elapsed = 0.0
+    delay = initial_s
+    while elapsed < window_s:
+        wait = min(delay, window_s - elapsed)
+        if wait <= 0:
+            return
+        yield wait
+        elapsed += wait
+        delay = min(delay * 2, max_delay_s)
 
 
 class ConnApp:
@@ -62,7 +77,10 @@ class ConnApp:
         self.harness.ctx.ax_reader = self.ax_bridge
         self.publisher: Callable[[dict], None] | None = None
         self._pump_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task | None = None
         self._spoke_this_response = False
+        self._response_transcript: list[str] = []
+        self._response_modality: str | None = None
         self._warned_budget = False
         self._closing = False
         self._idle_timer: asyncio.TimerHandle | None = None
@@ -77,13 +95,16 @@ class ConnApp:
         self._tool_tasks: set[asyncio.Task] = set()
         self._context_task: asyncio.Task | None = None
         self._stopping = False
+        self._last_gesture_id: str | None = None
+        self._app_build: str | None = None
 
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         self.ax_bridge.bind(self._loop, self.publish)
         self.trace.log("session_start", session_id=self.session_id,
-                       model=self.cfg.realtime.model, demo=not self.adapter_is_live())
+                       model=self.cfg.realtime.model, demo=not self.adapter_is_live(),
+                       **runtime_identity(self.cfg.source_path))
         await self.adapter.connect()
         self._pump_task = asyncio.ensure_future(self._pump())
         self._arm_idle_timer()
@@ -112,10 +133,19 @@ class ConnApp:
     async def stop(self) -> None:
         self._closing = True
         self._stopping = True
+        # A response abandoned mid-utterance still gets its words on the
+        # record, and never bleeds into the next session's transcript.
+        self._flush_model_transcript(self._current_response_id,
+                                     status="abandoned")
         self.approvals.clear()
         if self._context_task and not self._context_task.done():
             self._context_task.cancel()
         await self._quiesce_tool_tasks()
+        reconnect_task = self._reconnect_task
+        if reconnect_task and not reconnect_task.done():
+            reconnect_task.cancel()
+            await asyncio.gather(reconnect_task, return_exceptions=True)
+        self._reconnect_task = None
         if self._pump_task:
             self._pump_task.cancel()
         if self._watchdog_timer:
@@ -148,6 +178,8 @@ class ConnApp:
         self.cost = CostMeter(pricing=self.cfg.pricing, budget=self.cfg.budget)
         self._warned_budget = False
         self._spoke_this_response = False
+        self._response_transcript.clear()
+        self._response_modality = None
         self._turn_count = 0
         self._phase_since = time.monotonic()
         self._current_response_id = None
@@ -155,6 +187,7 @@ class ConnApp:
         self._turn_context = None
         self._tool_tasks.clear()
         self._context_task = None
+        self._reconnect_task = None
         self._stopping = False
         await self.start()
 
@@ -166,10 +199,14 @@ class ConnApp:
             return
         loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self.dispatch(ev)))
 
-    async def on_ptt_down(self, client_ts_ms: int | None = None, source: str = "hotkey") -> None:
-        self.trace.log("ptt_down", client_ts_ms=client_ts_ms, source=source)
-        await self._ensure_connected()
+    async def on_ptt_down(self, client_ts_ms: int | None = None, source: str = "hotkey",
+                          gesture_id: str | None = None) -> None:
         starts_turn = self.machine.phase in (Phase.IDLE, Phase.DONE, Phase.SPEAKING)
+        # Duplicate and rejected edges stay on the record (evidence truth),
+        # but only a turn-starting press is a latency-slicing boundary.
+        self.trace.log("ptt_down", client_ts_ms=client_ts_ms, source=source,
+                       gesture_id=gesture_id, starts_turn=starts_turn)
+        await self._ensure_connected()
         if starts_turn:
             self._start_turn_context()
         await self.dispatch(PttDown(client_ts_ms=client_ts_ms))
@@ -178,10 +215,14 @@ class ConnApp:
                 self._inject_turn_context(self._turn_context)
             )
 
-    async def on_ptt_up(self, client_ts_ms: int | None = None, source: str = "hotkey") -> None:
-        self.trace.log("ptt_up", client_ts_ms=client_ts_ms, source=source)
+    async def on_ptt_up(self, client_ts_ms: int | None = None, source: str = "hotkey",
+                        gesture_id: str | None = None) -> None:
+        self.trace.log("ptt_up", client_ts_ms=client_ts_ms, source=source,
+                       gesture_id=gesture_id)
+        self._last_gesture_id = gesture_id
+        voiced = self.audio.window_voiced() if self.audio else None
         await self._finish_context_injection()
-        await self.dispatch(PttUp(client_ts_ms=client_ts_ms))
+        await self.dispatch(PttUp(client_ts_ms=client_ts_ms, voiced=voiced))
 
     async def on_text(self, text: str) -> None:
         text = text.strip()
@@ -240,6 +281,34 @@ class ConnApp:
         only, no machine input: the daemon does not act on UI paint timing."""
         self.trace.log("ui_ack", moment=moment, client_ts_ms=client_ts_ms)
 
+    async def on_shutdown_request(self, reason: str) -> None:
+        """Authenticated app asked the daemon to exit (normal app quit). The
+        signal is wired by __main__; without one this is trace-only."""
+        self.trace.log("shutdown_request", reason=reason)
+        signal = getattr(self, "shutdown_signal", None)
+        if signal is not None:
+            signal()
+
+    async def on_report_last_command(self) -> str | None:
+        """One-keypress sanitized failure artifact for the last turn. Local
+        file only; no network. Returns the path for the confirmation toast."""
+        from .report import write_last_command_report
+
+        try:
+            path = write_last_command_report(
+                self.cfg.data_dir, self.session_id, self.trace.read(),
+                config_path=self.cfg.source_path, receipt=self.cost.receipt(),
+            )
+        except OSError as exc:
+            self.trace.log("report_failed", error=str(exc))
+            self.publish({"type": "toast", "level": "error",
+                          "text": "Could not write the command report."})
+            return None
+        self.trace.log("report_written", path=str(path))
+        self.publish({"type": "toast", "level": "info",
+                      "text": f"Report saved: {path}"})
+        return str(path)
+
 
     async def dispatch(self, ev: MachineInput) -> None:
         if isinstance(ev, PlaybackDrained):
@@ -259,6 +328,7 @@ class ConnApp:
                         or (new is Phase.THINKING and old in (Phase.IDLE, Phase.DONE)))
         if is_turn_start:
             self._turn_count += 1
+            self.cost.user_turns = self._turn_count
         self.trace.log("phase_change", from_phase=old.value, to_phase=new.value,
                        turn=self._turn_count)
         self._phase_since = time.monotonic()
@@ -329,6 +399,14 @@ class ConnApp:
                     await self.adapter.close()
             case RejectInput(reason=reason):
                 self.publish({"type": "reject_input", "reason": reason})
+            case AckTurn(accepted=accepted, reason=reason):
+                self.trace.log("turn_ack", accepted=accepted, reason=reason,
+                               gesture_id=self._last_gesture_id)
+                self.publish({"type": "turn_ack", "accepted": accepted,
+                              "reason": reason})
+                if not accepted:
+                    self.publish({"type": "reject_input",
+                                  "reason": reason or "rejected"})
         return ok
 
     async def _send_or_disconnect(self, coro) -> bool:
@@ -370,19 +448,27 @@ class ConnApp:
     async def _run_tool(self, call) -> None:
         result = await self.harness.run(call)
         if result.action_outcome is not None:
+            self.cost.count_action_outcome(result.action_outcome.value)
             try:
-                dispatch_state = json.loads(result.output).get("dispatch_state")
+                receipt_payload = json.loads(result.output)
             except (TypeError, ValueError):
-                dispatch_state = None
-            if dispatch_state in {"dispatched", "possibly_dispatched"}:
+                receipt_payload = {}
+            if not isinstance(receipt_payload, dict):
+                receipt_payload = {}
+            self._record_support_envelope(call, receipt_payload)
+            if receipt_payload.get("dispatch_state") in {
+                "dispatched", "possibly_dispatched",
+            }:
                 self._observation_epoch += 1
                 if self._turn_context is not None:
                     self._turn_context = self._turn_context.invalidate_observation()
         self.cost.tool_calls += 1
         if call.name == "computer_screenshot" and result.ok:
             self.cost.screenshots += 1
+        artifact = self._write_tool_result_artifact(call, result)
         self.trace.log("tool_result", call_id=call.call_id, name=call.name,
-                       ok=result.ok, output=result.output[:500])
+                       ok=result.ok, output=result.output[:500],
+                       output_artifact=artifact)
         if result.action_trace is not None:
             self.trace.log(
                 "action_transaction",
@@ -447,9 +533,13 @@ class ConnApp:
                 await self._mark_speaking("audio")
             case RtTranscriptDelta(text=text):
                 self.publish({"type": "transcript_delta", "text": text})
+                self._response_transcript.append(text)
+                self._response_modality = self._response_modality or "audio"
                 await self._mark_speaking("audio")
             case RtTextDelta(text=text):
                 self.publish({"type": "transcript_delta", "text": text})
+                self._response_transcript.append(text)
+                self._response_modality = self._response_modality or "text"
                 await self._mark_speaking("text")
             case RtInputTranscript(text=text):
                 self.trace.log("input", mode="voice", text=text)
@@ -458,6 +548,9 @@ class ConnApp:
                 call = await self.harness.prepare_call(
                     call_id, name, argv, response_provenance
                 )
+                self.cost.tool_proposals += 1
+                if call.gate is Gate.BLOCKED:
+                    self.cost.blocked_proposals += 1
                 self.trace.log("tool_proposed", call_id=call_id, name=name,
                                gate=call.gate.value, preview=call.preview,
                                arguments=self.harness.trace_arguments(
@@ -470,6 +563,7 @@ class ConnApp:
                                plan=call.prepared_plan)
                 await self.dispatch(ToolProposed(call=call))
             case RtResponseDone(usage=usage, had_tool_calls=had_calls):
+                self._flush_model_transcript(response_id, status="completed")
                 if usage:
                     turn = self.cost.ingest(usage)
                     self.trace.log("response_done", usage=usage,
@@ -484,16 +578,87 @@ class ConnApp:
                     self._response_provenance.retire(response_id)
                 await self._maybe_drain()
             case RtResponseCancelled():
+                self._flush_model_transcript(response_id, status="cancelled")
                 await self.dispatch(ResponseCancelled())
                 if response_id:
                     self._response_provenance.retire(response_id)
-            case RtError(message=msg, fatal=fatal):
-                self.trace.log("upstream_error", message=msg, fatal=fatal)
+            case RtError(message=msg, fatal=fatal, related=related):
+                self.trace.log("upstream_error", message=msg, fatal=fatal,
+                               related=related)
                 if fatal:
                     await self._handle_disconnect(msg)
             case RtClosed(reason=reason):
                 if not self._closing:
                     await self._handle_disconnect(reason)
+
+    def _record_support_envelope(self, call, receipt_payload: dict) -> None:
+        """Empirical support history, recording only: reliability keyed by
+        bundle, app build, tool, target role, and witness family. History
+        can later downgrade exposure; it never upgrades permission, target
+        certainty, or verification."""
+        try:
+            plan = call.prepared_plan or {}
+            record = {
+                "ts": round(time.time(), 3),
+                "session_id": self.session_id,
+                "tool": call.name,
+                "bundle_id": plan.get("bundle_id"),
+                "app_build": self._app_build,
+                "target_role": plan.get("target_role"),
+                "witness": [p.get("kind")
+                            for p in (plan.get("predicates") or [])
+                            if isinstance(p, dict)],
+                "strategy": receipt_payload.get("strategy"),
+                "outcome": receipt_payload.get("outcome"),
+                "dispatch_state": receipt_payload.get("dispatch_state"),
+            }
+            out = self.cfg.data_dir / "support" / "envelope.jsonl"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with open(out, "a") as handle:
+                handle.write(json.dumps(record, default=str) + "\n")
+        except OSError as exc:
+            self.trace.log("support_envelope_failed", error=str(exc))
+
+    def _write_tool_result_artifact(self, call, result) -> str | None:
+        """The trace keeps a 500-character preview; the linked file carries
+        the fuller envelope, bounded at 64KB. Arguments go through the same
+        hashing redaction as tool_proposed. Secure values, clipboard bodies,
+        and secrets never enter outputs, but read results (vault snippets,
+        snapshot renders) appear in full here; the file is local and
+        gitignored, and Report Last Command embeds only the trace preview."""
+        try:
+            day = time.strftime("%Y-%m-%d")
+            out_dir = self.cfg.data_dir / "tool-results" / day / self.session_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            call_digest = hashlib.sha256(call.call_id.encode()).hexdigest()[:24]
+            path = out_dir / f"call-{call_digest}.json"
+            path.write_text(json.dumps({
+                "session_id": self.session_id,
+                "call_id": call.call_id,
+                "name": call.name,
+                "arguments": self.harness.trace_arguments(call.name, call.arguments),
+                "ok": result.ok,
+                "output": result.output[:65536],
+                "turn_id": call.turn_id,
+                "response_epoch": call.response_epoch,
+                "observation_epoch": call.observation_epoch,
+            }, indent=2))
+            return str(path)
+        except OSError as exc:
+            self.trace.log("tool_result_artifact_failed", error=str(exc))
+            return None
+
+    def _flush_model_transcript(self, response_id: str | None, *, status: str) -> None:
+        """The exact words the user heard (or read), one trace event per
+        response. A modality-only marker cannot audit completion language;
+        this can."""
+        text = "".join(self._response_transcript)
+        modality = self._response_modality
+        self._response_transcript.clear()
+        self._response_modality = None
+        if text:
+            self.trace.log("model_transcript", response_id=response_id,
+                           text=text, modality=modality, status=status)
 
     async def _mark_speaking(self, modality: str) -> None:
         if not self._spoke_this_response:
@@ -519,6 +684,24 @@ class ConnApp:
                                   f"(warn threshold ${self.cfg.budget.warn_at_usd:.2f})"})
 
     async def _handle_disconnect(self, reason: str) -> None:
+        if self._closing:
+            return
+        task = self._reconnect_task
+        if task is None or task.done():
+            task = asyncio.create_task(self._reconnect(reason))
+            self._reconnect_task = task
+        else:
+            self.trace.log("disconnect_coalesced", reason=reason)
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if not self._closing:
+                raise
+        finally:
+            if task.done() and self._reconnect_task is task:
+                self._reconnect_task = None
+
+    async def _reconnect(self, reason: str) -> None:
         await self.dispatch(WsFailed(reason=reason))
         self.publish({"type": "toast", "level": "error",
                       "text": "Connection lost. Reconnecting with a fresh session; "
@@ -528,20 +711,49 @@ class ConnApp:
                 await self.adapter.close()
             except Exception as e:
                 self.trace.log("adapter_close_failed", error=str(e))
-        for delay in (0.5, 1.0, 2.0, 4.0):
+        delays = iter(reconnect_delays(
+            window_s=self.cfg.session.reconnect_window_s,
+            initial_s=RECONNECT_INITIAL_DELAY_S,
+            max_delay_s=self.cfg.session.reconnect_max_delay_s,
+        ))
+        delay = 0.0
+        attempt = 0
+        while not self._closing:
+            if delay:
+                self.trace.log("reconnect_wait", attempt=attempt + 1,
+                               delay_s=delay)
+                await asyncio.sleep(delay)
+                if self._closing:
+                    return
+            attempt += 1
             try:
                 await self.adapter.connect()
                 self._pump_task = asyncio.ensure_future(self._pump())
                 await self.dispatch(WsReconnected())
-                self.trace.log("upstream_reconnected")
+                self.trace.log("upstream_reconnected", attempt=attempt)
                 return
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                self.trace.log("reconnect_failed", error=str(e))
-                await asyncio.sleep(delay)
+                self.trace.log("reconnect_failed", attempt=attempt,
+                               error=str(e))
+                if self.adapter.connected:
+                    try:
+                        await self.adapter.close()
+                    except Exception as close_error:
+                        self.trace.log("adapter_close_failed",
+                                       error=str(close_error))
+            try:
+                delay = next(delays)
+            except StopIteration:
+                break
         self.publish({"type": "toast", "level": "error",
-                      "text": "Could not reconnect. Press stop and restart."})
+                      "text": "Conn is still offline. Quit and reopen Conn."})
 
     async def _ensure_connected(self) -> None:
+        reconnect_task = self._reconnect_task
+        if reconnect_task is not None and not reconnect_task.done():
+            await asyncio.shield(reconnect_task)
         if not self.adapter.connected:
             await self.adapter.connect()
             self._pump_task = asyncio.ensure_future(self._pump())

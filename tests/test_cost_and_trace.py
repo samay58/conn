@@ -50,11 +50,11 @@ class TestCostMeter:
         meter.ingest(USAGE_TURN)
         meter.tool_calls = 3
         r = meter.receipt()
-        assert r["turns"] == 2
+        assert r["model_responses"] == 2
         assert r["tokens"]["text_in"] == 320
         assert r["tokens"]["audio_out"] == 80
         assert r["tool_calls"] == 3
-        assert len(r["per_turn_usd"]) == 2
+        assert len(r["per_response_usd"]) == 2
         assert r["estimated_usd"] > 0
 
 

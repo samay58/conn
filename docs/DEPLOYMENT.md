@@ -1,6 +1,6 @@
 # Deployment: running Conn on another Mac
 
-Updated 2026-07-12 for the verified semantic action engine.
+Updated 2026-07-13 after the voice-first reliability program.
 
 Conn uses two local processes:
 
@@ -106,8 +106,8 @@ codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
 build when none can expand SwiftUI macros. Install full Xcode or newer Command
 Line Tools instead of editing around the macro requirement.
 
-Current reference results on the primary Mac are 461 Python tests passed with
-2 existing dependency warnings, 13 of 13 evals passed, and 111 Swift tests
+Current reference results on the primary Mac are 573 Python tests passed with
+2 existing dependency warnings, 14 of 14 evals passed, and 144 Swift tests
 passed. Counts may grow. Every test and eval must be green on the new Mac.
 
 ## Grant privacy permissions
@@ -173,16 +173,16 @@ receipt and that the active Conn surface says:
 Run the 30-command product checklist in `docs/LIVE_EVAL_CHECKLIST.md` before
 calling the new machine accepted for daily use.
 
-Current known issue: quitting Conn.app leaves its token-bound daemon running.
-Do not use quit and reopen as a recovery path until authenticated shutdown or
-orphan exit lands. For development, stop both Conn.app and its daemon together.
+Conn.app owns its daemon through an authenticated lease. Quit, crash relaunch,
+and orphan exit recovery are mechanically covered. Never kill or adopt an
+unknown process on Conn's port.
 
 ## Deployment checklist
 
 - [ ] Full Python suite green
-- [ ] 13 of 13 harness evals green
+- [ ] Current harness eval suite green
 - [ ] Doctor reviewed with no substantive failure
-- [ ] 111 Swift tests or the current larger suite green
+- [ ] Current Swift suite green
 - [ ] Release app builds with a macro-capable toolchain
 - [ ] `Conn Dev Signing` is valid
 - [ ] Installed app passes strict signature verification

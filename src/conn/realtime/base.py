@@ -67,6 +67,7 @@ class RtResponseCancelled:
 class RtError:
     message: str
     fatal: bool = False
+    related: str | None = None  # client event that caused a nonfatal error
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,95 +1,64 @@
-# Next session: close restart, then prove operations
+# Next session: human acceptance of verified outcomes
 
-Updated 2026-07-12.
+Updated 2026-07-13. The reliability program and the verified-outcome follow-up
+are mechanically green. Python, Swift, harness, live intent, reconnect, and
+data-hygiene gates are recorded in `docs/STATE-OF-PLAY.md`.
 
-## Start here
+## Outcome
 
-Current build is signed, installed, and mechanically green. External-keyboard
-push-to-talk, app authentication, Accessibility, and current-build fixture
-smoke work. Do not spend the next session on visual control, island polish,
-sound, MCP, or more architecture.
+Supply the human evidence automation cannot: compare two signed voice receipts
+to the visible app result, check barge-in acoustically, complete the safe manual
+drill, and begin the 30-command product gate.
 
-Installed app uses left-side Control + Option for push-to-talk by default.
-Change it from Conn menu, Push-to-Talk Key, if another binding is preferable.
+## Steps
 
-First fix authenticated restart. Normal Conn quit leaves its daemon alive. The
-next app launch has a fresh token, refuses the old daemon, and stays offline.
-Do not weaken authentication or kill an unproven port owner. Add a bounded
-authenticated shutdown or daemon orphan-exit path, then prove 20 consecutive
-quit and reopen cycles.
+1. Launch the installed `/Applications/Conn.app`. If an older copy is already
+   running, relaunch it by hand so the newly installed build is active. Do not
+   stop a daemon or process unless its ownership is clear.
 
-After restart passes, build the real fixture-backed semantic matrix.
+2. Run the two create commands against scratch content:
+   - In Safari, say `Open a new tab`. Accept `Done.` only if the receipt is
+     `verified` and a tab visibly appears.
+   - In Notes, say `New note`. Accept `Done.` only if the receipt is `verified`
+     and a blank note visibly appears.
+   - Use `Report Last Command` after any mismatch and retain the artifact.
 
-The matrix must also close one known product gap. Menu commands, raw key
-chords, and submit currently return dispatch-only when their effect leaves the
-original target. Build a causal native witness for those cases. Broad window
-changes and target absence remain insufficient evidence.
+   Targeted native probes already returned `verified` from descendant-role
+   witnesses. Their artifacts still say `visible_confirmation_required`, so
+   these voice runs must supply the independent eye verdict.
 
-Read:
+3. Check barge-in acoustically. Ask a question, interrupt Conn mid-answer with
+   a new command, and confirm the new transcript has no leading fragment of
+   Conn's own speech.
 
-1. `docs/STATE-OF-PLAY.md`
-2. `docs/2026-07-09-verified-action-engine-spec.md`, acceptance bars
-3. `macos/Sources/Conn/DaemonLauncher.swift`
-4. `src/conn/server/http.py`
-5. `src/conn/action_probe.py`
-6. `macos/Sources/ConnActionFixture/`
-7. `macos/Sources/Conn/NativeActionProbeRunner.swift`
+4. Complete `docs/MANUAL-TESTING.md`, including the independent fixture truth
+   checks. Record every receipt-to-eye mismatch, even when the action worked.
 
-## Build the real fixture matrix
+5. Start the 30-command gate in `docs/LIVE_EVAL_CHECKLIST.md` across three work
+   sessions. Daily-driver acceptance still requires zero false completion
+   language and at least 90 percent of supported actions faster than hands or
+   useful while hands are occupied.
 
-Expand `conn --action-probe fixture` from one no-effect press into repeatable
-cases for:
+## Evidence already closed
 
-- immediate and delayed press effects
-- no-effect press
-- toggle and tab selection
-- scroll-to-visible
-- non-secure text entry
-- secure-field refusal
-- duplicate-label ambiguity
-- sibling reorder
-- lazy menu action
-- window create, close, and title change
-- raw key chord with and without a verifiable predicate
+- Safari native create probe: `verified`, dispatched by `ax_menu_action`, bound
+  `AXRadioButton` descendants increased from 2 to 3
+- Notes native create probe: `verified`, dispatched by `ax_menu_action`, bound
+  note-table rows increased
+- full live intent eval: 217 of 219, or 99.1 percent, in
+  `data/intent-evals/2026-07-13/results-1783960836.json`
+- destructive corpus: four of four produced no tool call and the exact
+  one-sentence refusal
+- full Python suite: 573 passed, 3 deselected, with no test-created change to
+  real `data/`
 
-Each case must run through the production native transaction engine. Compare
-its receipt with `ConnActionFixture` truth after the action. The engine must not
-read the truth log.
+## Hard gates
 
-## Turn the matrix into acceptance evidence
-
-Run 1,000 real fixture transactions. Save aggregate counts and latency under
-`data/action-probes/`. Fail the run on any wrong target or false verified
-outcome. Keep the existing in-memory 1,000-loop test as a fast unit stress test.
-
-## Run the live app matrix
-
-After fixture acceptance passes, test supported semantic operations in
-Terminal, Safari, Notes, and Obsidian. Human-visible verdict must be recorded
-separately from engine evidence.
-
-Chrome remains blocked until it is installed and its signing team is proven
-locally. Do not guess the team ID.
-
-## Mechanical gate
-
-```bash
-cd /Users/samaydhawan/conn
-PYTHONPATH=src .venv/bin/python -m pytest tests -q
-PYTHONPATH=src .venv/bin/python -m conn --eval
-PYTHONPATH=src .venv/bin/python -m conn --doctor
-
-cd /Users/samaydhawan/conn/macos
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
-./make-app.sh install
-codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
-
-cd /Users/samaydhawan/conn
-git diff --check
-```
-
-## Stop condition
-
-End the session when fixture acceptance and live matrix results are recorded.
-Do not start the 30-command product gate until the semantic bar passes. Do not
-start visual work until the product gate passes.
+- zero false verified outcomes
+- zero retries after possible dispatch
+- no stale action reaches native execution
+- no production Python AX or input fallback
+- no model-authored effect predicate or raw strategy on ordinary actions
+- no per-app command catalog
+- no unacknowledged context item treated as live
+- no arbitrary process killed or adopted during restart recovery

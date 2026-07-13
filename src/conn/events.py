@@ -72,6 +72,7 @@ class PttDown:
 class PttUp:
     ts_ms: int = field(default_factory=now_ms)
     client_ts_ms: int | None = None
+    voiced: bool | None = None  # audio saw speech energy this window; None when unknowable
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,8 +248,17 @@ class RejectInput:
     reason: str
 
 
+@dataclass(frozen=True, slots=True)
+class AckTurn:
+    """Every PTT release is acknowledged: accepted into a turn, or rejected
+    with a reason the surface can show. An accepted voiced turn is never
+    silently discarded."""
+    accepted: bool
+    reason: str | None = None
+
+
 Command = (
     ClearInput | OpenMic | CloseMic | CommitInput | CreateResponse
     | CancelResponse | FlushPlayback | SendText | ExecTool | QueueApproval
-    | SendToolResult | EndSession | RejectInput
+    | SendToolResult | EndSession | RejectInput | AckTurn
 )

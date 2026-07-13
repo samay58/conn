@@ -28,7 +28,12 @@ def main() -> None:
     parser.add_argument("--demo", action="store_true", help="scripted model, no credentials")
     parser.add_argument("--simulate-tools", action="store_true", help="with --demo: canned tool results, zero side effects")
     parser.add_argument("--doctor", action="store_true", help="run environment checks")
-    parser.add_argument("--eval", action="store_true", help="run the demo eval suite")
+    parser.add_argument("--eval", action="store_true", help="run the harness-only demo eval suite")
+    parser.add_argument(
+        "--intent-eval", nargs="?", const="all", default=None,
+        metavar="LIMIT",
+        help="opt-in live model intent eval over the reviewed corpus; "
+             "optional LIMIT caps the sample (billed API usage)")
     parser.add_argument(
         "--action-probe",
         choices=[
@@ -44,7 +49,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.latency_report:
-        from .latency import format_report, spans
+        from .latency import distributions, format_report, spans
 
         if str(args.latency_report) == "latest":
             cfg = load_config(args.config)
@@ -59,7 +64,7 @@ def main() -> None:
             print(f"trace: {trace_path}")
         else:
             trace_path = Path(args.latency_report)
-        print(format_report(spans(trace_path)))
+        print(format_report(spans(trace_path), distributions(trace_path)))
         return
 
     cfg = load_config(args.config)
@@ -74,6 +79,12 @@ def main() -> None:
         from .evals import run_evals
 
         sys.exit(run_evals(cfg))
+
+    if args.intent_eval:
+        from .intent_eval import run_intent_eval
+
+        limit = None if str(args.intent_eval) == "all" else int(args.intent_eval)
+        sys.exit(run_intent_eval(cfg, limit))
 
     if args.action_probe:
         from .action_probe import PROBE_TARGETS, run_fixture_probe, run_verified_probe
@@ -164,6 +175,21 @@ async def _serve(cfg, args) -> None:
 
         hotkey = wire_hotkey(cfg.hotkeys.ptt, app, loop)
 
+    import os
+
+    from .lifecycle import OwnershipLease
+
+    lease = OwnershipLease.from_environment(os.environ)
+    shutdown_event = asyncio.Event()
+    app.shutdown_signal = shutdown_event.set
+    lease_task = None
+    if lease.bound:
+        def orphaned() -> None:
+            app.trace.log("lifecycle_orphaned", parent_pid=lease.parent_pid,
+                          grace_s=lease.grace_s)
+            shutdown_event.set()
+        lease_task = asyncio.ensure_future(lease.watch(orphaned))
+
     await app.start()
     mode = "demo" if args.demo else "live"
     hk = f"global PTT on {cfg.hotkeys.ptt}" if hotkey else "console PTT only (hold Space)"
@@ -174,8 +200,10 @@ async def _serve(cfg, args) -> None:
     from .server.http import serve
 
     try:
-        await serve(app)
+        await serve(app, shutdown_event)
     finally:
+        if lease_task is not None:
+            lease_task.cancel()
         if hotkey:
             hotkey.stop()
         if audio is not None:

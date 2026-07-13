@@ -278,3 +278,101 @@ remains pending.
 `docs/STATE-OF-PLAY.md` is the canonical current status. This ledger preserves
 historical packet records, including claims later corrected by measured live
 evidence.
+# 2026-07-12 voice-first reliability diagnosis
+
+Live dogfooding overturned the prior execution order. The verified transaction
+kernel remains mechanically sound, but the product control loop is not ready
+for daily use. The latest session recorded 40 upstream errors, two verified
+mutations out of seven proposals, and repeated failure on Notes navigation and
+Safari New Tab.
+
+Approved direction: repair evidence, Realtime item lifecycle, daemon
+ownership, and voice-turn isolation first. Then move ordinary action mechanics
+from the model into a small capability-compiled semantic intent layer. Preserve
+all verified-action invariants. Do not add visual control, broad app command
+catalogs, hidden macros, or repeated security scans.
+
+Source of truth:
+`docs/2026-07-12-voice-first-reliability-spec.md`.
+
+# 2026-07-13 reliability spec adversarial review
+
+Pre-implementation review re-verified the July 12 spec against the session
+artifacts and current source. No material architecture flaw. All causal
+diagnoses confirmed in code: 36-character `ctx_` item IDs with no server
+acknowledgement, rejected creates remembered and later deleted, cancellation
+sent without an active response binding, menu and key-chord schemas inviting
+`desired_effect` that `desiredEffectTargetsAction` rejects for those
+operations, the mutation chain closing on every non-verified outcome, the
+duration-only tap discard, the playback-contaminated pre-roll path, and the
+fixed 2s bridge timeout against native budgets up to 4s.
+
+Corrections folded into the spec, anchored to the first upstream session's
+window because the orphaned daemon kept growing the trace file overnight: 16
+PTT cycles, 41 upstream errors (17 create, of which 2 from the snapshot
+tool-result path, 16 delete, 7 unbound cancels, 1 duration close), and five
+sub-300ms discarded holds. Scope rulings: R4 counterfactual scoring is trace recording only, and
+the support envelope records evidence without runtime suppression until
+failures justify it. Mechanical baseline before first change: 461 Python
+tests, 13 of 13 harness evals, 111 Swift tests, release build and persistent
+signing green.
+
+# 2026-07-13 voice-first reliability implementation
+
+Implemented packets R0 through R8 of the reliability spec in one session
+under TDD, after the adversarial review found no material architecture flaw.
+
+Landed, each with pinned tests: exact assistant transcripts, runtime and app
+build identity, gesture-bound PTT provenance and turn acks, receipts that
+separate user turns, model responses, proposals, blocked proposals, and
+action outcomes, per-turn latency distributions, linked full tool-result
+artifacts, outcome-derived probe filenames, Report Last Command with a
+pipeline-stage classifier, the July 12 replay cassette, an acknowledged
+Realtime item ledger with legal IDs and response-bound cancellation, a strict
+protocol fake (1,000 turns plus the cassette replay, zero errors), a daemon
+ownership lease with graceful shutdown and bounded orphan exit (50 quit, 20
+crash, 3 orphan cycles against real processes), playback-tail pre-roll
+suppression with a synthetic watermark proof, signal-aware short-hold
+acceptance, idempotent duplicate edges, stale-line clearing, the semantic
+intent boundary (desired_effect removed everywhere, raw menu and hotkey tools
+hidden as diagnostics, `computer_create` and `computer_select_relative`
+lowering onto live affordances in the engine), descriptive capability
+reports, ranked-candidate and support-envelope recording, collection and
+window-count witnesses for create, adaptive verification backoff with
+notification hints, bridge deadlines aligned to native budgets, bounded
+recovery (one replan after proven not_dispatched, two compile failures per
+turn, no repeated plan shapes) with safe user messages, a harness-only label
+on the old evals, and an opt-in live intent eval over a 215-item reviewed
+corpus (24 of 25 on the first live sample).
+
+Final counts: 551 Python tests, 138 Swift tests, 13 of 13 harness evals,
+three 100-turn soak sessions clean. Open: live signed-build voice runs, the
+acoustic barge-in check, the real fixture matrix, the full-corpus intent bar,
+menu mark-state witnesses, ref-targeted partial rereads, and the human
+product gate.
+
+# 2026-07-13 verified outcomes and release audit
+
+The first live session on the reliability build exposed two false negatives
+and one native target bug. Safari opened a tab while its receipt said
+`no_effect`; Notes created a note with no witness; empty element titles blocked
+the grounded click fallback.
+
+The follow-up bound Safari verification to tab descendants and Notes
+verification to the unique note table. Target preparation now skips empty
+fallback strings. Live native receipts returned `verified` for Safari and
+Notes, but their independent eye verdicts remain open. Safari caps the first
+tab at `dispatch_only` when no tab collection exists in the baseline.
+
+Destructive requests now stop at the model boundary. The full live intent
+corpus passed 217 of 219 cases. Reconnect recovery runs for five minutes with
+capped exponential spacing, shares one task across disconnect and push-to-talk
+paths, and gives a usable relaunch instruction if it exhausts. Tests use a
+temporary data directory. The debris sweep removed only artifacts tied to
+traces that never reached `session_start`.
+
+Release checks passed: 573 Python tests, 144 Swift tests, 14 of 14 harness
+evals, 50 graceful quit cycles, 20 crash relaunches, 3 orphan exits, release
+build, persistent signature, and unchanged real-data manifest across the full
+Python suite. Human acceptance remains the Safari and Notes eye check, acoustic
+barge-in, the manual drill, and the 30-command product gate.

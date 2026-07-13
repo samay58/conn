@@ -73,7 +73,15 @@ final class AppState: ObservableObject {
             live = msg["live"] as? Bool ?? false
             if let cap = msg["cap_usd"] as? Double { capUSD = cap }
         case "state":
-            phase = msg["phase"] as? String ?? phase
+            let newPhase = msg["phase"] as? String ?? phase
+            if newPhase == "listening", phase != "listening" {
+                // Turn start: stale lines from the last turn never linger
+                // behind the new gesture.
+                userLine = ""
+                modelLine = ""
+                toast = nil
+            }
+            phase = newPhase
             connected = msg["connected"] as? Bool ?? connected
             if msg.keys.contains("last_action_outcome") {
                 lastActionOutcome = msg["last_action_outcome"] as? String

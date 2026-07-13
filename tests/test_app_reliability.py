@@ -13,7 +13,8 @@ import pytest
 from starlette.testclient import TestClient
 
 import conn.app as app_module
-from conn.app import ConnApp
+from conn.app import ConnApp, reconnect_delays
+from conn.config import Config
 from conn.events import (
     Gate, PttDown, PttUp, TextCommand, ToolCall, ToolProposed,
 )
@@ -48,8 +49,10 @@ class BrokenAdapter:
         self.connected = True
         self.break_method = break_method
         self.close_count = 0
+        self.connect_count = 0
 
     async def connect(self):
+        self.connect_count += 1
         raise RuntimeError("connect always fails in this stub")
 
     async def close(self):
@@ -86,6 +89,19 @@ class BrokenAdapter:
         yield  # pragma: no cover -- never reached, keeps this an async generator
 
 
+class GatedReconnect(BrokenAdapter):
+    def __init__(self):
+        super().__init__("send_text")
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def connect(self):
+        self.connect_count += 1
+        self.entered.set()
+        await self.release.wait()
+        self.connected = True
+
+
 class TestSendFailureDisconnect:
     @pytest.mark.parametrize("break_method", ["commit_input", "create_response"])
     def test_ptt_turn_send_failure_lands_in_failed_not_thinking(
@@ -106,6 +122,132 @@ class TestSendFailureDisconnect:
         assert app.machine.phase is Phase.FAILED
         assert app.machine.phase is not Phase.THINKING
 
+
+class TestReconnectBackoff:
+    @pytest.mark.parametrize("field", ["reconnect_window_s",
+                                        "reconnect_max_delay_s"])
+    def test_reconnect_timings_must_be_positive(self, field):
+        with pytest.raises(ValueError):
+            Config(session={field: 0})
+
+    def test_schedule_retries_for_five_minutes_with_a_thirty_second_cap(self):
+        delays = list(reconnect_delays(window_s=300.0, initial_s=0.5,
+                                       max_delay_s=30.0))
+
+        assert delays[:7] == [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0]
+        assert max(delays) == 30.0
+        assert sum(delays) == pytest.approx(300.0)
+
+    def test_machine_stays_failed_until_a_late_reconnect_succeeds(
+            self, cfg, ctx, monkeypatch):
+        sleeps = []
+
+        async def record_sleep(delay):
+            sleeps.append(delay)
+
+        monkeypatch.setattr(app_module.asyncio, "sleep", record_sleep)
+
+        class EventuallyConnects(BrokenAdapter):
+            def __init__(self):
+                super().__init__("send_text")
+                self.phase_during_connect = []
+                self.app = None
+
+            async def connect(self):
+                self.connect_count += 1
+                self.phase_during_connect.append(self.app.machine.phase)
+                if self.connect_count < 8:
+                    raise RuntimeError("network still unavailable")
+                self.connected = True
+
+        async def run():
+            harness = ToolHarness(build_registry(), cfg, ctx,
+                                  executors=FAKE_EXECUTORS)
+            adapter = EventuallyConnects()
+            app = ConnApp(cfg, adapter, harness)
+            adapter.app = app
+            app.publisher = lambda m: None
+            app._loop = asyncio.get_running_loop()
+            await app._handle_disconnect("socket closed")
+            if app._pump_task:
+                app._pump_task.cancel()
+            return app, adapter
+
+        app, adapter = asyncio.run(run())
+        assert adapter.connect_count == 8
+        assert sleeps == [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0]
+        assert set(adapter.phase_during_connect) == {Phase.FAILED}
+        assert app.machine.phase is Phase.IDLE
+
+    def test_concurrent_disconnect_paths_share_one_reconnect(self, cfg, ctx):
+        async def run():
+            harness = ToolHarness(build_registry(), cfg, ctx,
+                                  executors=FAKE_EXECUTORS)
+            adapter = GatedReconnect()
+            app = ConnApp(cfg, adapter, harness)
+            app.publisher = lambda m: None
+            app._loop = asyncio.get_running_loop()
+            first = asyncio.create_task(app._handle_disconnect("socket closed"))
+            await adapter.entered.wait()
+            second = asyncio.create_task(app._handle_disconnect("send failed"))
+            await asyncio.sleep(0)
+            adapter.release.set()
+            await asyncio.gather(first, second)
+            if app._pump_task:
+                app._pump_task.cancel()
+            return app, adapter
+
+        app, adapter = asyncio.run(run())
+        assert adapter.connect_count == 1
+        assert app.machine.phase is Phase.IDLE
+
+    def test_ptt_during_reconnect_uses_the_existing_connection_attempt(
+            self, cfg, ctx):
+        async def run():
+            harness = ToolHarness(build_registry(), cfg, ctx,
+                                  executors=FAKE_EXECUTORS)
+            adapter = GatedReconnect()
+            app = ConnApp(cfg, adapter, harness)
+            app.publisher = lambda m: None
+            app._loop = asyncio.get_running_loop()
+            reconnect = asyncio.create_task(
+                app._handle_disconnect("socket closed"))
+            await adapter.entered.wait()
+            ptt = asyncio.create_task(app.on_ptt_down())
+            await asyncio.sleep(0)
+            adapter.release.set()
+            await asyncio.gather(reconnect, ptt)
+            await app.stop()
+            return adapter
+
+        adapter = asyncio.run(run())
+        assert adapter.connect_count == 1
+
+    def test_exhausted_reconnect_tells_the_user_to_relaunch(
+            self, cfg, ctx, monkeypatch):
+        monkeypatch.setattr(app_module.asyncio, "sleep", fast_sleep)
+        cfg.session.reconnect_window_s = 0.5
+
+        async def run():
+            harness = ToolHarness(build_registry(), cfg, ctx,
+                                  executors=FAKE_EXECUTORS)
+            adapter = BrokenAdapter("send_text")
+            app = ConnApp(cfg, adapter, harness)
+            messages = []
+            app.publisher = messages.append
+            app._loop = asyncio.get_running_loop()
+            await app._handle_disconnect("socket closed")
+            return messages
+
+        messages = asyncio.run(run())
+        assert messages[-1] == {
+            "type": "toast",
+            "level": "error",
+            "text": "Conn is still offline. Quit and reopen Conn.",
+        }
+
+
+class TestSendFailureDisconnectContinued:
     def test_send_text_failure_lands_in_failed(self, cfg, ctx, monkeypatch):
         monkeypatch.setattr(app_module.asyncio, "sleep", fast_sleep)
 
@@ -160,6 +302,11 @@ class TestSendFailureDisconnect:
 
         app = asyncio.run(run())
         assert app.machine.phase is Phase.FAILED
+
+
+class TestFixtureDataIsolation:
+    def test_shared_config_writes_only_below_pytest_tmp(self, cfg, tmp_path):
+        assert cfg.data_dir.is_relative_to(tmp_path)
 
 
 class TestRejectInputPublished:

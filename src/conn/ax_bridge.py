@@ -154,6 +154,30 @@ class AxBridge:
             "axobs",
         )
 
+    async def capability_report(
+        self,
+        *,
+        turn_id: str,
+        observation_epoch: int,
+        denied_bundles: list[str] | None = None,
+    ) -> NativeRpcResult:
+        """Descriptive intent capabilities for the current app, epoch-bound.
+        Reports carry no plan fingerprints and cannot authorize anything."""
+        return await self._ask_detailed(
+            {
+                "type": "ax_action",
+                "op": "capability_report",
+                "params": {
+                    "turn_id": turn_id,
+                    "observation_epoch": observation_epoch,
+                    "denied_bundles": list(denied_bundles or []),
+                },
+                "turn_id": turn_id,
+                "observation_epoch": observation_epoch,
+            },
+            "axcap",
+        )
+
     async def prepare_action(
         self,
         request: dict,
@@ -178,6 +202,17 @@ class AxBridge:
             "axplan",
         )
 
+    TRANSPORT_MARGIN_S = 1.5
+
+    def effective_timeout_s(self, timeout_ms: int | None) -> float:
+        """The Python deadline for an execute is the authorized native
+        budget plus bounded transport margin, never shorter: a slow valid
+        action must not become a premature bridge timeout that strands a
+        finished native receipt."""
+        if not isinstance(timeout_ms, int) or timeout_ms <= 0:
+            return self.timeout_s
+        return max(self.timeout_s, timeout_ms / 1000 + self.TRANSPORT_MARGIN_S)
+
     async def execute_action(
         self,
         plan_fingerprint: str,
@@ -185,6 +220,7 @@ class AxBridge:
         turn_id: str,
         response_epoch: int,
         observation_epoch: int,
+        timeout_ms: int | None = None,
     ) -> NativeRpcResult:
         return await self._ask_detailed(
             {
@@ -200,13 +236,14 @@ class AxBridge:
                 "observation_epoch": observation_epoch,
             },
             "axexec",
+            timeout_s=self.effective_timeout_s(timeout_ms),
         )
 
     async def _ask(self, message: dict, id_prefix: str) -> object | None:
         return (await self._ask_detailed(message, id_prefix)).data
 
     async def _ask_detailed(
-        self, message: dict, id_prefix: str
+        self, message: dict, id_prefix: str, timeout_s: float | None = None
     ) -> NativeRpcResult:
         if self._loop is None or self._publish is None or not self.app_present:
             return NativeRpcResult(None, False, "native_app_unavailable")
@@ -232,7 +269,7 @@ class AxBridge:
                 "sequence": sequence,
             })
             request_sent = True
-            data = await asyncio.wait_for(future, self.timeout_s)
+            data = await asyncio.wait_for(future, timeout_s or self.timeout_s)
             if data is _DISCONNECTED:
                 return NativeRpcResult(None, True, "native_app_disconnected")
             return NativeRpcResult(data, True)

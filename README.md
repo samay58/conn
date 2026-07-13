@@ -22,7 +22,11 @@ open /Applications/Conn.app
 
 The Swift menu-bar app owns the notch island, configurable global
 push-to-talk, production Accessibility observations, semantic target
-resolution, dispatch, and effect verification. On non-notch displays it uses
+resolution, dispatch, and effect verification. Quitting the app shuts its
+daemon down over the authenticated bridge, and an app-owned daemon that loses
+its parent exits after a bounded grace, so restarts never need manual
+cleanup. The menu's Report Last Command writes a sanitized failure artifact
+for the last turn. On non-notch displays it uses
 the floating panel fallback. No Conn surface takes keyboard focus. Approval is
 a deliberate pointer click.
 
@@ -60,11 +64,16 @@ Only `verified` produces `ok: true` for a mutation and the user-facing word
 other unsuccessful outcome says `Did not run.` A possibly-dispatched action is
 never retried automatically.
 
-Current semantic operations cover app open/switch, clipboard write, tab focus,
-scroll, non-secure text entry, element press, lazy menu action, and allowlisted
-key chords. Menu actions, raw key chords, and submit report dispatch-only when
-no target-bound effect survives. Secure fields and denied bundles remain
-blocked. Visual coordinate control is not implemented.
+Ordinary commands flow through bounded semantic intents: the model names a
+goal (`create` a tab, `select_relative` the next note) and Conn.app discovers
+the live menu path, shortcut, or selection natively, with compiler-owned
+witnesses (collection growth, window count, selected state). Raw menu and
+key-chord tools are policy-gated diagnostics hidden from the model. Semantic
+operations also cover app open/switch, clipboard write, tab focus, scroll,
+non-secure text entry, element press, lazy menu action, and allowlisted key
+chords. Actions with no surviving target-bound effect report dispatch-only.
+Secure fields and denied bundles remain blocked. Visual coordinate control is
+not implemented.
 
 ## Stable signing
 
@@ -147,7 +156,9 @@ PYTHONPATH=src .venv/bin/python -m conn --doctor
 ```bash
 cd /Users/samaydhawan/conn
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
-PYTHONPATH=src .venv/bin/python -m conn --eval
+PYTHONPATH=src .venv/bin/python -m pytest tests -m lifecycle -q   # real daemon quit/crash/orphan cycles
+PYTHONPATH=src .venv/bin/python -m conn --eval                    # harness-only
+PYTHONPATH=src .venv/bin/python -m conn --intent-eval 25          # live model intent sample (billed)
 PYTHONPATH=src .venv/bin/python -m conn --doctor
 
 cd /Users/samaydhawan/conn/macos
@@ -155,12 +166,15 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ./make-app.sh
 ```
 
-Latest measured results: 461 Python tests passed with 2 existing dependency
-warnings, 13 of 13 harness evals passed, 111 Swift tests passed, and the release
-Swift build passed. A 1,000-transaction in-memory native-engine stress test
-recorded zero wrong targets and zero false verified outcomes. It is not the
-real fixture acceptance gate. See
-[docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md) for the full measured bars.
+Latest measured results (2026-07-13): 573 Python tests passed with 2 existing
+dependency warnings, 14 of 14 harness-only evals passed, 144 Swift tests
+passed, the release build passed, a strict Realtime replay ran 1,000 turns
+plus the July 12 failure cassette with zero protocol errors, and real process
+cycles proved 50 graceful quits, 20 crash relaunches, and bounded orphan
+exits. A 1,000-transaction in-memory native-engine stress test recorded zero
+wrong targets and zero false verified outcomes; it is not the real fixture
+acceptance gate. See [docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md) for the
+full measured bars.
 
 ## Installation smoke probes
 

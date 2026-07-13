@@ -12,6 +12,7 @@ from conn.tools.registry import build_registry
 @pytest.fixture
 def cfg(tmp_path):
     c = Config()
+    c.data_dir = tmp_path / "data"
     c.apps.allowlist = ["Obsidian", "Google Chrome", "Safari"]
     c.apps.bundle_ids = {
         "Obsidian": "md.obsidian",

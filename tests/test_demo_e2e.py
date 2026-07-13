@@ -66,7 +66,7 @@ class TestDemoLoop:
         assert all(p["gate"] == "auto" for p in proposed)
 
         receipt = app.cost.receipt()
-        assert receipt["turns"] == 3
+        assert receipt["model_responses"] == 3
         assert receipt["tool_calls"] == 2
         assert receipt["estimated_usd"] > 0
 
@@ -163,7 +163,7 @@ class TestDemoLoop:
 
         app, messages = asyncio.run(run())
         receipts = [m for m in messages if m["type"] == "receipt"]
-        assert receipts and receipts[0]["receipt"]["turns"] >= 1
+        assert receipts and receipts[0]["receipt"]["model_responses"] >= 1
         day_dirs = list((app.cfg.data_dir / "receipts").iterdir())
         assert day_dirs and list(day_dirs[0].glob("session_*.json"))
 

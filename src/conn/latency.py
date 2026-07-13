@@ -41,8 +41,14 @@ def _read_events(trace_path: Path | str) -> list[dict]:
     events = []
     for line in path.read_text().splitlines():
         line = line.strip()
-        if line:
-            events.append(json.loads(line))
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
     return events
 
 
@@ -78,8 +84,10 @@ def spans(trace_path: Path | str) -> dict[str, float | None]:
     needs. Reads the file fresh every call; traces are small JSONL files
     and this is a report/receipt-attachment path, not a hot loop.
     """
-    events = _read_events(trace_path)
+    return _spans_from_events(_read_events(trace_path))
 
+
+def _spans_from_events(events: list[dict]) -> dict[str, float | None]:
     ptt_down = _find(events, "ptt_down")
     ptt_up = _find(events, "ptt_up")
     ack_listening = _find(events, "ui_ack", moment="listening")
@@ -89,10 +97,7 @@ def spans(trace_path: Path | str) -> dict[str, float | None]:
     tool_exec = _find(events, "tool_exec")
     tool_proposed = _find(events, "tool_proposed")
     kill_switch = _find(events, "kill_switch")
-    # Belay confirms silence via a flush, not the natural end-of-turn drain;
-    # both log kind "audio_silent" so this must filter on `after`.
     audio_silent_flush = _find(events, "audio_silent", after="flush")
-
     return {
         "keydown_to_listening_ms": _client_span_ms(ptt_down, ack_listening),
         "release_to_ack_ms": _client_span_ms(ptt_up, ack_thinking),
@@ -103,6 +108,45 @@ def spans(trace_path: Path | str) -> dict[str, float | None]:
     }
 
 
+def per_turn_spans(trace_path: Path | str) -> list[dict[str, float | None]]:
+    """One span dict per PTT turn. A turn's events run from its ptt_down to
+    the next turn-starting ptt_down; duplicate or rejected edges (traced with
+    starts_turn=false) never create a boundary. Traces older than the field
+    treat every ptt_down as a boundary."""
+    events = _read_events(trace_path)
+    starts = [i for i, e in enumerate(events)
+              if e.get("kind") == "ptt_down"
+              and e.get("starts_turn", True) is not False]
+    turns = []
+    for n, start in enumerate(starts):
+        end = starts[n + 1] if n + 1 < len(starts) else len(events)
+        turns.append(_spans_from_events(events[start:end]))
+    return turns
+
+
+def _percentile(values: list[float], fraction: float) -> float:
+    ordered = sorted(values)
+    rank = max(0, min(len(ordered) - 1, round(fraction * (len(ordered) - 1))))
+    return ordered[rank]
+
+
+def distributions(trace_path: Path | str) -> dict[str, dict]:
+    """Per-span count, p50, and p95 across every PTT turn in the trace."""
+    turns = per_turn_spans(trace_path)
+    out: dict[str, dict] = {}
+    for name in SPAN_NAMES:
+        values = [t[name] for t in turns if t.get(name) is not None]
+        p50, p95 = BUDGETS_MS[name]
+        out[name] = {
+            "count": len(values),
+            "p50_ms": _percentile(values, 0.50) if values else None,
+            "p95_ms": _percentile(values, 0.95) if values else None,
+            "budget_p50_ms": p50,
+            "budget_p95_ms": p95,
+        }
+    return out
+
+
 def budget_status(name: str, value_ms: float | None) -> str:
     """"pass" / "fail" / "n/a", judged against the span's p50 budget."""
     if value_ms is None:
@@ -111,8 +155,10 @@ def budget_status(name: str, value_ms: float | None) -> str:
     return "pass" if value_ms <= p50 else "fail"
 
 
-def format_report(span_values: dict[str, float | None]) -> str:
-    """Human-readable report: one line per span, value, budget, pass/fail."""
+def format_report(span_values: dict[str, float | None],
+                  dist: dict[str, dict] | None = None) -> str:
+    """Human-readable report: one line per span, value, budget, pass/fail,
+    plus per-turn distributions when supplied."""
     width = max(len(name) for name in SPAN_NAMES)
     lines = ["conn latency report"]
     for name in SPAN_NAMES:
@@ -122,4 +168,16 @@ def format_report(span_values: dict[str, float | None]) -> str:
         value_str = f"{value:g}ms" if value is not None else "n/a"
         budget_str = f"budget {p50:g}ms p50" + (f" / {p95:g}ms p95" if p95 else "")
         lines.append(f"  {name:<{width}}  {value_str:>10}  {budget_str:<28}  {status.upper()}")
+    if dist:
+        lines.append("per-turn distributions")
+        for name in SPAN_NAMES:
+            entry = dist.get(name) or {}
+            count = entry.get("count", 0)
+            if not count:
+                lines.append(f"  {name:<{width}}  n/a (0 turns)")
+                continue
+            p50_v, p95_v = entry.get("p50_ms"), entry.get("p95_ms")
+            lines.append(
+                f"  {name:<{width}}  p50 {p50_v:g}ms  p95 {p95_v:g}ms"
+                f"  over {count} turns")
     return "\n".join(lines)

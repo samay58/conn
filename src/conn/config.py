@@ -39,6 +39,8 @@ class SessionCfg(BaseModel):
     done_flash_ms: int = 1500
     tap_threshold_ms: int = 300
     watchdog_timeout_s: float = 600
+    reconnect_window_s: float = Field(default=300.0, gt=0)
+    reconnect_max_delay_s: float = Field(default=30.0, gt=0)
 
 
 class AppsCfg(BaseModel):
@@ -122,6 +124,7 @@ class Config(BaseModel):
     pricing: PricingCfg = PricingCfg()
 
     data_dir: Path = PROJECT_ROOT / "data"
+    source_path: Path | None = None
 
     @property
     def hotkey(self) -> HotkeysCfg:
@@ -144,4 +147,4 @@ def load_config(path: Path | None = None) -> Config:
         return Config()
     with open(path, "rb") as f:
         raw = tomllib.load(f)
-    return Config(**raw)
+    return Config(**raw, source_path=path)

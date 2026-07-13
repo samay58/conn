@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections import deque
 from typing import Callable
 
@@ -22,6 +23,10 @@ BYTES_PER_SAMPLE = 2
 # A listening window shorter than this is a tap, not an utterance; no
 # low-signal hint for it.
 LOW_SIGNAL_MIN_FRAMES = 5
+# With no echo cancellation, mic capture within this window of the last
+# played-back audio can contain Conn's own voice (device output latency plus
+# room reverberation). Such capture never enters the pre-roll ring.
+PLAYBACK_TAIL_S = 0.25
 
 
 def resolve_input_device(devices: list[dict], requested: str) -> tuple[int | None, str | None]:
@@ -83,6 +88,8 @@ class AudioPipe:
         self._was_playing = False
         self._in_rate = TARGET_RATE
         self.last_rms = 0.0
+        self._now = time.monotonic
+        self._playback_tail_until = 0.0
 
     # ---- lifecycle ----
 
@@ -133,7 +140,22 @@ class AudioPipe:
     def gate_open(self) -> None:
         self._gate_peak_rms = 0.0
         self._gate_frames = 0
+        if self._now() < self._playback_tail_until:
+            # Barge-in: whatever the ring holds was captured while the
+            # speaker was sounding. Discard it rather than upload Conn's own
+            # voice ahead of the user's.
+            with self._ring_lock:
+                self._ring.clear()
+                self._ring_bytes = 0
         self._gate = True
+
+    def window_voiced(self) -> bool | None:
+        """True when the current listening window (pre-roll included) peaked
+        at or above the low-signal threshold; None when no threshold is
+        configured."""
+        if self._low_signal_rms <= 0:
+            return None
+        return self._gate_peak_rms >= self._low_signal_rms
 
     def gate_close(self) -> None:
         was_open = self._gate
@@ -173,6 +195,12 @@ class AudioPipe:
         pcm = samples.tobytes()
         if not self._gate:
             with self._ring_lock:
+                if self._now() < self._playback_tail_until:
+                    # Playback is (or was just) sounding: this capture is
+                    # contaminated. Drop it and anything already ringed.
+                    self._ring.clear()
+                    self._ring_bytes = 0
+                    return
                 self._ring.append(pcm)
                 self._ring_bytes += len(pcm)
                 while self._ring and self._ring_bytes > self._ring_max_bytes:
@@ -190,6 +218,14 @@ class AudioPipe:
             preroll = list(self._ring)
             self._ring.clear()
             self._ring_bytes = 0
+        if preroll:
+            # The first syllable often lives in the pre-roll; its energy
+            # counts toward the voiced window so short holds are not read
+            # as silent.
+            joined = np.frombuffer(b"".join(preroll), dtype=np.int16)
+            if joined.size:
+                preroll_rms = float(np.sqrt(np.mean(joined.astype(np.float64) ** 2)))
+                self._gate_peak_rms = max(self._gate_peak_rms, preroll_rms)
         # call_soon_threadsafe preserves submission order from this thread,
         # so the ring lands ahead of the live frame that triggered the flush.
         for chunk in preroll:
@@ -204,6 +240,8 @@ class AudioPipe:
             drained = self._was_playing and not self._out_buf
             if drained:
                 self._was_playing = False
+        if chunk:
+            self._playback_tail_until = self._now() + PLAYBACK_TAIL_S
         outdata[:len(chunk)] = chunk
         if len(chunk) < need:
             outdata[len(chunk):] = b"\x00" * (need - len(chunk))

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from .events import (
-    ApprovalDecision, ApprovalTimeout, BudgetOverride, BudgetTripped,
+    AckTurn, ApprovalDecision, ApprovalTimeout, BudgetOverride, BudgetTripped,
     CancelResponse, ClearInput, CloseMic, Command, CommitInput, CreateResponse,
     EndSession, ExecTool, FlushPlayback, Gate, MachineInput, ModelSpeaking,
     OpenMic, PlaybackDrained, PttDown, PttUp, QueueApproval, ResetTick,
@@ -130,6 +130,9 @@ class SessionStateMachine:
     _batch_had_calls: bool = False  # current response proposed at least one tool call
     _mutation_reserved: bool = False
     _mutation_chain_closed: bool = False
+    _replan_budget: int = 1        # one replan per turn, only after proven not_dispatched
+    _predispatch_failures: int = 0  # compile failures do not consume the replan budget
+    _failed_shapes: set[str] = field(default_factory=set)
     _execution_seq: int = 0
     _transition_seq: int = 0       # bumped on every real phase transition
     _watchdog_armed_seq: int | None = None
@@ -273,6 +276,10 @@ class SessionStateMachine:
             self._new_turn()
             self._ptt_down_ms = ev.ts_ms
             return [CancelResponse(), FlushPlayback(), ClearInput(), OpenMic()]
+        if self.phase is Phase.LISTENING:
+            # Duplicate modifier edge for the gesture already in progress;
+            # idempotent, not a rejection.
+            return []
         return [RejectInput(reason=self.phase.value)]
 
     def _ptt_up(self, ev: PttUp) -> list[Command]:
@@ -280,12 +287,16 @@ class SessionStateMachine:
             return []
         held = ev.ts_ms - (self._ptt_down_ms or ev.ts_ms)
         self._ptt_down_ms = None
-        if held < self.tap_threshold_ms:
+        if held < self.tap_threshold_ms and ev.voiced is not True:
+            # Duration alone cannot discard a voiced command; silence plus a
+            # short hold can, and it must be visible, never silent.
             self.phase = Phase.IDLE
-            return [CloseMic(), ClearInput()]
+            return [AckTurn(accepted=False, reason="silent_tap"),
+                    CloseMic(), ClearInput()]
         self.phase = Phase.THINKING
         self._begin_response()
-        return [CloseMic(), CommitInput(), CreateResponse()]
+        return [AckTurn(accepted=True), CloseMic(), CommitInput(),
+                CreateResponse()]
 
     def _text(self, ev: TextCommand) -> list[Command]:
         if self.phase not in (Phase.IDLE, Phase.DONE):
@@ -302,6 +313,18 @@ class SessionStateMachine:
             return []
         self._batch_had_calls = True
         if self._is_computer_mutation(call.name):
+            if self._plan_shape(call) in self._failed_shapes:
+                # The same failed plan shape never runs twice in one turn; a
+                # model repeating itself has exhausted its safe options.
+                self._mutation_chain_closed = True
+                output = self._blocked_action_output(
+                    call, "repeated_plan_shape: this exact plan already failed this turn")
+                self.ledger[call.call_id] = LedgerEntry(
+                    call, CallStatus.BLOCKED, output)
+                cmds = [SendToolResult(call.call_id, False, output)]
+                cmds.extend(self._maybe_continue())
+                self._refresh_phase()
+                return cmds
             if self._mutation_chain_closed:
                 output = self._blocked_action_output(
                     call, "mutation_chain_closed: fresh user turn required")
@@ -336,8 +359,17 @@ class SessionStateMachine:
             case Gate.BLOCKED:
                 reason = call.block_reason or "blocked_by_policy"
                 if self._is_computer_mutation(call.name):
-                    self._mutation_chain_closed = True
                     prepared_failure = self._prepared_failure_receipt(call)
+                    if self._is_recoverable_compile_failure(prepared_failure):
+                        # A predispatch compiler failure does not consume the
+                        # dispatch budget, but it is bounded per turn and its
+                        # shape can never be retried.
+                        self._predispatch_failures += 1
+                        self._failed_shapes.add(self._plan_shape(call))
+                        if self._predispatch_failures > 2:
+                            self._mutation_chain_closed = True
+                    else:
+                        self._mutation_chain_closed = True
                     if prepared_failure is not None:
                         output = json.dumps(prepared_failure.as_dict())
                         status = {
@@ -379,7 +411,15 @@ class SessionStateMachine:
             return []
         if (self._is_computer_mutation(entry.call.name)
                 and status is not CallStatus.VERIFIED):
-            self._mutation_chain_closed = True
+            if status is CallStatus.FAILED and self._replan_budget > 0 \
+                    and self._proven_not_dispatched(output):
+                # One safe replan: the failure is proven predispatch, so a
+                # single fresh plan may follow. Any dispatched or uncertain
+                # outcome still stops the chain.
+                self._replan_budget -= 1
+                self._failed_shapes.add(self._plan_shape(entry.call))
+            else:
+                self._mutation_chain_closed = True
         entry.status = status
         entry.output = output
         cmds: list[Command] = [SendToolResult(call_id, ok, output)]
@@ -489,6 +529,9 @@ class SessionStateMachine:
         self._batch_had_calls = False
         self._mutation_reserved = False
         self._mutation_chain_closed = False
+        self._replan_budget = 1
+        self._predispatch_failures = 0
+        self._failed_shapes.clear()
         self.phase = Phase.LISTENING
 
     def _reset_turn(self) -> None:
@@ -501,6 +544,31 @@ class SessionStateMachine:
     def _start_execution(self, call: ToolCall) -> ToolCall:
         self._execution_seq += 1
         return replace(call, execution_id=self._execution_seq)
+
+    @staticmethod
+    def _plan_shape(call: ToolCall) -> str:
+        try:
+            arguments = json.dumps(call.arguments, sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            arguments = repr(call.arguments)
+        return f"{call.name}:{arguments}"
+
+    @staticmethod
+    def _proven_not_dispatched(output: str) -> bool:
+        try:
+            payload = json.loads(output)
+        except (TypeError, ValueError):
+            return False
+        return (isinstance(payload, dict)
+                and payload.get("dispatch_state") == "not_dispatched"
+                and payload.get("retry_safe") is True)
+
+    @staticmethod
+    def _is_recoverable_compile_failure(receipt: ActionReceipt | None) -> bool:
+        return (receipt is not None
+                and receipt.outcome is ActionOutcome.FAILED
+                and receipt.dispatch_state is DispatchState.NOT_DISPATCHED
+                and receipt.retry_safe)
 
     @staticmethod
     def _blocked_action_output(call: ToolCall, reason: str) -> str:

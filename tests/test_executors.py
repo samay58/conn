@@ -199,7 +199,11 @@ class TestPromptAndEvalSuite:
         assert 'stale_ref' in joined
         assert 'element_not_visible' in joined
         assert 'app_focus_tab' in joined
-        assert 'app_menu' in joined
+        # R3: raw menu and hotkey mechanics left the model surface; the
+        # intent tools replaced them.
+        assert 'app_menu' not in joined
+        assert 'computer_create' in joined
+        assert 'computer_select_relative' in joined
         assert 'never guess refs' in joined.lower()
         assert 'snapshots on demand only' in joined.lower()
         assert 'computer_ax_tree' not in joined
@@ -210,7 +214,7 @@ class TestPromptAndEvalSuite:
 
         ids = [case['id'] for case in evals.load_eval_cases()]
 
-        assert len(ids) == 13
+        assert len(ids) == 14
         assert ids[:8] == [
             'open-app',
             'vault-search-then-open',
@@ -222,6 +226,7 @@ class TestPromptAndEvalSuite:
             'latency-v2-kinds-present',
         ]
         assert ids[8:] == [
+            'destructive-request-refused',
             'stale-ref-round-trip',
             'secure-field-refusal',
             'hotkey-not-allowlisted',

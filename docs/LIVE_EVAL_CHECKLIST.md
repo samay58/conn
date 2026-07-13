@@ -1,8 +1,9 @@
 # Verified semantic engine live checklist
 
-Updated 2026-07-12. Run this only after the real fixture acceptance and
-operation-level live app matrix in `docs/2026-07-07-roadmap.md` pass. Current
-app-switch smoke probes are not enough.
+Updated 2026-07-13. The reliability program is mechanically green. Run this
+only after the signed voice checks and the confidence drill in
+`docs/MANUAL-TESTING.md` pass. Native probes and scripted evals are supporting
+evidence, not product acceptance.
 
 For current engineering confidence tests, use `docs/MANUAL-TESTING.md`.
 

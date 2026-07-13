@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
+
 from conn import evals, latency
 
 
@@ -115,6 +117,13 @@ class TestSpans:
         path.write_text("\n\n".join(lines) + "\n\n")
         assert latency.spans(path) == EXPECTED_FULL
 
+    def test_truncated_final_trace_line_is_skipped(self, tmp_path):
+        path = write_trace(tmp_path, FULL_TRACE)
+        with path.open("a") as handle:
+            handle.write('{"ts": 1003.0, "kind":')
+
+        assert latency.spans(path) == EXPECTED_FULL
+
 
 class TestBudgetStatus:
     def test_pass_when_under_budget(self):
@@ -211,3 +220,49 @@ class TestTasksJsonCase:
         with_trace_kinds = [c for c in cases if "trace_kinds" in c.get("expect", {})]
         assert len(with_trace_kinds) == 1
         assert with_trace_kinds[0]["expect"]["trace_kinds"]
+
+
+class TestPerTurnDistributions:
+    def _write_turns(self, tmp_path, count=3):
+        """Three PTT turns with release_to_first_token spans of 100, 200,
+        300ms in daemon time."""
+        path = tmp_path / "multi.jsonl"
+        lines = []
+        base = 1000.0
+        for i in range(count):
+            t0 = base + i * 10
+            span_s = (i + 1) * 0.1
+            lines.append({"ts": t0, "kind": "ptt_down",
+                          "client_ts_ms": int(t0 * 1000), "source": "app_hotkey"})
+            lines.append({"ts": t0 + 1.0, "kind": "ptt_up",
+                          "client_ts_ms": int((t0 + 1.0) * 1000),
+                          "source": "app_hotkey"})
+            lines.append({"ts": t0 + 1.0 + span_s, "kind": "model_delta",
+                          "response_id": f"r{i}", "modality": "audio"})
+        path.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+        return path
+
+    def test_per_turn_spans_split_on_ptt_down(self, tmp_path):
+        from conn.latency import per_turn_spans
+
+        turns = per_turn_spans(self._write_turns(tmp_path))
+        assert len(turns) == 3
+        values = [t["release_to_first_token_ms"] for t in turns]
+        assert values == [pytest.approx(100, abs=1), pytest.approx(200, abs=1),
+                          pytest.approx(300, abs=1)]
+
+    def test_distributions_compute_p50_and_p95(self, tmp_path):
+        from conn.latency import distributions
+
+        dist = distributions(self._write_turns(tmp_path))
+        entry = dist["release_to_first_token_ms"]
+        assert entry["count"] == 3
+        assert entry["p50_ms"] == pytest.approx(200, abs=1)
+        assert entry["p95_ms"] == pytest.approx(300, abs=1)
+
+    def test_distributions_skip_missing_spans(self, tmp_path):
+        from conn.latency import distributions
+
+        dist = distributions(self._write_turns(tmp_path))
+        assert dist["proposal_to_chip_ms"]["count"] == 0
+        assert dist["proposal_to_chip_ms"]["p50_ms"] is None

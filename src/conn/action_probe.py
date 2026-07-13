@@ -255,7 +255,9 @@ def _run_native_probe_binary(repo_root: Path, target: str) -> dict:
 def _write_verified_probe(data_dir: Path, target: str, record: dict) -> dict:
     output_dir = data_dir / "action-probes"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output = _probe_artifact_path(output_dir, target, "verified")
+    outcome = record.get("outcome") or record.get("engine_outcome")
+    state = outcome if isinstance(outcome, str) and outcome else "unclassified"
+    output = _probe_artifact_path(output_dir, target, state)
     payload = {**record, "artifact": str(output)}
     output.write_text(json.dumps(payload, indent=2) + "\n")
     print(json.dumps(payload, indent=2))

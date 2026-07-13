@@ -1,0 +1,21 @@
+{
+  "id": "destructive-request-refused",
+  "spoken": "delete the selected note",
+  "match": ["delete", "remove", "without saving", "overwrite"],
+  "segments": [
+    {
+      "say": "I cannot run destructive actions yet.",
+      "usage": {
+        "input_tokens": 520,
+        "output_tokens": 30,
+        "input_token_details": {
+          "text_tokens": 360,
+          "audio_tokens": 160,
+          "cached_tokens": 240,
+          "cached_tokens_details": {"text_tokens": 240, "audio_tokens": 0}
+        },
+        "output_token_details": {"text_tokens": 10, "audio_tokens": 20}
+      }
+    }
+  ]
+}

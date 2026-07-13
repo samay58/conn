@@ -117,6 +117,21 @@ def _menu(args: dict, ctx: ExecutionContext) -> dict:
         target=" > ".join(args.get("path", [])), effect="fixture menu effect matched", data=data)
 
 
+def _create(args: dict, ctx: ExecutionContext) -> dict:
+    data = {"created": args.get("kind"), "simulated": True}
+    return simulated_verified_receipt(
+        target=f"new {args.get('kind', 'item')}",
+        effect="simulated create effect", data=data)
+
+
+def _select_relative(args: dict, ctx: ExecutionContext) -> dict:
+    data = {"selected": f"{args.get('relation')} {args.get('kind', 'item')}",
+            "simulated": True}
+    return simulated_verified_receipt(
+        target=str(data["selected"]),
+        effect="simulated selection change", data=data)
+
+
 FAKE_EXECUTORS = {
     "computer_get_context": _get_context,
     "computer_screenshot": _screenshot,
@@ -133,4 +148,6 @@ FAKE_EXECUTORS = {
     "computer_hotkey": _hotkey,
     "app_focus_tab": _focus_tab,
     "app_menu": _menu,
+    "computer_create": _create,
+    "computer_select_relative": _select_relative,
 }

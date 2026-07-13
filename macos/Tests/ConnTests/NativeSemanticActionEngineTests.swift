@@ -2,6 +2,21 @@ import XCTest
 @testable import Conn
 
 final class NativeSemanticActionEngineTests: XCTestCase {
+    func testEmptyTargetTitleFallsThroughToSafeOperationName() async throws {
+        let backend = SemanticFixtureBackend()
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "press",
+            target: ["ref": "empty-title"],
+            effect: nil
+        ))
+
+        XCTAssertNotNil(plan?["plan_fingerprint"] as? String)
+        XCTAssertEqual(plan?["target"] as? String, "press")
+        XCTAssertEqual(plan?["preview"] as? String, "Press press")
+    }
+
     func testDispatchSuccessWithoutEffectIsNotVerified() async throws {
         let backend = SemanticFixtureBackend()
         let engine = NativeSemanticActionEngine(backend: backend)
@@ -1075,6 +1090,7 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
                 supportedActions: ["AXPress"]
             ),
             NativeObservationNode(ref: "no-effect", role: "AXButton", title: "No effect", identifier: "fixture.no_effect", redactedValue: "false", valueType: "boolean", enabled: true, supportedActions: ["AXPress"]),
+            NativeObservationNode(ref: "empty-title", role: "AXButton", title: "", identifier: "fixture.empty_title", supportedActions: ["AXPress"]),
             NativeObservationNode(ref: "status", role: "AXStaticText", title: "Status", identifier: "fixture.status", redactedValue: status, valueType: "string"),
             NativeObservationNode(ref: "tab", role: "AXRadioButton", title: "Second tab", identifier: "fixture.tab", selected: tabSelected, supportedActions: ["AXPress"], settableAttributes: ["AXSelected"]),
             NativeObservationNode(ref: "checkbox", role: "AXCheckBox", title: "Check", identifier: "fixture.checkbox", redactedValue: "false", valueType: "boolean", supportedActions: ["AXPress"]),

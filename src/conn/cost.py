@@ -39,8 +39,15 @@ class CostMeter:
     started_at: float = field(default_factory=time.time)
     turns: list[TurnCost] = field(default_factory=list)
     tool_calls: int = 0
+    tool_proposals: int = 0
+    blocked_proposals: int = 0
+    user_turns: int = 0
     screenshots: int = 0
+    action_outcomes: dict[str, int] = field(default_factory=dict)
     overridden: bool = False
+
+    def count_action_outcome(self, outcome: str) -> None:
+        self.action_outcomes[outcome] = self.action_outcomes.get(outcome, 0) + 1
 
     def ingest(self, usage: dict) -> TurnCost:
         in_details = usage.get("input_token_details", {})
@@ -98,17 +105,21 @@ class CostMeter:
             total.cached_in += t.cached_in
         return {
             "duration_s": round(time.time() - self.started_at, 1),
-            "turns": len(self.turns),
+            "user_turns": self.user_turns,
+            "model_responses": len(self.turns),
             "tokens": {
                 "text_in": total.text_in, "text_out": total.text_out,
                 "audio_in": total.audio_in, "audio_out": total.audio_out,
                 "cached_in": total.cached_in,
             },
             "tool_calls": self.tool_calls,
+            "tool_proposals": self.tool_proposals,
+            "blocked_proposals": self.blocked_proposals,
+            "action_outcomes": dict(self.action_outcomes),
             "screenshots": self.screenshots,
             "estimated_usd": round(self.spent_usd, 4),
             "cap_usd": self.budget.session_cap_usd,
-            "per_turn_usd": [round(t.usd, 4) for t in self.turns],
+            "per_response_usd": [round(t.usd, 4) for t in self.turns],
         }
 
     def write_receipt_snapshot(self, data_dir: Path, session_id: str, final: bool = False,
@@ -122,6 +133,7 @@ class CostMeter:
         r = self.receipt()
         r["final"] = final
         if trace_path is not None:
-            from .latency import spans
+            from .latency import distributions, spans
             r["latency"] = spans(trace_path)
+            r["latency_distributions"] = distributions(trace_path)
         return write_receipt(data_dir, session_id, r)

@@ -57,13 +57,13 @@ class TestPtt:
         m.handle(PttDown(ts_ms=1000))
         cmds = m.handle(PttUp(ts_ms=1150))
         assert m.phase is Phase.IDLE
-        assert kinds(cmds) == ["CloseMic", "ClearInput"]
+        assert kinds(cmds) == ["AckTurn", "CloseMic", "ClearInput"]
         assert not any(isinstance(c, (CommitInput, CreateResponse)) for c in cmds)
 
     def test_real_press_commits_and_creates_response(self, m):
         cmds = start_turn(m)
         assert m.phase is Phase.THINKING
-        assert kinds(cmds) == ["CloseMic", "CommitInput", "CreateResponse"]
+        assert kinds(cmds) == ["AckTurn", "CloseMic", "CommitInput", "CreateResponse"]
 
     def test_ptt_down_rejected_while_thinking_and_acting(self, m):
         start_turn(m)

@@ -1,7 +1,6 @@
-"""Incremental receipts: a receipt file must exist on disk from the first
-response.done, not only after a clean session end, so a killed-mid-session
-process still leaves a real receipt (Defect 8: Jul 3 session spent $0.065
-and left nothing behind).
+"""Incremental receipts exist on disk from the first response.done. A process
+killed mid-session still leaves a real receipt (Defect 8: Jul 3 session spent
+$0.065 and left nothing behind).
 """
 
 from __future__ import annotations
@@ -58,7 +57,7 @@ class TestIncrementalReceipt:
         files = receipt_files(app)
         assert files, "receipt file should exist after the first response_done"
         data = json.loads(files[0].read_text())
-        assert data["turns"] >= 1
+        assert data["model_responses"] >= 1
         assert data["final"] is False
 
     def test_receipt_finalizes_on_clean_stop(self, cfg, ctx):
@@ -92,7 +91,7 @@ class TestIncrementalReceipt:
         assert files, "a killed session must still leave a receipt on disk"
         data = json.loads(files[0].read_text())
         assert isinstance(data, dict)
-        assert data["turns"] >= 1
+        assert data["model_responses"] >= 1
         assert "estimated_usd" in data
         assert data["final"] is False
 
@@ -104,7 +103,7 @@ class TestAtomicReceiptWrite:
         # but before all bytes land) leaves a truncated, unparseable file in
         # place of what was previously a valid receipt. Simulate that kill by
         # making write_text land half its bytes on disk, then raise.
-        first = {"turns": 1, "estimated_usd": 0.01, "final": False}
+        first = {"model_responses": 1, "estimated_usd": 0.01, "final": False}
         path = write_receipt(tmp_path, "session_x", first)
         assert json.loads(path.read_text()) == first
 
@@ -116,7 +115,7 @@ class TestAtomicReceiptWrite:
 
         monkeypatch.setattr(pathlib.Path, "write_text", flaky_write_text)
 
-        second = {"turns": 2, "estimated_usd": 0.02, "final": False}
+        second = {"model_responses": 2, "estimated_usd": 0.02, "final": False}
         with pytest.raises(OSError):
             write_receipt(tmp_path, "session_x", second)
 

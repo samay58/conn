@@ -72,6 +72,14 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
                 raise ValueError(f"app_signer_not_configured: {app_name!r}")
             if team_id:
                 payload["team_id"] = team_id
+    elif name == "computer_create":
+        payload = {"family": "create", "kind": args["kind"]}
+        payload.update(_intent_scope(args, cfg))
+    elif name == "computer_select_relative":
+        payload = {"family": "select_relative", "relation": args["relation"]}
+        if args.get("kind"):
+            payload["kind"] = args["kind"]
+        payload.update(_intent_scope(args, cfg))
 
     timeout_ms = (
         cfg.actions.launch_verify_ms
@@ -83,16 +91,34 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
         if name in {"computer_type_text", "computer_hotkey"}
         else "semantic_only"
     )
+    # Model-authored effect predicates are gone from the contract: the
+    # native side derives every witness or declares a truthful ceiling. A
+    # predicate the model hallucinates is dropped here, never forwarded.
     return {
         "operation": operation,
         "target": target,
         "payload": payload,
-        "desired_effect": args.get("desired_effect"),
         "risk": spec.risk.value,
         "strategy_ceiling": strategy_ceiling,
         "timeout_ms": timeout_ms,
         "denied_bundles": list(cfg.ax.deny_bundles),
     }
+
+
+def _intent_scope(args: dict, cfg) -> dict:
+    app_name = str(args.get("app") or "").strip()
+    if not app_name:
+        return {}
+    bundle_id = str(cfg.apps.bundle_ids.get(app_name) or "").strip()
+    if not bundle_id:
+        raise ValueError(f"app_bundle_id_missing: {app_name!r}")
+    scope: dict = {"bundle_id": bundle_id}
+    team_id = str(cfg.apps.team_ids.get(app_name) or "").strip()
+    if not bundle_id.startswith("com.apple.") and not team_id:
+        raise ValueError(f"app_signer_not_configured: {app_name!r}")
+    if team_id:
+        scope["team_id"] = team_id
+    return scope
 
 
 def validate_plan(plan: object) -> str | None:
@@ -150,6 +176,9 @@ _SAFE_PLAN_FIELDS = frozenset({
     "payload_hash",
     "before_digest",
     "target_fingerprint",
+    "candidates",
+    "read_set",
+    "timeout_ms",
 })
 
 

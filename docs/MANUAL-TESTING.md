@@ -1,6 +1,11 @@
 # Conn manual test range
 
-Updated 2026-07-12. Fifteen-minute confidence drill. Not product acceptance.
+Updated 2026-07-13. Fifteen-minute confidence drill. Not product acceptance.
+
+Status 2026-07-13: the reliability packets are mechanically green and the
+July 12 defects have pinned fixes. Run this range against a freshly installed
+build (`make-app.sh install`, then relaunch) to collect live evidence; the
+range still does not establish readiness on its own.
 
 ## Rules
 
@@ -23,8 +28,8 @@ cd /Users/samaydhawan/conn/macos
 open .build/fixture/ConnActionFixture.app
 ```
 
-Current warning: do not quit and reopen Conn during this drill. App-only
-restart is a known failing path. Fix ranks first in roadmap.
+App quit, crash relaunch, and orphan exit recovery are mechanically proven.
+If Conn fails to reconnect during this drill, preserve the trace and stop.
 
 ## PTT circuit
 
@@ -99,5 +104,5 @@ Confidence drill passes when:
 - no automatic retry after possible dispatch
 - Stop prevents later mutation
 
-Then continue engineering acceptance. Do not start 30-command product gate
-until real fixture matrix and live app matrix pass.
+Then continue engineering acceptance. Do not start the 30-command product gate
+until the wire, voice-turn, intent, real fixture, and live app gates pass.
