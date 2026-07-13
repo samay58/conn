@@ -86,6 +86,28 @@ final class HotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(events, ["down", "up", "down", "up"])
     }
 
+    func testModifierEventBoundaryDoesNotReadTypingOnlyProperties() {
+        let monitor = HotkeyMonitor(defaults: isolatedDefaults())
+        var pressed = false
+        monitor.onDown = { pressed = true }
+        let event = NSEvent.keyEvent(
+            with: .flagsChanged,
+            location: .zero,
+            modifierFlags: [.control, .option],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: 58
+        )!
+
+        monitor.handle(event)
+
+        XCTAssertTrue(pressed)
+    }
+
     func testChangingBindingReleasesAnActivePress() {
         let monitor = HotkeyMonitor(defaults: isolatedDefaults())
         monitor.setBinding(.rightCommand)

@@ -156,7 +156,7 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ```
 
 Latest measured results: 461 Python tests passed with 2 existing dependency
-warnings, 13 of 13 harness evals passed, 109 Swift tests passed, and the release
+warnings, 13 of 13 harness evals passed, 111 Swift tests passed, and the release
 Swift build passed. A 1,000-transaction in-memory native-engine stress test
 recorded zero wrong targets and zero false verified outcomes. It is not the
 real fixture acceptance gate. See
@@ -185,7 +185,10 @@ These commands test installation and app switching. They do not satisfy the
 real fixture matrix or six-app semantic-action acceptance bar.
 
 The remaining human product gate is 30 ordinary commands across three work
-sessions. Use [docs/LIVE_EVAL_CHECKLIST.md](docs/LIVE_EVAL_CHECKLIST.md).
+sessions. Start with the safe confidence drill in
+[docs/MANUAL-TESTING.md](docs/MANUAL-TESTING.md). Use
+[docs/LIVE_EVAL_CHECKLIST.md](docs/LIVE_EVAL_CHECKLIST.md) only after semantic
+acceptance passes.
 
 ## Second Mac
 

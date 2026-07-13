@@ -1,20 +1,24 @@
-# Next session: prove semantic operations
+# Next session: close restart, then prove operations
 
 Updated 2026-07-12.
 
 ## Start here
 
-Current build is signed, installed, and mechanically green. Do not spend the
-next session on visual control, island polish, sound, MCP, or more architecture.
-The next missing proof is a real fixture-backed semantic matrix.
+Current build is signed, installed, and mechanically green. External-keyboard
+push-to-talk, app authentication, Accessibility, and current-build fixture
+smoke work. Do not spend the next session on visual control, island polish,
+sound, MCP, or more architecture.
 
 Installed app uses left-side Control + Option for push-to-talk by default.
 Change it from Conn menu, Push-to-Talk Key, if another binding is preferable.
 
-Before running it, unlock the desktop and rerun the fixture probe. If it still
-receives no Accessibility tree, open System Settings, Privacy and Security,
-Accessibility. Toggle Conn off and on, then quit and reopen Conn. The newest
-signed build could not recheck the grant because the console locked.
+First fix authenticated restart. Normal Conn quit leaves its daemon alive. The
+next app launch has a fresh token, refuses the old daemon, and stays offline.
+Do not weaken authentication or kill an unproven port owner. Add a bounded
+authenticated shutdown or daemon orphan-exit path, then prove 20 consecutive
+quit and reopen cycles.
+
+After restart passes, build the real fixture-backed semantic matrix.
 
 The matrix must also close one known product gap. Menu commands, raw key
 chords, and submit currently return dispatch-only when their effect leaves the
@@ -25,9 +29,11 @@ Read:
 
 1. `docs/STATE-OF-PLAY.md`
 2. `docs/2026-07-09-verified-action-engine-spec.md`, acceptance bars
-3. `src/conn/action_probe.py`
-4. `macos/Sources/ConnActionFixture/`
-5. `macos/Sources/Conn/NativeActionProbeRunner.swift`
+3. `macos/Sources/Conn/DaemonLauncher.swift`
+4. `src/conn/server/http.py`
+5. `src/conn/action_probe.py`
+6. `macos/Sources/ConnActionFixture/`
+7. `macos/Sources/Conn/NativeActionProbeRunner.swift`
 
 ## Build the real fixture matrix
 

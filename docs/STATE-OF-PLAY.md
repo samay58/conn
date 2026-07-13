@@ -10,10 +10,15 @@ green. Production mutations run through Conn.app as bounded transactions.
 Python owns policy and orchestration. Raw Accessibility, LaunchServices,
 pasteboard, key-event, or bridge success cannot produce `Done.`
 
-The signed app is installed and basic live smoke probes work. The semantic
-acceptance gate is still open. Current live probes cover app switching and one
-no-effect fixture action. They do not cover the required operation matrix or
-1,000 real fixture transactions. The 30-command product gate has not started.
+The signed app is installed. Left-side Control + Option push-to-talk is
+confirmed on the Lofree external keyboard. The app and daemon authenticate,
+both Accessibility lanes report granted, and the current-build fixture smoke
+agrees with independent truth.
+
+The semantic acceptance gate is still open. Current live probes cover app
+switching and one no-effect fixture action. They do not cover the required
+operation matrix or 1,000 real fixture transactions. The 30-command product
+gate has not started.
 
 ## Runtime shape
 
@@ -39,7 +44,8 @@ Push-to-talk defaults to left-side Control + Option so external keyboards do
 not depend on right-side modifier identity. Releasing either key ends the
 press. The menu-bar menu can switch it to Right Command, Left Control, Left
 Option, Right Control, Right Option, or F13. Choice persists across relaunches
-and signed rebuilds.
+and signed rebuilds. The Lofree's key beside Space reports Left Command, so it
+cannot safely serve as a distinct Right Command trigger.
 
 ## Action contract
 
@@ -94,17 +100,18 @@ Latest mechanical run:
 |---|---|
 | Python | 461 passed; 2 existing dependency warnings |
 | Harness evals | 13 of 13 passed |
-| Swift | 109 passed |
+| Swift | 111 passed |
 | Release build | passed with Xcode-beta toolchain |
 | Doctor | all substantive checks passed; optional global-hotkey probe warned |
 | Installed app | valid `Conn Dev Signing` signature, built 2026-07-12 |
 
-An unlocked probe before the final rebuild received an empty Accessibility
-snapshot. The newest persistent-signed build installed and verified cleanly,
-but its fixture probe stopped before dispatch because the console was locked.
-Unlock the desktop and rerun. If the snapshot is still empty, toggle Conn off
-and on in System Settings, Privacy and Security, Accessibility, then relaunch
-it. Python doctor success does not prove the app's separate TCC grant.
+Current signed-build checks on 2026-07-12:
+
+- app bridge authenticated after launch
+- Python and Conn.app Accessibility lanes both reported granted
+- physical Control + Option press and release worked on the Lofree keyboard
+- fixture no-effect probe returned `no_effect` in 525ms and agreed with the
+  independent truth log
 
 The 1,000-transaction test uses the in-memory Swift
 `SemanticFixtureBackend`. It recorded 980 verified actions, 10 intentional
@@ -112,7 +119,7 @@ no-effect outcomes, 10 ambiguity refusals, zero wrong targets, and zero false
 verified outcomes. It checks transaction logic and latency. It is not a real
 ConnActionFixture or Accessibility acceptance run.
 
-Live smoke evidence from 2026-07-12:
+Other live smoke evidence from 2026-07-12:
 
 - ConnActionFixture no-effect action: 3 of 3 returned `no_effect`; independent
   truth log agreed; no retry.
@@ -122,10 +129,6 @@ Live smoke evidence from 2026-07-12:
   `effect_already_satisfied` before dispatch.
 - Google Chrome is not installed. Its signer is therefore unproven and Conn
   blocks it before native preparation.
-
-Those successful smoke records predate the final reinstall. The current signed
-binary still needs an unlocked live rerun. Refresh its Accessibility toggle
-only if that rerun returns an empty tree.
 
 These are installation and transaction smoke checks. They do not establish
 the spec's 95 percent six-app semantic-action bar.
@@ -157,8 +160,8 @@ signature can be inspected.
 
 Semantic acceptance still needs:
 
-- an unlocked current-build fixture rerun; refresh Conn.app Accessibility only
-  if the rerun returns an empty tree
+- a safe authenticated restart lifecycle; normal app quit currently leaves its
+  token-bound daemon alive, and a new app launch correctly refuses to adopt it
 - a real ConnActionFixture matrix across each semantic operation
 - 1,000 real fixture transactions checked against the independent truth log
 - at least 95 percent first-try verified across observable actions in Terminal,
@@ -181,5 +184,6 @@ Do not call the semantic engine accepted for daily use until both gates pass.
 | `docs/agent-wargames/2026-07-09-verified-action-engine-wargame.md` | July 9 adversarial decision record |
 | `docs/2026-07-07-roadmap.md` | Remaining priorities |
 | `docs/NEXT-SESSION.md` | Next execution block |
+| `docs/MANUAL-TESTING.md` | Safe manual confidence drill |
 | `docs/LIVE_EVAL_CHECKLIST.md` | Human product gate |
 | `docs/orchestration-ledger.md` | Historical implementation record |

@@ -162,6 +162,19 @@ final class BridgeAuthenticationTests: XCTestCase {
         XCTAssertEqual(Data(base64Encoded: token)?.count, 32)
     }
 
+    func testGeneratedHealthChallengeUsesOnlyServerAcceptedCharacters() {
+        XCTAssertEqual(BridgeChallenge.encode(Data([0xfb, 0xff])), "-_8")
+
+        let challenge = BridgeChallenge.generate()
+        XCTAssertEqual(challenge.count, 43)
+        XCTAssertNotNil(
+            challenge.range(
+                of: #"^[A-Za-z0-9_-]+$"#,
+                options: .regularExpression
+            )
+        )
+    }
+
     func testLauncherEnvironmentPassesTokenOnlyToChild() {
         let environment = DaemonLauncher.launchEnvironment(
             base: ["PATH": "/usr/bin"], bridgeToken: "secret")

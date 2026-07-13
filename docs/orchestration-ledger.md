@@ -242,6 +242,10 @@ before commit and push. Each finding received a regression test and fix:
 - installed-app push-to-talk now defaults to Control + Option, exposes seven
   persisted menu choices, and releases cleanly when either key or the binding
   changes
+- the native event boundary no longer reads typing-only repeat state from
+  modifier events; a real AppKit event regression test covers the failure
+- bridge health challenges now use the URL-safe alphabet accepted by the
+  daemon, so a fresh app and daemon can authenticate reliably
 
 The final diff-scoped security scan reviewed 55 production and protocol files.
 Fourteen valid intermediate candidates were fixed and retested. One
@@ -251,7 +255,7 @@ Measured gates after hardening:
 
 - Python: 461 passed, 2 existing dependency warnings
 - evals: 13 of 13 passed
-- Swift: 109 passed
+- Swift: 111 passed
 - release build: passed
 - doctor: every substantive check passed; optional global-hotkey probe warned
 - persistent-signed Conn.app installed and verified on 2026-07-12

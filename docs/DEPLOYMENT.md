@@ -107,7 +107,7 @@ build when none can expand SwiftUI macros. Install full Xcode or newer Command
 Line Tools instead of editing around the macro requirement.
 
 Current reference results on the primary Mac are 461 Python tests passed with
-2 existing dependency warnings, 13 of 13 evals passed, and 109 Swift tests
+2 existing dependency warnings, 13 of 13 evals passed, and 111 Swift tests
 passed. Counts may grow. Every test and eval must be green on the new Mac.
 
 ## Grant privacy permissions
@@ -164,7 +164,7 @@ Hold the configured push-to-talk keys and ask a read-only question first. New
 installs default to left-side Control + Option. Change it from the Conn menu
 under Push-to-Talk Key if needed. Then try one harmless
 state-changing action. Confirm that the model continues only after a native
-receipt and that the island says:
+receipt and that the active Conn surface says:
 
 - `Done.` only for verified
 - `Sent, not confirmed.` for dispatch-only
@@ -173,12 +173,16 @@ receipt and that the island says:
 Run the 30-command product checklist in `docs/LIVE_EVAL_CHECKLIST.md` before
 calling the new machine accepted for daily use.
 
+Current known issue: quitting Conn.app leaves its token-bound daemon running.
+Do not use quit and reopen as a recovery path until authenticated shutdown or
+orphan exit lands. For development, stop both Conn.app and its daemon together.
+
 ## Deployment checklist
 
 - [ ] Full Python suite green
 - [ ] 13 of 13 harness evals green
 - [ ] Doctor reviewed with no substantive failure
-- [ ] 109 Swift tests or the current larger suite green
+- [ ] 111 Swift tests or the current larger suite green
 - [ ] Release app builds with a macro-capable toolchain
 - [ ] `Conn Dev Signing` is valid
 - [ ] Installed app passes strict signature verification
@@ -195,6 +199,8 @@ calling the new machine accepted for daily use.
   layout. There is no preferences UI or filesystem scan.
 - Code-signing identity and TCC grants are machine-local.
 - Live AX probes require an unlocked desktop session.
+- App-only relaunch is not yet reliable because the prior token-bound daemon
+  remains alive and cannot be adopted by a fresh app token.
 - External app probes depend on the app being installed and exposing the
   expected native state.
 - The current build may need

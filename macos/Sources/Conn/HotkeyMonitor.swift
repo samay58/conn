@@ -101,6 +101,16 @@ final class HotkeyMonitor {
         }
     }
 
+    func handle(_ event: NSEvent) {
+        let isRepeat = event.type == .keyDown && event.isARepeat
+        handle(
+            keyCode: event.keyCode,
+            eventType: event.type,
+            modifierFlags: event.modifierFlags,
+            isRepeat: isRepeat
+        )
+    }
+
     func start() {
         guard !started else { return }
         started = true
@@ -116,12 +126,7 @@ final class HotkeyMonitor {
     private func installMonitors() {
         removeMonitors()
         let handle: (NSEvent) -> Void = { [weak self] event in
-            self?.handle(
-                keyCode: event.keyCode,
-                eventType: event.type,
-                modifierFlags: event.modifierFlags,
-                isRepeat: event.isARepeat
-            )
+            self?.handle(event)
         }
         let mask = binding.eventMask
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask,

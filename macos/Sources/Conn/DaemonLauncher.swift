@@ -16,7 +16,7 @@ enum DaemonLauncher {
     static var process: Process?
 
     static func ensureRunning(bridgeToken: String, then done: @escaping @MainActor () -> Void) {
-        let challenge = BridgeToken.generate()
+        let challenge = BridgeChallenge.generate()
         URLSession.shared.dataTask(with: authenticatedHealthRequest(challenge: challenge)) { data, response, _ in
             let statusOK = (response as? HTTPURLResponse)?.statusCode == 200
             if statusOK, let data {
@@ -65,7 +65,7 @@ enum DaemonLauncher {
             NSLog("Conn daemon did not authenticate after launch")
             return
         }
-        let challenge = BridgeToken.generate()
+        let challenge = BridgeChallenge.generate()
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.25) {
             URLSession.shared.dataTask(with: authenticatedHealthRequest(challenge: challenge)) {
                 data, response, _ in

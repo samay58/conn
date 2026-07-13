@@ -4,6 +4,8 @@ Updated 2026-07-12. Run this only after the real fixture acceptance and
 operation-level live app matrix in `docs/2026-07-07-roadmap.md` pass. Current
 app-switch smoke probes are not enough.
 
+For current engineering confidence tests, use `docs/MANUAL-TESTING.md`.
+
 ## Product acceptance bar
 
 Use Conn for 30 ordinary commands across at least three real work sessions.
