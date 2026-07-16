@@ -135,19 +135,24 @@ enum NativeActionProbeRunner {
         let observation = await engine.observe([
             "turn_id": turnID,
             "observation_epoch": 1,
-            "query": ["max_nodes": 500, "max_depth": 16],
+            "query": [
+                "search_terms": ["fixture.no_effect"],
+                "expected_roles": ["AXButton"],
+                "expected_actions": ["AXPress"],
+                "max_nodes": 500,
+                "max_depth": 16,
+            ],
         ])
-        let nodes = observation["nodes"] as? [[String: Any]] ?? []
-        guard let noEffect = nodes.first(where: {
-            $0["identifier"] as? String == "fixture.no_effect"
-        }), let targetRef = noEffect["ref"] as? String,
+        let candidates = observation["candidates"] as? [[String: Any]] ?? []
+        guard candidates.count == 1,
+              let targetRef = candidates[0]["ref"] as? String,
               let snapshotID = observation["snapshot_id"] as? String else {
             return [
                 "probe": "fixture",
                 "outcome": "failed",
                 "independent_verdict": "fixture_target_not_observed",
                 "bundle_id": observation["bundle_id"] as? String ?? "unknown",
-                "node_count": nodes.count,
+                "candidate_count": candidates.count,
             ]
         }
         let plan = await engine.prepare([

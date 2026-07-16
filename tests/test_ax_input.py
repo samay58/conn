@@ -532,6 +532,7 @@ def test_fake_executors_cover_all_grounded_input_tools(ctx):
         "computer_hotkey",
         "app_focus_tab",
         "app_menu",
+        "browser_navigate",
     }
 
     assert expected.issubset(FAKE_EXECUTORS)
@@ -549,6 +550,7 @@ def test_fake_executors_cover_all_grounded_input_tools(ctx):
     assert FAKE_EXECUTORS["computer_hotkey"]({"combo": "cmd+shift+t"}, ctx)["data"]["combo"] == "cmd+shift+t"
     assert FAKE_EXECUTORS["app_focus_tab"]({"title": "Kaku"}, ctx)["data"]["focused"] == "Kaku"
     assert FAKE_EXECUTORS["app_menu"]({"path": ["File", "New Tab"]}, ctx)["data"]["pressed"] == ["File", "New Tab"]
+    assert FAKE_EXECUTORS["browser_navigate"]({"url": "https://example.com"}, ctx)["data"]["url"] == "https://example.com"
 
 
 def test_named_app_frontmost_uses_known_exact_bundle():

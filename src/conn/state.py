@@ -31,6 +31,10 @@ from .actions import (
     dispatch_only_receipt,
     uncertain_failure_receipt,
 )
+
+MAX_GROUNDING_READS_PER_TURN = 2
+
+
 class Phase(StrEnum):
     IDLE = "idle"
     LISTENING = "listening"
@@ -120,6 +124,7 @@ class ResponseProvenanceLedger:
 @dataclass
 class SessionStateMachine:
     computer_mutations: frozenset[str]
+    grounding_reads: frozenset[str] = frozenset({"computer_ax_snapshot"})
     tap_threshold_ms: int = 300
     watchdog_timeout_s: float = 600
     phase: Phase = Phase.IDLE
@@ -132,6 +137,7 @@ class SessionStateMachine:
     _mutation_chain_closed: bool = False
     _replan_budget: int = 1        # one replan per turn, only after proven not_dispatched
     _predispatch_failures: int = 0  # compile failures do not consume the replan budget
+    _grounding_reads_used: int = 0
     _failed_shapes: set[str] = field(default_factory=set)
     _execution_seq: int = 0
     _transition_seq: int = 0       # bumped on every real phase transition
@@ -312,6 +318,41 @@ class SessionStateMachine:
         if call.call_id in self.ledger:
             return []
         self._batch_had_calls = True
+        if call.name in self.grounding_reads and self._mutation_chain_closed:
+            output = json.dumps({
+                "ok": False,
+                "error": (
+                    "clarification_exhausted: fresh user turn required after "
+                    "an unresolved target"
+                ),
+            })
+            self.ledger[call.call_id] = LedgerEntry(
+                call, CallStatus.BLOCKED, output
+            )
+            cmds = [SendToolResult(call.call_id, False, output)]
+            cmds.extend(self._maybe_continue())
+            self._refresh_phase()
+            return cmds
+        if (
+            call.name in self.grounding_reads
+            and self._grounding_reads_used >= MAX_GROUNDING_READS_PER_TURN
+        ):
+            output = json.dumps({
+                "ok": False,
+                "error": (
+                    "grounding_read_limit: fresh user turn required after "
+                    "two observations"
+                ),
+            })
+            self.ledger[call.call_id] = LedgerEntry(
+                call, CallStatus.BLOCKED, output
+            )
+            cmds = [SendToolResult(call.call_id, False, output)]
+            cmds.extend(self._maybe_continue())
+            self._refresh_phase()
+            return cmds
+        if call.name in self.grounding_reads:
+            self._grounding_reads_used += 1
         if self._is_computer_mutation(call.name):
             if self._plan_shape(call) in self._failed_shapes:
                 # The same failed plan shape never runs twice in one turn; a
@@ -405,7 +446,16 @@ class SessionStateMachine:
         )
         return self._resolve(ev.call_id, CallStatus.DENIED, output, ok=False)
 
-    def _resolve(self, call_id: str, status: CallStatus, output: str, *, ok: bool) -> list[Command]:
+    def _resolve(
+        self,
+        call_id: str,
+        status: CallStatus,
+        output: str,
+        *,
+        ok: bool,
+        model_observation=None,
+        visual_observation=None,
+    ) -> list[Command]:
         entry = self.ledger.get(call_id)
         if entry is None or entry.status in RESOLVED:
             return []
@@ -422,7 +472,11 @@ class SessionStateMachine:
                 self._mutation_chain_closed = True
         entry.status = status
         entry.output = output
-        cmds: list[Command] = [SendToolResult(call_id, ok, output)]
+        cmds: list[Command] = [SendToolResult(
+            call_id, ok, output,
+            model_observation=model_observation,
+            visual_observation=visual_observation,
+        )]
         cmds.extend(self._maybe_continue())
         self._refresh_phase()
         return cmds
@@ -440,7 +494,14 @@ class SessionStateMachine:
                 ev, action_outcome=receipt.outcome, ok=receipt.ok))
             output = json.dumps(receipt.as_dict())
             result_ok = receipt.ok
-        return self._resolve(ev.call_id, status, output, ok=result_ok)
+        return self._resolve(
+            ev.call_id,
+            status,
+            output,
+            ok=result_ok,
+            model_observation=ev.model_observation,
+            visual_observation=ev.visual_observation,
+        )
 
     def _response_done(self, ev: ResponseDone) -> list[Command]:
         self._response_open = False
@@ -531,6 +592,7 @@ class SessionStateMachine:
         self._mutation_chain_closed = False
         self._replan_budget = 1
         self._predispatch_failures = 0
+        self._grounding_reads_used = 0
         self._failed_shapes.clear()
         self.phase = Phase.LISTENING
 
@@ -540,6 +602,7 @@ class SessionStateMachine:
         self._batch_had_calls = False
         self._mutation_reserved = False
         self._ptt_down_ms = None
+        self._grounding_reads_used = 0
 
     def _start_execution(self, call: ToolCall) -> ToolCall:
         self._execution_seq += 1
@@ -547,11 +610,36 @@ class SessionStateMachine:
 
     @staticmethod
     def _plan_shape(call: ToolCall) -> str:
+        ephemeral = {
+            "snapshot_id", "observation_id", "capture_id", "ref", "ancestor_ref",
+        }
+
+        def stable(value):
+            if isinstance(value, dict):
+                return {
+                    key: stable(item)
+                    for key, item in value.items()
+                    if key not in ephemeral
+                }
+            if isinstance(value, list):
+                return [stable(item) for item in value]
+            return value
+
+        plan = call.prepared_plan or {}
+        shape = {
+            "tool": call.name,
+            "goal": call.preview,
+            "arguments": stable(call.arguments),
+            "descriptor": plan.get("target_descriptor")
+            or plan.get("target_fingerprint")
+            or plan.get("target_role"),
+            "lane": plan.get("lane") or plan.get("risk"),
+            "strategies": plan.get("authorized_strategies") or [],
+        }
         try:
-            arguments = json.dumps(call.arguments, sort_keys=True, default=str)
+            return json.dumps(shape, sort_keys=True, default=str)
         except (TypeError, ValueError):
-            arguments = repr(call.arguments)
-        return f"{call.name}:{arguments}"
+            return repr(shape)
 
     @staticmethod
     def _proven_not_dispatched(output: str) -> bool:
@@ -594,6 +682,7 @@ class SessionStateMachine:
             ),),
             retry_safe=False,
             duration_ms=0,
+            reason_code=reason,
             data={"error": reason},
         ).as_dict())
 
@@ -669,6 +758,7 @@ class SessionStateMachine:
                     ),),
                     retry_safe=False,
                     duration_ms=duration_ms,
+                    reason_code="witness_not_matched",
                     data={"error": summary},
                 )
             case ActionOutcome.AMBIGUOUS:

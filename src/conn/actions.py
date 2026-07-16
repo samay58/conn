@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .navigation import NAVIGATION_GRANT_GUIDANCE
+
 
 class ActionOutcome(StrEnum):
     VERIFIED = "verified"
@@ -19,10 +21,34 @@ class DispatchState(StrEnum):
     DISPATCHED = "dispatched"
 
 
+class ReasonCode(StrEnum):
+    NO_TRUSTWORTHY_WITNESS = "no_trustworthy_witness"
+    WITNESS_NOT_MATCHED = "witness_not_matched"
+    AMBIGUOUS_AFTER_FULL_LOCATOR = "ambiguous_after_full_locator"
+    INVALID_ACTION_RECEIPT = "invalid_action_receipt"
+
+
 def _wire_bool(value: object, field: str) -> bool:
     if type(value) is not bool:
         raise ValueError(f"{field} must be a boolean")
     return value
+
+
+def _candidate_description(value: object) -> str | None:
+    if isinstance(value, str):
+        return value[:160]
+    if not isinstance(value, dict):
+        return None
+    descriptor = value.get("descriptor")
+    if isinstance(descriptor, dict):
+        display = descriptor.get("display")
+        if isinstance(display, str) and display.strip():
+            return display.strip()[:160]
+    for key in ("display", "label", "title"):
+        text = value.get(key)
+        if isinstance(text, str) and text.strip():
+            return text.strip()[:160]
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +72,7 @@ class ActionReceipt:
     evidence: tuple[ActionEvidence, ...]
     retry_safe: bool
     duration_ms: int
+    reason_code: str | None = None
     data: dict | None = None
 
     def __post_init__(self) -> None:
@@ -66,23 +93,19 @@ class ActionReceipt:
             raise ValueError(f"{self.outcome.value} has impossible dispatch state")
         if self.retry_safe and self.dispatch_state is not DispatchState.NOT_DISPATCHED:
             raise ValueError("retry safe action must be proven not dispatched")
+        if self.outcome is not ActionOutcome.VERIFIED:
+            if not isinstance(self.reason_code, str) or not self.reason_code.strip():
+                raise ValueError("non-verified action requires a reason code")
 
     @property
     def ok(self) -> bool:
         return self.outcome is ActionOutcome.VERIFIED
 
-    @property
-    def reason_code(self) -> str | None:
-        """Stable machine-readable failure class: the first token of the
-        error summary, e.g. 'stale_snapshot' or 'no_live_affordance'."""
-        error = (self.data or {}).get("error")
-        if not isinstance(error, str) or not error:
-            return None
-        return error.split(":", 1)[0].strip()
-
     def safe_user_message(self) -> str:
         """What Conn may say about this outcome: the safe reason and next
         move, with no internal terminology."""
+        if self.reason_code == "navigation_grant_required":
+            return NAVIGATION_GRANT_GUIDANCE
         match self.outcome:
             case ActionOutcome.VERIFIED:
                 return "Done."
@@ -91,8 +114,11 @@ class ActionReceipt:
             case ActionOutcome.NO_EFFECT:
                 return "I sent it, but it did not take effect."
             case ActionOutcome.AMBIGUOUS:
-                candidates = [str(item) for item
-                              in (self.data or {}).get("candidates", [])[:3]]
+                candidates = [
+                    _candidate_description(item)
+                    for item in (self.data or {}).get("candidates", [])[:3]
+                ]
+                candidates = [item for item in candidates if item]
                 if candidates:
                     return (f"I found more than one match: "
                             f"{', '.join(candidates)}. Which one?")
@@ -138,8 +164,22 @@ class ActionReceipt:
 
     @classmethod
     def from_dict(cls, data: dict) -> ActionReceipt:
+        outcome = ActionOutcome(data["outcome"])
+        reason_code = data.get("reason_code")
+        if outcome is not ActionOutcome.VERIFIED and not reason_code:
+            error = (data.get("data") or {}).get("error")
+            if isinstance(error, str) and error:
+                reason_code = _reason_from_summary(error)
+            else:
+                reason_code = {
+                    ActionOutcome.DISPATCH_ONLY: ReasonCode.NO_TRUSTWORTHY_WITNESS,
+                    ActionOutcome.NO_EFFECT: ReasonCode.WITNESS_NOT_MATCHED,
+                    ActionOutcome.AMBIGUOUS: ReasonCode.AMBIGUOUS_AFTER_FULL_LOCATOR,
+                    ActionOutcome.BLOCKED: "legacy_blocked",
+                    ActionOutcome.FAILED: ReasonCode.INVALID_ACTION_RECEIPT,
+                }[outcome]
         return cls(
-            outcome=ActionOutcome(data["outcome"]),
+            outcome=outcome,
             dispatch_state=DispatchState(data["dispatch_state"]),
             strategy=str(data.get("strategy", "unknown")),
             lane=str(data.get("lane", "semantic")),
@@ -156,8 +196,14 @@ class ActionReceipt:
             ),
             retry_safe=_wire_bool(data.get("retry_safe"), "retry_safe"),
             duration_ms=int(data.get("duration_ms", 0)),
+            reason_code=str(reason_code) if reason_code is not None else None,
             data=data.get("data") if isinstance(data.get("data"), dict) else None,
         )
+
+
+def _reason_from_summary(summary: str) -> str:
+    token = summary.split(":", 1)[0].strip().lower().replace(" ", "_")
+    return token or ReasonCode.INVALID_ACTION_RECEIPT
 
 
 def dispatch_only_receipt(*, target: str, strategy: str, duration_ms: int) -> ActionReceipt:
@@ -175,6 +221,7 @@ def dispatch_only_receipt(*, target: str, strategy: str, duration_ms: int) -> Ac
         ),),
         retry_safe=False,
         duration_ms=duration_ms,
+        reason_code=ReasonCode.NO_TRUSTWORTHY_WITNESS,
     )
 
 
@@ -195,6 +242,7 @@ def uncertain_failure_receipt(
         ),),
         retry_safe=False,
         duration_ms=duration_ms,
+        reason_code=_reason_from_summary(summary),
         data={"error": summary},
     )
 
@@ -216,6 +264,7 @@ def not_dispatched_failure_receipt(
         ),),
         retry_safe=True,
         duration_ms=duration_ms,
+        reason_code=_reason_from_summary(summary),
         data={"error": summary},
     )
 
@@ -235,6 +284,7 @@ def blocked_receipt(*, target: str, summary: str, duration_ms: int) -> ActionRec
         ),),
         retry_safe=False,
         duration_ms=duration_ms,
+        reason_code=_reason_from_summary(summary),
         data={"error": summary},
     )
 
@@ -254,6 +304,7 @@ def ambiguous_receipt(*, target: str, data: dict, duration_ms: int) -> ActionRec
         ),),
         retry_safe=True,
         duration_ms=duration_ms,
+        reason_code=ReasonCode.AMBIGUOUS_AFTER_FULL_LOCATOR,
         data=data,
     )
 
@@ -284,6 +335,7 @@ def preparation_failure_receipt(
         ),),
         retry_safe=True,
         duration_ms=0,
+        reason_code=_reason_from_summary(summary),
         data=details,
     )
 

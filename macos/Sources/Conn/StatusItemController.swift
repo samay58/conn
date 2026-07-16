@@ -57,6 +57,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(makeItem("Stop (Belay)", #selector(stop), "."))
         menu.addItem(.separator())
 
+        let navigation = makeItem(
+            "Navigation control: Off", #selector(toggleNavigation), ""
+        )
+        navigation.tag = 4
+        menu.addItem(navigation)
+        menu.addItem(.separator())
+
         let trust = makeItem("Enable Global Hotkey…", #selector(enableHotkey), "")
         trust.tag = 2
         menu.addItem(trust)
@@ -95,6 +102,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             "Conn \(conn) · \(state.stateLabel) · $\(String(format: "%.3f", state.spentUSD))"
         menu.item(withTag: 2)?.isHidden = AXIsProcessTrusted()
         menu.item(withTag: 3)?.title = "Push-to-Talk Key: \(hotkey.binding.title)"
+        let navigation = menu.item(withTag: 4)
+        navigation?.isEnabled = state.connected
+        if state.navigationSuspended {
+            navigation?.title = "Navigation control: Suspended"
+            navigation?.state = .mixed
+        } else if state.navigationGranted {
+            navigation?.title = "Navigation control: On"
+            navigation?.state = .on
+        } else {
+            navigation?.title = Self.navigationGuidanceTitle(
+                guidance: state.navigationGuidance,
+                connected: state.connected,
+                granted: false,
+                suspended: false
+            ) ?? "Navigation control: Off"
+            navigation?.state = .off
+        }
         for item in menu.item(withTag: 3)?.submenu?.items ?? [] {
             item.state = item.representedObject as? String == hotkey.binding.rawValue
                 ? .on : .off
@@ -104,6 +128,36 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func showPanel() { panelProvider().show() }
     @objc private func newSession() { client.send(["type": "new_session"]) }
     @objc private func stop() { client.send(["type": "stop"]) }
+
+    static func navigationCommand(
+        eventType: NSEvent.EventType?, currentlyGranted: Bool
+    ) -> [String: Any]? {
+        guard eventType == .leftMouseDown || eventType == .leftMouseUp else {
+            return nil
+        }
+        return [
+            "type": currentlyGranted ? "navigation_revoke" : "navigation_grant",
+        ]
+    }
+
+    static func navigationGuidanceTitle(
+        guidance: String,
+        connected: Bool,
+        granted: Bool,
+        suspended: Bool
+    ) -> String? {
+        let text = guidance.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard connected, !granted, !suspended, !text.isEmpty else { return nil }
+        return text
+    }
+
+    @objc private func toggleNavigation() {
+        guard let command = Self.navigationCommand(
+            eventType: NSApp.currentEvent?.type,
+            currentlyGranted: state.navigationGranted
+        ) else { return }
+        client.send(command)
+    }
 
     @objc private func enableHotkey() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
@@ -117,7 +171,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openConsole() {
-        NSWorkspace.shared.open(URL(string: "http://127.0.0.1:8787")!)
+        NSWorkspace.shared.open(DaemonEndpoint.current.console)
     }
 
     @objc private func reportLastCommand() {

@@ -159,6 +159,9 @@ def build_server(app: ConnApp, *, console_capability: str | None = None) -> Star
                 await ws.close(code=1008)
                 return
 
+            if role == "app":
+                app.on_app_connection(client_id)
+
             hello = {
                 "type": "hello", "live": app.adapter_is_live(),
                 "cap_usd": app.cfg.budget.session_cap_usd,
@@ -195,6 +198,8 @@ def build_server(app: ConnApp, *, console_capability: str | None = None) -> Star
         except (asyncio.TimeoutError, WebSocketDisconnect):
             pass
         finally:
+            if role == "app":
+                app.on_app_disconnect(client_id)
             if role == "app" and app.ax_bridge.app_present:
                 app.ax_bridge.app_detached(client_id)
             bus.detach(ws)
@@ -293,9 +298,27 @@ async def handle_client(app: ConnApp, msg: dict, *, authenticated_role: str | No
         case "text":
             await app.on_text(str(msg.get("text", "")))
         case "approval":
-            await app.on_approval(str(msg.get("call_id", "")),
-                                  bool(msg.get("approved", False)),
-                                  client_ts_ms=msg.get("client_ts_ms"))
+            app.on_approval_soon(
+                str(msg.get("call_id", "")),
+                bool(msg.get("approved", False)),
+                client_ts_ms=msg.get("client_ts_ms"),
+            )
+        case "navigation_grant":
+            await app.on_navigation_grant(client_id=client_id)
+        case "navigation_revoke":
+            await app.on_navigation_revoke(client_id=client_id)
+        case "navigation_suspend":
+            await app.on_navigation_suspend(client_id=client_id)
+        case "navigation_resume":
+            generation = msg.get("generation")
+            await app.on_navigation_resume(
+                client_id=client_id,
+                generation=(
+                    generation
+                    if isinstance(generation, int) and not isinstance(generation, bool)
+                    else None
+                ),
+            )
         case "stop":
             await app.on_stop(client_ts_ms=msg.get("client_ts_ms"))
         case "override_budget":

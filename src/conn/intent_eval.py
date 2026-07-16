@@ -10,12 +10,17 @@ without ever executing anything. Harness-only evals do not measure this.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 import json
+import math
 import re
+import statistics
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .config import Config
+from .cost import CostMeter
 from .prompt import INSTRUCTIONS
 from .realtime.base import (
     RtError, RtResponseDone, RtTextDelta, RtToolCall, RtTranscriptDelta,
@@ -70,10 +75,30 @@ def grade(item: dict, proposal: dict | None,
         if wanted is None:
             continue
         options = wanted if isinstance(wanted, list) else [wanted]
-        if not any(str(value).strip().lower() == str(option).strip().lower()
-                   for option in options):
+        matches = any(
+            str(value).strip().lower() == str(option).strip().lower()
+            for option in options
+        )
+        if slot == "url" and not matches:
+            matches = any(
+                _normalized_url(value) == _normalized_url(option)
+                for option in options
+            )
+        if not matches:
             return (False, f"slot {slot}={value!r} not in {options}")
     return (True, "ok")
+
+
+def _normalized_url(value: object) -> tuple[str, str, str, str]:
+    text = str(value).strip()
+    parsed = urlsplit(text if "://" in text else f"https://{text}")
+    path = parsed.path.rstrip("/") or "/"
+    return (
+        parsed.scheme.lower(),
+        (parsed.hostname or "").lower(),
+        path,
+        parsed.query,
+    )
 
 
 # The production loop injects turn context at PTT-down, so the model rarely
@@ -98,6 +123,23 @@ def canned_read(name: str, bundle_id: str) -> dict:
         "com.apple.finder": "Finder",
     }.get(bundle_id, bundle_id)
     window_title = "Notes" if bundle_id == "com.apple.Notes" else "Start Page"
+    snapshot_render = (
+        f"snapshot eval_snapshot app={bundle_id} "
+        f"window=\"{window_title}\" elements=5\n"
+        "e1 AXButton \"Cancel\"\n"
+        "e2 AXTextField \"Search\"\n"
+        "e3 AXButton \"Save\"\n"
+        "e4 AXTabGroup \"Tabs\"\n"
+        "e5 AXRadioButton \"Spreadsheet\" parent=e4"
+    )
+    if bundle_id == "com.apple.Notes":
+        snapshot_render = (
+            "snapshot eval_snapshot app=com.apple.Notes window=\"Notes\" elements=4\n"
+            "e1 AXList \"Notes\"\n"
+            "e2 AXRow \"Current note\" parent=e1 selected=true\n"
+            "e3 AXRow \"Following note\" parent=e1\n"
+            "e4 AXTextArea \"Note body\""
+        )
     reads = {
         "computer_get_context": {
             "ok": True,
@@ -108,12 +150,7 @@ def canned_read(name: str, bundle_id: str) -> dict:
         },
         "computer_ax_snapshot": {
             "ok": True,
-            "data": {"snapshot_id": "eval_snapshot",
-                     "render": (f"snapshot eval_snapshot app={bundle_id} "
-                                f"window=\"{window_title}\" elements=3\n"
-                                "e1 AXButton \"Cancel\"\n"
-                                "e2 AXTextField \"Search\"\n"
-                                "e3 AXButton \"Save\"")},
+            "data": {"snapshot_id": "eval_snapshot", "render": snapshot_render},
             "duration_ms": 45,
         },
     }
@@ -128,14 +165,24 @@ async def _first_result(cfg: Config, tools: list[dict],
                         bundle_id: str = "com.apple.Safari") -> dict:
     adapter = OpenAIRealtimeAdapter(cfg, tools, INSTRUCTIONS)
     await adapter.connect()
+    events: asyncio.Queue = asyncio.Queue()
+
+    async def pump_events() -> None:
+        async for event in adapter.events():
+            await events.put(event)
+        await events.put(None)
+
+    pump = asyncio.create_task(pump_events())
     try:
         await adapter.upsert_semantic_context(context_item(bundle_id))
         await adapter.send_text(utterance)
         await adapter.create_response()
         read_hops = 0
         assistant_parts = []
+        action_proposal = None
+        usage_records = []
         tool_any = set(expect.get("tool_any") or [])
-        async for event in adapter.events():
+        while (event := await events.get()) is not None:
             match event:
                 case RtTranscriptDelta(text=text) | RtTextDelta(text=text):
                     assistant_parts.append(text)
@@ -152,29 +199,55 @@ async def _first_result(cfg: Config, tools: list[dict],
                         await adapter.send_tool_result(
                             call_id, json.dumps(canned_read(name, bundle_id)))
                         continue
-                    return {
-                        "proposal": proposal,
-                        "assistant_text": "".join(assistant_parts),
-                    }
-                case RtResponseDone(had_tool_calls=had_tool_calls):
-                    if had_tool_calls and read_hops:
+                    if action_proposal is None:
+                        action_proposal = proposal
+                case RtResponseDone(
+                    usage=usage, had_tool_calls=had_tool_calls
+                ):
+                    if usage:
+                        usage_records.append(usage)
+                    if had_tool_calls and read_hops and action_proposal is None:
                         await adapter.create_response()
                         continue
                     return {
-                        "proposal": None,
+                        "proposal": action_proposal,
                         "assistant_text": "".join(assistant_parts),
+                        "usage": usage_records,
                     }
                 case RtError(fatal=True):
                     return {
-                        "proposal": None,
+                        "proposal": action_proposal,
                         "assistant_text": "".join(assistant_parts),
+                        "usage": usage_records,
                     }
         return {
-            "proposal": None,
+            "proposal": action_proposal,
             "assistant_text": "".join(assistant_parts),
+            "usage": usage_records,
         }
     finally:
+        pump.cancel()
+        with suppress(asyncio.CancelledError):
+            await pump
         await adapter.close()
+
+
+def cost_summary(cfg: Config, turns: list[list[dict]]) -> dict:
+    per_turn = []
+    for usage_records in turns:
+        meter = CostMeter(pricing=cfg.pricing, budget=cfg.budget)
+        for usage in usage_records:
+            meter.ingest(usage)
+        per_turn.append(round(meter.spent_usd, 6))
+    ordered = sorted(per_turn)
+    p95_index = max(math.ceil(len(ordered) * 0.95) - 1, 0)
+    return {
+        "total_usd": round(sum(per_turn), 6),
+        "per_turn_usd": per_turn,
+        "p50_usd": round(statistics.median(ordered), 6) if ordered else 0.0,
+        "p95_usd": ordered[p95_index] if ordered else 0.0,
+        "max_usd": ordered[-1] if ordered else 0.0,
+    }
 
 
 async def _run(cfg: Config, limit: int | None) -> dict:
@@ -182,6 +255,7 @@ async def _run(cfg: Config, limit: int | None) -> dict:
     corpus = json.loads(corpus_path.read_text())
     items = corpus["items"][:limit] if limit else corpus["items"]
     results = []
+    turn_usage = []
     passed = 0
     for index, item in enumerate(items):
         try:
@@ -193,11 +267,14 @@ async def _run(cfg: Config, limit: int | None) -> dict:
             )
             proposal = outcome["proposal"]
             assistant_text = outcome["assistant_text"]
+            usage = outcome["usage"]
             ok, detail = grade(item, proposal, assistant_text)
         except (TimeoutError, OSError, RuntimeError) as exc:
-            proposal, assistant_text = None, ""
+            proposal, assistant_text, usage = None, "", []
             ok, detail = False, f"transport: {type(exc).__name__}"
         passed += ok
+        turn_usage.append(usage)
+        turn_cost = cost_summary(cfg, [usage])["total_usd"]
         results.append({
             "utterance": item["utterance"],
             "expect": item.get("expect"),
@@ -205,6 +282,8 @@ async def _run(cfg: Config, limit: int | None) -> dict:
             "assistant_text": assistant_text,
             "passed": ok,
             "detail": detail,
+            "usage": usage,
+            "cost_usd": turn_cost,
             "source": item.get("source"),
         })
         marker = "pass" if ok else "FAIL"
@@ -216,6 +295,7 @@ async def _run(cfg: Config, limit: int | None) -> dict:
         "items": len(items),
         "passed": passed,
         "pass_rate": round(passed / len(items), 4) if items else None,
+        "cost": cost_summary(cfg, turn_usage),
         "results": results,
     }
 
@@ -233,6 +313,6 @@ def run_intent_eval(cfg: Config, limit: int | None = None) -> int:
     out_path.write_text(json.dumps(report, indent=2))
     rate = report["pass_rate"]
     print(f"{report['passed']}/{report['items']} passed"
-          f" ({rate:.1%})  -> {out_path}")
+          f" ({rate:.1%}), ${report['cost']['total_usd']:.4f}  -> {out_path}")
     full_corpus = limit is None
     return 0 if (rate or 0) >= 0.97 or not full_corpus else 1

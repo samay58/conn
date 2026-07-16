@@ -40,6 +40,7 @@ class _ServerApp:
         self.publisher = lambda _message: None
         self.state_publications = 0
         self.approvals: list[tuple[str, bool]] = []
+        self.connections: list[tuple[str, str]] = []
 
     def adapter_is_live(self) -> bool:
         return True
@@ -60,6 +61,12 @@ class _ServerApp:
     async def on_approval(self, call_id: str, approved: bool, **_kwargs) -> None:
         self.approvals.append((call_id, approved))
         self.publish({"type": "approval_observed"})
+
+    def on_app_connection(self, client_id: str) -> None:
+        self.connections.append(("connected", client_id))
+
+    def on_app_disconnect(self, client_id: str) -> None:
+        self.connections.append(("disconnected", client_id))
 
 
 def _proof(token: str, purpose: str, challenge: str) -> str:
@@ -331,6 +338,12 @@ def test_authenticated_console_cannot_initiate_or_approve_actions() -> None:
         async def on_ui_ack(self, *_args) -> None:
             self.calls.append("ui_ack")
 
+        async def on_navigation_grant(self, **_kwargs) -> None:
+            self.calls.append("navigation_grant")
+
+        async def on_navigation_revoke(self, **_kwargs) -> None:
+            self.calls.append("navigation_revoke")
+
     async def scenario() -> list[str]:
         stub = Stub()
         messages = [
@@ -342,6 +355,10 @@ def test_authenticated_console_cannot_initiate_or_approve_actions() -> None:
             {"type": "override_budget"},
             {"type": "new_session"},
             {"type": "ui_ack", "moment": "thinking"},
+            {"type": "navigation_grant"},
+            {"type": "navigation_revoke"},
+            {"type": "navigation_suspend"},
+            {"type": "navigation_resume"},
         ]
         for message in messages:
             await handle_client(
@@ -362,6 +379,51 @@ def test_authenticated_console_cannot_initiate_or_approve_actions() -> None:
         return stub.calls
 
     assert asyncio.run(scenario()) == []
+
+
+def test_only_authenticated_app_connection_can_change_navigation_state() -> None:
+    class Stub:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, bool | None, str | None]] = []
+
+        async def on_navigation_grant(self, *, client_id: str | None) -> None:
+            self.calls.append(("grant", None, client_id))
+
+        async def on_navigation_revoke(self, *, client_id: str | None) -> None:
+            self.calls.append(("revoke", None, client_id))
+
+        async def on_navigation_suspend(self, *, client_id: str | None) -> None:
+            self.calls.append(("suspend", None, client_id))
+
+        async def on_navigation_resume(
+            self, *, client_id: str | None, generation: int | None
+        ) -> None:
+            self.calls.append(("resume", None, client_id))
+
+    async def scenario() -> list[tuple[str, bool | None, str | None]]:
+        stub = Stub()
+        messages = [
+            {"type": "navigation_grant"},
+            {"type": "navigation_suspend"},
+            {"type": "navigation_resume", "generation": 3},
+            {"type": "navigation_revoke"},
+        ]
+        for message in messages:
+            await handle_client(
+                stub, message, authenticated_role="app", client_id="signed-app"
+            )
+        for message in messages:
+            await handle_client(
+                stub, message, authenticated_role="console", client_id="console"
+            )
+        return stub.calls
+
+    assert asyncio.run(scenario()) == [
+        ("grant", None, "signed-app"),
+        ("suspend", None, "signed-app"),
+        ("resume", None, "signed-app"),
+        ("revoke", None, "signed-app"),
+    ]
 
 
 def test_public_console_page_contains_no_approval_credential() -> None:
@@ -470,6 +532,32 @@ def test_console_cannot_approve_with_any_message_shape() -> None:
         ))
 
     assert stub.approvals == []
+
+
+def test_authenticated_approval_frame_does_not_block_bridge_reader() -> None:
+    class Stub:
+        def __init__(self):
+            self.approvals = []
+
+        def on_approval_soon(self, *args, **kwargs):
+            self.approvals.append((args, kwargs))
+
+    stub = Stub()
+    asyncio.run(handle_client(
+        stub,
+        {
+            "type": "approval",
+            "call_id": "call-1",
+            "approved": True,
+            "client_ts_ms": 123,
+        },
+        authenticated_role="app",
+        client_id="app-1",
+    ))
+
+    assert stub.approvals == [
+        (("call-1", True), {"client_ts_ms": 123})
+    ]
 
 
 def test_console_unverified_outcomes_have_explicit_non_green_styles() -> None:

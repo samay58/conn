@@ -1,64 +1,72 @@
-# Next session: human acceptance of verified outcomes
+# Next session: capability breadth through Conn Lab
 
-Updated 2026-07-13. The reliability program and the verified-outcome follow-up
-are mechanically green. Python, Swift, harness, live intent, reconnect, and
-data-hygiene gates are recorded in `docs/STATE-OF-PLAY.md`.
+Updated 2026-07-16. Read `docs/STATE-OF-PLAY.md`,
+`docs/2026-07-16-conn-lab-spec.md`, and
+`docs/2026-07-16-conn-lab-implementation-plan.md` first.
 
-## Outcome
+## Starting point
 
-Supply the human evidence automation cannot: compare two signed voice receipts
-to the visible app result, check barge-in acoustically, complete the safe manual
-drill, and begin the 30-command product gate.
+Conn Lab L0 through L9 are implemented. Current measured boundaries:
 
-## Steps
+- 741 Python tests passed, three intentionally deselected, two dependency
+  warnings
+- three lifecycle tests passed on port 18787
+- 14 of 14 harness evals passed
+- 232 Swift tests passed
+- 86 focused lab tests passed
+- the final public smoke passed in 31.979 seconds and left no Screen Sharing
+  process
+- 20 of 20 fresh-clone release transactions returned verified receipts and
+  matching independent oracles
+- the scripted adversarial matrix passed 100 of 100
+- the live intent corpus passed 225 of 226, or 99.56 percent, at $1.392171
 
-1. Launch the installed `/Applications/Conn.app`. If an older copy is already
-   running, relaunch it by hand so the newly installed build is active. Do not
-   stop a daemon or process unless its ownership is clear.
+Default Tart NAT is the release path. Softnet is optional. Missing privilege
+does not fail `doctor`. Every disposable clone from the final work was
+deleted. Only the stopped golden image and pinned OCI image remain.
 
-2. Run the two create commands against scratch content:
-   - In Safari, say `Open a new tab`. Accept `Done.` only if the receipt is
-     `verified` and a tab visibly appears.
-   - In Notes, say `New note`. Accept `Done.` only if the receipt is `verified`
-     and a blank note visibly appears.
-   - Use `Report Last Command` after any mismatch and retain the artifact.
+The public CLI reads twelve scenarios from one validated JSON catalog. Private
+guest environment values use a bounded standard-input envelope rather than
+host process arguments. Every run emits typed run, oracle, and artifact
+records after guest cleanup.
 
-   Targeted native probes already returned `verified` from descendant-role
-   witnesses. Their artifacts still say `visible_confirmation_required`, so
-   these voice runs must supply the independent eye verdict.
+The release evidence retains one honest native uncertainty:
+`lab-release-160545-19`. The fixture changed once, `AXPress` returned
+`kAXErrorCannotComplete`, Conn marked the action possibly dispatched, and no
+retry occurred.
 
-3. Check barge-in acoustically. Ask a question, interrupt Conn mid-answer with
-   a new command, and confirm the new transcript has no leading fragment of
-   Conn's own speech.
+## Next engineering delivery
 
-4. Complete `docs/MANUAL-TESTING.md`, including the independent fixture truth
-   checks. Record every receipt-to-eye mismatch, even when the action worked.
+Build the capability-expansion flywheel in this order:
 
-5. Start the 30-command gate in `docs/LIVE_EVAL_CHECKLIST.md` across three work
-   sessions. Daily-driver acceptance still requires zero false completion
-   language and at least 90 percent of supported actions faster than hands or
-   useful while hands are occupied.
+- split the current full-stack scenario driver into capsule-owned setup and
+  oracle seams
+- route semantic and visual native plans through one explicit action facade
+- promote sanitized failures into reviewable candidate scenarios
+- freeze the July 13 menu target, wrong-browser, repeated zero-candidate, and
+  opaque Play incidents
+- add deterministic Finder, Calendar, Preview, Safari, Firefox, Notes, and
+  ConnActionFixture capsules
+- measure shared app and window, button, list, field, menu, document,
+  scrolling, and visual-fallback shapes
+- implement only generic primitives demanded by red atlas scenarios
+- require each new primitive to succeed in three structurally different apps
+  and refuse one adversarial case
 
-## Evidence already closed
+Keep one mutation per transaction. Re-observe between steps. Stop on
+ambiguity, possible dispatch, stale state, app change, secure state, grant
+loss, or budget exhaustion. Do not add app command catalogs, selectors,
+hardcoded coordinates, hidden macros, drag and drop, file moves, event
+creation, outbound messages, destructive actions, OCR, another model, MCP, or
+shell execution.
 
-- Safari native create probe: `verified`, dispatched by `ax_menu_action`, bound
-  `AXRadioButton` descendants increased from 2 to 3
-- Notes native create probe: `verified`, dispatched by `ax_menu_action`, bound
-  note-table rows increased
-- full live intent eval: 217 of 219, or 99.1 percent, in
-  `data/intent-evals/2026-07-13/results-1783960836.json`
-- destructive corpus: four of four produced no tool call and the exact
-  one-sentence refusal
-- full Python suite: 573 passed, 3 deselected, with no test-created change to
-  real `data/`
+## Human work still open
 
-## Hard gates
+- relaunch installed Conn.app if an older process is running
+- physical microphone acoustic barge-in check
+- hardware hotkey behavior
+- notch and external-display presentation
+- `docs/MANUAL-TESTING.md`
+- 30-command product gate across three ordinary sessions
 
-- zero false verified outcomes
-- zero retries after possible dispatch
-- no stale action reaches native execution
-- no production Python AX or input fallback
-- no model-authored effect predicate or raw strategy on ordinary actions
-- no per-app command catalog
-- no unacknowledged context item treated as live
-- no arbitrary process killed or adopted during restart recovery
+VM evidence does not replace those judgments.

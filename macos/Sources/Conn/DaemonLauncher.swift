@@ -1,5 +1,42 @@
 import Foundation
 
+struct DaemonEndpoint: Equatable {
+    static let productionPort = 8787
+
+    let port: Int
+
+    var webSocket: URL {
+        URL(string: "ws://127.0.0.1:\(port)/ws")!
+    }
+
+    var health: URL {
+        URL(string: "http://127.0.0.1:\(port)/healthz")!
+    }
+
+    var appHealth: URL {
+        URL(string: "http://127.0.0.1:\(port)/app-healthz")!
+    }
+
+    var console: URL {
+        URL(string: "http://127.0.0.1:\(port)")!
+    }
+
+    static func resolve(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> DaemonEndpoint {
+        guard let raw = environment["CONN_SERVER_PORT"],
+              let port = Int(raw),
+              1...65535 ~= port else {
+            return DaemonEndpoint(port: productionPort)
+        }
+        return DaemonEndpoint(port: port)
+    }
+
+    static var current: DaemonEndpoint {
+        resolve()
+    }
+}
+
 struct DaemonLaunchConfig: Equatable {
     let python: String
     let projectRoot: String
@@ -8,12 +45,13 @@ struct DaemonLaunchConfig: Equatable {
 enum DaemonLauncher {
     static let defaultPython = "/Users/samaydhawan/conn/.venv/bin/python"
     static let defaultProjectRoot = "/Users/samaydhawan/conn"
-    static let health = URL(string: "http://127.0.0.1:8787/healthz")!
-    static let appHealth = URL(string: "http://127.0.0.1:8787/app-healthz")!
-    static let port = 8787
     static let logRetentionDays = 7
 
     static var process: Process?
+
+    static var endpoint: DaemonEndpoint {
+        .current
+    }
 
     static func ensureRunning(bridgeToken: String, then done: @escaping @MainActor () -> Void) {
         let challenge = BridgeChallenge.generate()
@@ -38,7 +76,7 @@ enum DaemonLauncher {
                     NSLog("Conn refused to adopt a daemon that failed bridge authentication")
                     return
                 }
-                terminatePortOwner(port)
+                terminatePortOwner(endpoint.port)
             }
             launch(bridgeToken: bridgeToken)
             waitUntilAuthenticated(
@@ -50,7 +88,7 @@ enum DaemonLauncher {
     }
 
     static func authenticatedHealthRequest(challenge: String) -> URLRequest {
-        var request = URLRequest(url: appHealth)
+        var request = URLRequest(url: endpoint.appHealth)
         request.timeoutInterval = 1
         request.setValue(challenge, forHTTPHeaderField: "X-Conn-Challenge")
         return request
@@ -231,6 +269,15 @@ enum DaemonLauncher {
         return env
     }
 
+    static func launchArguments(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String] {
+        if environment["CONN_DAEMON_MODE"] == "scripted" {
+            return ["-m", "conn", "--demo", "--no-audio", "--no-hotkey"]
+        }
+        return ["-m", "conn", "--no-hotkey"]
+    }
+
     static func launch(bridgeToken: String) {
         guard let config = resolveConfig() else {
             NSLog(
@@ -240,7 +287,7 @@ enum DaemonLauncher {
         }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: config.python)
-        proc.arguments = ["-m", "conn", "--no-hotkey"]
+        proc.arguments = launchArguments()
         proc.currentDirectoryURL = URL(fileURLWithPath: config.projectRoot)
         proc.environment = launchEnvironment(
             base: ProcessInfo.processInfo.environment,

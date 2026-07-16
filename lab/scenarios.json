@@ -1,0 +1,353 @@
+[
+  {
+    "schema_version": 1,
+    "id": "control",
+    "description": "Activate one unique fixture control.",
+    "tier": "fixture",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": "unique_control",
+      "vertical_scenario": "control",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Click Continue in the current window"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_activate",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "fixture_truth", "expected": {"effect": "control_changed"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["accessibility", "pointer", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "firefox-local",
+    "description": "Open one literal local page in Firefox.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "firefox_local",
+      "truth_server_run_id": "firefox-local"
+    },
+    "spoken_or_typed_turns": ["Open the Conn Lab page in Firefox"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "browser_navigate",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {
+      "outcome": "dispatch_only",
+      "reason_code": "no_trustworthy_witness"
+    },
+    "oracle": {"kind": "browser_truth", "expected": {"effect": "page_loaded"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["firefox", "local_truth_server", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "firefox-open",
+    "description": "Open Firefox without dispatching another browser.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "firefox_open",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Open Firefox"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "app_open",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "app_identity", "expected": {"effect": "frontmost_bundle"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["launch_services", "signed_app_identity", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "firefox-space",
+    "description": "Send one safe Space key to Firefox media.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "firefox_space",
+      "truth_server_run_id": "firefox-space"
+    },
+    "spoken_or_typed_turns": ["Press Space in Firefox"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_key",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {
+      "outcome": "dispatch_only",
+      "reason_code": "no_trustworthy_witness"
+    },
+    "oracle": {"kind": "browser_truth", "expected": {"effect": "space_play"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["keyboard", "firefox", "local_truth_server"]
+  },
+  {
+    "schema_version": 1,
+    "id": "firefox-visual",
+    "description": "Activate opaque Firefox media through bounded visual grounding.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "firefox_visual",
+      "truth_server_run_id": "firefox-visual"
+    },
+    "spoken_or_typed_turns": ["Play the video in Firefox"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_activate",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {
+      "outcome": "dispatch_only",
+      "reason_code": "no_trustworthy_witness"
+    },
+    "oracle": {"kind": "browser_truth", "expected": {"effect": "pointer_play"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["screen_capture", "pointer", "local_truth_server"]
+  },
+  {
+    "schema_version": 1,
+    "id": "menu",
+    "description": "Re-resolve one lazy menu item after recapture.",
+    "tier": "fixture",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": "menu_recapture",
+      "vertical_scenario": "menu",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Create a new window from the menu"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_create",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "fixture_truth", "expected": {"effect": "window_created"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["accessibility", "menu_recapture", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "notes-create",
+    "description": "Create one disposable local Notes note.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "notes_create",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Create a new note in Notes"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_create",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "notes_store", "expected": {"effect": "notes_store_count_delta"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["notes", "accessibility", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "notes-select",
+    "description": "Select the next disposable local Notes note.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "notes_select",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Select the next note in Notes"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_select_relative",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "notes_store", "expected": {"effect": "notes_selected_object_changed"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["notes", "relative_selection", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "notes-type",
+    "description": "Replace disposable Notes text without submitting.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "notes_type",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Replace the seed note with scratch text"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_type_text",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "notes_store", "expected": {"effect": "notes_store_title_replaced"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["notes", "text_input", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "safari-local",
+    "description": "Open one literal local page in Safari.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "safari_local",
+      "truth_server_run_id": "safari-local"
+    },
+    "spoken_or_typed_turns": ["Open the Conn Lab page in Safari"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "browser_navigate",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {
+      "outcome": "dispatch_only",
+      "reason_code": "no_trustworthy_witness"
+    },
+    "oracle": {"kind": "browser_truth", "expected": {"effect": "page_loaded"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["safari", "local_truth_server", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "safari-tab",
+    "description": "Create one Safari tab and match the nested tab witness.",
+    "tier": "real_app",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": null,
+      "vertical_scenario": "safari_tab",
+      "truth_server_run_id": "safari-tab"
+    },
+    "spoken_or_typed_turns": ["Open a new tab in Safari"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_create",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {"outcome": "verified", "reason_code": null},
+    "oracle": {"kind": "browser_truth", "expected": {"effect": "page_hidden"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["safari", "nested_collection_witness", "receipt"]
+  },
+  {
+    "schema_version": 1,
+    "id": "visual",
+    "description": "Activate one opaque fixture media surface.",
+    "tier": "fixture",
+    "mode": "scripted",
+    "initial_state": {
+      "fixture_scene": "opaque_media",
+      "vertical_scenario": "visual",
+      "truth_server_run_id": null
+    },
+    "spoken_or_typed_turns": ["Play the video in the current window"],
+    "navigation_grant_state": "active",
+    "fault_schedule": [],
+    "expected_tool_family": "computer_activate",
+    "expected_dispatch_count": 1,
+    "expected_receipt": {
+      "outcome": "dispatch_only",
+      "reason_code": "no_trustworthy_witness"
+    },
+    "oracle": {"kind": "fixture_truth", "expected": {"effect": "playback_changed"}},
+    "limits": {
+      "duration_s": 180,
+      "model_responses": 4,
+      "tool_calls": 6,
+      "observation_bytes": 10000000,
+      "retries": 1,
+      "live_cost_usd": 0.25
+    },
+    "required_capabilities": ["screen_capture", "pointer", "fixture_truth"]
+  }
+]

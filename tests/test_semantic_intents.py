@@ -29,11 +29,13 @@ class TestModelSurface:
         exported = {tool["name"] for tool in export_openai(build_registry())}
         assert "computer_hotkey" not in exported
         assert "app_menu" not in exported
+        assert "computer_screenshot" not in exported
 
     def test_diagnostic_tools_remain_in_the_registry_with_gates(self):
         registry = build_registry()
         assert registry["computer_hotkey"].diagnostic
         assert registry["app_menu"].diagnostic
+        assert registry["computer_screenshot"].diagnostic
 
     def test_diagnostics_exportable_only_on_explicit_request(self):
         exported = {tool["name"]
@@ -46,6 +48,20 @@ class TestModelSurface:
         exported = {tool["name"] for tool in export_openai(build_registry())}
         assert "computer_create" in exported
         assert "computer_select_relative" in exported
+        assert "computer_activate" in exported
+        assert "computer_key" in exported
+        assert "computer_visual_observe" in exported
+        assert "computer_click" not in exported
+
+    def test_direct_navigation_exposes_goal_fields_only(self):
+        tools = {tool["name"]: tool for tool in export_openai(build_registry())}
+        navigate = tools["browser_navigate"]
+        properties = navigate["parameters"]["properties"]
+
+        assert navigate["parameters"]["required"] == ["url"]
+        assert set(properties) == {"url", "browser_scope"}
+        assert properties["browser_scope"]["type"] == "string"
+        assert not ({"bundle_id", "team_id", "strategy", "effect"} & set(properties))
 
 
 class TestIntentCompilation:
@@ -55,6 +71,7 @@ class TestIntentCompilation:
             registry["computer_create"], {"kind": "tab"}, cfg)
         assert request["operation"] == "semantic_intent"
         assert request["payload"] == {"family": "create", "kind": "tab"}
+        assert request["timeout_ms"] == cfg.actions.create_verify_ms
         assert "desired_effect" not in request
 
     def test_select_relative_compiles_with_relation_and_kind(self, cfg):
@@ -204,8 +221,9 @@ class TestBridgeDeadlineAlignment:
         from conn.ax_bridge import AxBridge
 
         bridge = AxBridge(timeout_s=2.0)
-        assert bridge.effective_timeout_s(4000) == 5.5
-        assert bridge.effective_timeout_s(1200) == 2.7
+        assert bridge.effective_timeout_s(4000) == 5.6
+        assert bridge.effective_timeout_s(1200) == 2.8
+        assert bridge.effective_timeout_s(1200) > 2.701
         assert bridge.effective_timeout_s(None) == 2.0
 
     def test_harness_passes_the_plan_budget_to_execute(self, cfg, ctx, harness):
@@ -250,14 +268,108 @@ class TestBridgeDeadlineAlignment:
 
 
 class TestIntentEvalGrader:
+    def test_live_eval_pumps_item_acknowledgements_before_context_insert(
+        self, cfg, monkeypatch
+    ):
+        from conn import intent_eval
+        from conn.realtime.base import RtToolCall
+
+        class AckBoundAdapter:
+            def __init__(self, *args):
+                self.events_started = asyncio.Event()
+
+            async def connect(self):
+                return None
+
+            async def upsert_semantic_context(self, text):
+                await self.events_started.wait()
+
+            async def send_text(self, text):
+                return None
+
+            async def create_response(self):
+                return None
+
+            async def close(self):
+                return None
+
+            async def events(self):
+                self.events_started.set()
+                yield RtToolCall(
+                    call_id="call-1",
+                    name="app_open",
+                    arguments_json='{"app":"Safari"}',
+                )
+
+        monkeypatch.setattr(intent_eval, "OpenAIRealtimeAdapter", AckBoundAdapter)
+
+        result = asyncio.run(asyncio.wait_for(
+            intent_eval._first_result(
+                cfg, [], "Open Safari", {"tool_any": ["app_open"]}
+            ),
+            timeout=0.2,
+        ))
+
+        assert result["proposal"] == {
+            "name": "app_open", "arguments": {"app": "Safari"}
+        }
+
     def test_prompt_pins_named_notes_semantic_screen_reads_and_relative_words(self):
         from conn.prompt import INSTRUCTIONS
 
         assert "find or open a named note, call phoenix_search first" in INSTRUCTIONS
         assert "Do not substitute an app switch" in INSTRUCTIONS
         assert "prefer computer_get_context or computer_ax_snapshot" in INSTRUCTIONS
-        assert "Use computer_screenshot only when the user explicitly asks" in INSTRUCTIONS
+        assert "Use computer_visual_observe only when named accessible targets are unavailable" in INSTRUCTIONS
+        assert "Use computer_activate for reversible controls such as Play or Pause" in INSTRUCTIONS
+        assert "computer_screenshot" not in INSTRUCTIONS
         assert "Treat following as next" in INSTRUCTIONS
+        assert "use only the current candidate descriptions" in INSTRUCTIONS
+        assert "take a fresh native observation" in INSTRUCTIONS
+        assert "bind the chosen description" in INSTRUCTIONS
+        assert "browser_navigate for a literal URL or bare host" in INSTRUCTIONS
+        assert "browser_search only for explicit search wording" in INSTRUCTIONS
+        assert "Preserve a browser the user names" in INSTRUCTIONS
+        assert "A named app request uses app_open" in INSTRUCTIONS
+        assert "Another tab means create" in INSTRUCTIONS
+        assert "relative note language uses computer_select_relative" in INSTRUCTIONS
+
+    def test_direct_navigation_never_invents_a_site_for_an_app_name(self):
+        from conn.tools.registry import build_registry
+
+        description = build_registry()["browser_navigate"].description
+        assert "literal URL or hostname supplied by the user" in description
+        assert "Never infer a site from an app or product name" in description
+
+    def test_corpus_pins_direct_navigation_search_and_notes_precedence(self):
+        corpus = json.loads(
+            (__import__("pathlib").Path(__file__).parents[1]
+             / "evals" / "intent_corpus.json").read_text())
+        items = {item["utterance"]: item for item in corpus["items"]}
+
+        assert items["Open techmeme.com in Safari"]["expect"]["tool_any"] == [
+            "browser_navigate"
+        ]
+        assert items["Search the web for example.com"]["expect"]["tool_any"] == [
+            "browser_search"
+        ]
+        assert items["Go to the next note"]["expect"]["tool_any"] == [
+            "computer_select_relative"
+        ]
+        assert items["Open"]["expect"]["allow_no_tool"] is True
+        assert items["Click the save button"]["expect"]["tool_any"] == [
+            "computer_activate"
+        ]
+        assert items["Take a screenshot"]["expect"]["tool_any"] == [
+            "computer_visual_observe"
+        ]
+        expected_tools = {
+            tool
+            for item in corpus["items"]
+            for tool in item["expect"].get("tool_any", [])
+        }
+        assert "computer_click" not in expected_tools
+        assert "computer_screenshot" not in expected_tools
 
     def test_canned_reads_follow_the_injected_bundle(self):
         from conn.intent_eval import canned_read
@@ -267,6 +379,11 @@ class TestIntentEvalGrader:
         assert context["data"]["app"] == "Notes"
         snapshot = canned_read("computer_ax_snapshot", "com.apple.Notes")
         assert "app=com.apple.Notes" in snapshot["data"]["render"]
+        assert "AXList" in snapshot["data"]["render"]
+        assert "AXRow" in snapshot["data"]["render"]
+        safari = canned_read("computer_ax_snapshot", "com.apple.Safari")
+        assert "AXTabGroup" in safari["data"]["render"]
+        assert 'AXRadioButton "Spreadsheet"' in safari["data"]["render"]
 
     def test_grades_tool_and_slot_matches(self):
         from conn.intent_eval import grade
@@ -294,6 +411,20 @@ class TestIntentEvalGrader:
                            "slots": {"kind": ["note", "document"]}}}
         assert grade(note, {"name": "computer_create",
                             "arguments": {"kind": "document"}})[0]
+
+    def test_url_slot_accepts_equivalent_https_normalization(self):
+        from conn.intent_eval import grade
+
+        item = {"expect": {
+            "tool_any": ["browser_navigate"],
+            "slots": {"url": "example.com"},
+        }}
+        proposal = {
+            "name": "browser_navigate",
+            "arguments": {"url": "https://example.com"},
+        }
+
+        assert grade(item, proposal)[0]
 
     def test_no_tool_only_expectation_rejects_every_tool(self):
         from conn.intent_eval import grade
@@ -358,6 +489,24 @@ class TestIntentEvalGrader:
         assert result == {
             "proposal": None,
             "assistant_text": "I can't delete that yet.",
+            "usage": [],
+        }
+
+    def test_intent_eval_cost_summary_preserves_per_turn_distribution(self, cfg):
+        from conn.intent_eval import cost_summary
+
+        usage = {
+            "input_token_details": {"text_tokens": 1_000},
+            "output_token_details": {"text_tokens": 100},
+        }
+        summary = cost_summary(cfg, [[usage], [usage, usage]])
+
+        assert summary == {
+            "total_usd": 0.0192,
+            "per_turn_usd": [0.0064, 0.0128],
+            "p50_usd": 0.0096,
+            "p95_usd": 0.0128,
+            "max_usd": 0.0128,
         }
 
     def test_corpus_is_reviewed_and_large_enough(self):
@@ -388,6 +537,22 @@ class TestIntentEvalGrader:
             assert expect["speech_equals"] == (
                 "I can't help with destructive actions yet.")
             assert expect["speech_max_sentences"] == 1
+
+    def test_screenshot_requests_allow_honest_no_output_ceiling(self):
+        corpus = json.loads(
+            (__import__("pathlib").Path(__file__).parents[1]
+             / "evals" / "intent_corpus.json").read_text())
+        screenshot_requests = {
+            "Take a screenshot",
+            "Grab a screenshot of the screen",
+            "Screenshot this",
+            "Capture the screen",
+            "Screenshot the window",
+            "Take a picture of my screen",
+        }
+        items = {item["utterance"]: item for item in corpus["items"]}
+        for utterance in screenshot_requests:
+            assert items[utterance]["expect"]["allow_no_tool"] is True
 
     def test_app_routing_items_use_an_off_target_context(self):
         corpus = json.loads(

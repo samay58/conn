@@ -20,11 +20,15 @@ final class AppState: ObservableObject {
     @Published var chips: [Chip] = []
     @Published var level: Double = 0
     @Published var spentUSD = 0.0
-    @Published var capUSD = 1.0
+    @Published var capUSD = 5.0
     @Published var toast: String?
     @Published var rejectPulse: Int = 0
     @Published var axWarning: String?
     @Published var lastActionOutcome: String?
+    @Published var navigationGranted = false
+    @Published var navigationSuspended = false
+    @Published var navigationGeneration = 0
+    @Published var navigationGuidance = ""
 
     var pendingChip: Chip? { chips.first(where: \.pending) }
     var actionVerified: Bool { lastActionOutcome == "verified" }
@@ -95,6 +99,12 @@ final class AppState: ObservableObject {
                          status: $0["status"] as? String ?? "")
                 }
             }
+            if let navigation = msg["navigation"] as? [String: Any] {
+                navigationGranted = navigation["granted"] as? Bool ?? false
+                navigationSuspended = navigation["suspended"] as? Bool ?? false
+                navigationGeneration = navigation["generation"] as? Int ?? 0
+                navigationGuidance = navigation["guidance"] as? String ?? ""
+            }
         case "user_transcript":
             userLine = msg["text"] as? String ?? ""
             modelLine = ""
@@ -121,6 +131,13 @@ final class AppState: ObservableObject {
         default:
             break
         }
+    }
+
+    func clearNavigationState() {
+        navigationGranted = false
+        navigationSuspended = false
+        navigationGeneration = 0
+        navigationGuidance = ""
     }
 
     /// T2 grant preflight: one short line for the island; the console banner

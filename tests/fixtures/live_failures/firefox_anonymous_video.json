@@ -1,0 +1,45 @@
+{
+  "source_session": "session_86cb484325",
+  "bundle_id": "org.mozilla.firefox",
+  "window_id": 1834,
+  "window_frame": {"x": 0, "y": 0, "width": 2048, "height": 1152},
+  "queries": ["play", "video", "play", "video", "control"],
+  "measured_node_count": 34,
+  "measured_blank_title_count": 33,
+  "measured_full_window_count": 12,
+  "measured_duplicate_fingerprint_count": 10,
+  "expected_candidate_count": 0,
+  "intended_disposition": "refuse_before_dispatch",
+  "nodes": [
+    {
+      "ref": "anonymous-1",
+      "role": "AXGroup",
+      "title": "",
+      "description": "",
+      "path": [0, 0, 0],
+      "frame": {"x": 0, "y": 0, "width": 2048, "height": 1152},
+      "supported_actions": ["AXPress", "AXScrollToVisible", "AXShowMenu"],
+      "fingerprint": "1d3d3666c18916885874f8a906af436a95b1b7ce346d1871458736578a589c2f"
+    },
+    {
+      "ref": "anonymous-2",
+      "role": "AXGroup",
+      "title": "",
+      "description": "",
+      "path": [0, 0, 0, 0, 0, 0, 0, 0],
+      "frame": {"x": 0, "y": 0, "width": 2048, "height": 1152},
+      "supported_actions": ["AXPress", "AXScrollToVisible", "AXShowMenu"],
+      "fingerprint": "1d3d3666c18916885874f8a906af436a95b1b7ce346d1871458736578a589c2f"
+    },
+    {
+      "ref": "anonymous-3",
+      "role": "AXGroup",
+      "title": "",
+      "description": "",
+      "path": [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
+      "frame": {"x": 0, "y": 0, "width": 2048, "height": 1152},
+      "supported_actions": ["AXPress", "AXScrollToVisible", "AXShowMenu"],
+      "fingerprint": "1d3d3666c18916885874f8a906af436a95b1b7ce346d1871458736578a589c2f"
+    }
+  ]
+}

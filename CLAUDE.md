@@ -15,7 +15,7 @@ A git-excluded local `AGENTS.md` mirror of this file (header aside) may exist at
 All Python commands run from the repo root with the project venv and `PYTHONPATH=src`:
 
 ```bash
-# Tests (573 as of 2026-07-13; no hardware/TCC needed; addopts skip the "hardware" and "lifecycle" markers)
+# Tests (no hardware/TCC needed; addopts skip the "hardware" and "lifecycle" markers)
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_state_machine.py -q          # one file
 PYTHONPATH=src .venv/bin/python -m pytest tests -q -k "approval"                  # by keyword
@@ -32,6 +32,13 @@ PYTHONPATH=src .venv/bin/python -m conn --eval                    # 14 harness-o
 PYTHONPATH=src .venv/bin/python -m conn --intent-eval 25          # live model intent eval over evals/intent_corpus.json (billed; omit the number for all 219)
 PYTHONPATH=src .venv/bin/python -m conn --latency-report          # latency spans + budget pass/fail on the newest trace
 PYTHONPATH=src .venv/bin/python -m conn --action-probe fixture    # installed-app smoke probe (also terminal|safari|chrome|notes|obsidian) → data/action-probes/
+
+# Disposable macOS lab
+PYTHONPATH=src .venv/bin/python -m conn.lab doctor
+PYTHONPATH=src .venv/bin/python -m conn.lab run safari-tab --mode scripted --fresh
+PYTHONPATH=src .venv/bin/python -m conn.lab suite smoke
+PYTHONPATH=src .venv/bin/python -m conn.lab suite release
+PYTHONPATH=src .venv/bin/python -m conn.lab report RUN_ID
 
 # macOS app (SwiftPM, macOS 14+)
 cd macos && ./make-app.sh              # release build → Conn.app (script picks a working toolchain, prefers Xcode-beta)
@@ -75,7 +82,7 @@ Ordinary actions are semantic intents, not mechanisms: the model calls `computer
 
 1. **The harness owns permissions; the model only proposes.** `read`/`act_low` run at once, `act_confirm` waits on a chip, `blocked` returns a structured refusal. Config can escalate a tool but can never unblock a v0-disabled one.
 2. **Continuations are withheld until tool results are real** (the pending-call ledger in `state.py`).
-3. **The budget cap is a hard stop** ($1.00/session default, one gate in one place).
+3. **The budget cap is a hard stop** ($5.00/session default, one gate in one place).
 4. **Mutation `ok` means verified effect evidence**, and a possibly-dispatched action never auto-retries.
 
 Plus rules earned from incidents: approvals are pointer-only inside the signed app (no keyboard focus, ever; the console cannot approve), and the loop never lies about being alive (transport/session/daemon death becomes user-visible state within one second).

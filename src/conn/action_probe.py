@@ -23,10 +23,38 @@ class ProbeResult:
 
 
 PROBE_TARGETS = ("fixture", "terminal", "safari", "chrome", "notes", "obsidian")
+EYE_VERDICTS = frozenset({"matched", "not_matched", "unclear"})
 
 
 def _probe_artifact_path(output_dir: Path, target: str, state: str) -> Path:
     return output_dir / f"{target}-{state}-{time.time_ns()}.json"
+
+
+def write_eye_verdict(
+    probe_artifact: Path,
+    *,
+    receipt_id: str,
+    verdict: str,
+    note: str,
+) -> Path:
+    if verdict not in EYE_VERDICTS:
+        raise ValueError("eye verdict must be matched, not_matched, or unclear")
+    if not receipt_id or len(receipt_id) > 256:
+        raise ValueError("receipt_id must contain 1 to 256 characters")
+    if len(note) > 1_000:
+        raise ValueError("eye verdict note exceeds 1,000 characters")
+    machine_record = json.loads(probe_artifact.read_text())
+    machine_receipt_id = machine_record.get("receipt_id")
+    if machine_receipt_id not in (None, receipt_id):
+        raise ValueError("eye verdict receipt_id does not match probe artifact")
+    sidecar = probe_artifact.with_name(f"{probe_artifact.stem}.eye.json")
+    sidecar.write_text(json.dumps({
+        "receipt_id": receipt_id,
+        "verdict": verdict,
+        "note": note,
+        "probe_artifact": str(probe_artifact),
+    }, indent=2) + "\n")
+    return sidecar
 
 
 def classify_fixture_probe(

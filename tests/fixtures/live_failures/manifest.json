@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "session_64e67d4bf3": {
+      "trace": "data/traces/2026-07-13/session_64e67d4bf3.jsonl",
+      "trace_sha256": "06abbb10eb7457e1069e548f9a38b6c1ef6e995af72887b84d44a527346f5cdc",
+      "receipt": "data/receipts/2026-07-13/session_64e67d4bf3.json",
+      "receipt_sha256": "bb59c4fd9849da0e84c08d6194fcda10fa6f4887deeb783dd72c418e566d773f",
+      "commit": "83aa370395e397a16310e675d84c36901c9e5bc2",
+      "trace_schema": 3
+    },
+    "session_a7613a568b": {
+      "trace": "data/traces/2026-07-13/session_a7613a568b.jsonl",
+      "trace_sha256": "63ddf9772f14693efd1bc73918787f0a6cb2e6807542733701477cc887e25e38",
+      "receipt": "data/receipts/2026-07-13/session_a7613a568b.json",
+      "receipt_sha256": "6ac69409e01a334fce01ae975732beb875bce629d7e184b55768d6208d4c555c",
+      "commit": "75e138c4c70ea2f3e658875faeddb4c81d2fb0eb",
+      "trace_schema": 3
+    },
+    "session_4a09e788eb": {
+      "trace": "data/traces/2026-07-13/session_4a09e788eb.jsonl",
+      "trace_sha256": "74e1f562c4581b983e277bb756ae73a974e54614300739a2a81c10bdbb7e0e04",
+      "receipt": "data/receipts/2026-07-13/session_4a09e788eb.json",
+      "receipt_sha256": "e92191138c6c2327e552d0f0d005761b1b14b92ebd0b1ec5659c72b9cc2b2cc7",
+      "commit": "75e138c4c70ea2f3e658875faeddb4c81d2fb0eb",
+      "trace_schema": 3
+    },
+    "session_86cb484325": {
+      "trace": "data/traces/2026-07-13/session_86cb484325.jsonl",
+      "trace_sha256": "60cfe753719de9ef8fe3fa93efbc3fdef2ac0e441f13f17d4dc202e97fb1da78",
+      "receipt": "data/receipts/2026-07-13/session_86cb484325.json",
+      "receipt_sha256": "1c1fb633f75ca0fec6ef5afe77fa6162e092387c235c02724ed8a24367cb3f96",
+      "commit": "75e138c4c70ea2f3e658875faeddb4c81d2fb0eb",
+      "trace_schema": 3
+    }
+  },
+  "cases": [
+    {
+      "id": "river_duplicate",
+      "source_session": "session_a7613a568b",
+      "source_event": "call_8U3gFDXpcScX5P2L",
+      "spoken_command": "River in the top menu.",
+      "current_disposition": "ambiguous before full-locator resolution",
+      "intended_disposition": "resolve the unique named structural locator",
+      "evidence_limitations": "source artifact clipped before the second duplicate branch",
+      "fixture": "river_duplicate.json"
+    },
+    {
+      "id": "firefox_anonymous_video",
+      "source_session": "session_86cb484325",
+      "source_event": "call_92t8ioFKpKCsVW4g",
+      "spoken_command": "Play the video.",
+      "current_disposition": "five equivalent anonymous target attempts blocked",
+      "intended_disposition": "zero AX candidates and no anonymous dispatch",
+      "evidence_limitations": "fixture retains representative nodes and measured aggregate counts",
+      "fixture": "firefox_anonymous_video.json"
+    },
+    {
+      "id": "safari_nested_tabs",
+      "source_session": "session_a7613a568b",
+      "source_event": "call_gYG4wx6k9xl4UZAm",
+      "spoken_command": "New tab please.",
+      "current_disposition": "dispatch_only despite visible tab creation",
+      "intended_disposition": "bind one stable kind-compatible tab collection",
+      "evidence_limitations": "probe requires a separate visible eye verdict",
+      "fixture": "safari_nested_tabs.json"
+    },
+    {
+      "id": "notes_collections",
+      "source_session": "session_4a09e788eb",
+      "source_event": "call_wlvPhdolFCyz9lVx",
+      "spoken_command": "New note.",
+      "current_disposition": "witness watched a collection that did not grow",
+      "intended_disposition": "select a unique note collection or refuse a genuine tie",
+      "evidence_limitations": "live miss has no explicit eye verdict or post-predicate count",
+      "fixture": "notes_collections.json"
+    },
+    {
+      "id": "notes_delayed_type",
+      "source_session": "session_4a09e788eb",
+      "source_event": "call_UXsljq8vJBbYTK3f",
+      "spoken_command": "Type harmless text in the current note.",
+      "current_disposition": "Python timed out at 2701ms after possible dispatch",
+      "intended_disposition": "native receipt arrives inside the transport deadline",
+      "evidence_limitations": "user praise is eye evidence only and cannot rewrite the receipt",
+      "fixture": "python_replays.json"
+    },
+    {
+      "id": "direct_url_routing",
+      "source_session": "session_a7613a568b",
+      "source_event": "call_fuZFcnJ03O1OAp20",
+      "spoken_command": "Open techmeme.com in Safari.",
+      "current_disposition": "URL became a Google query in the default browser",
+      "intended_disposition": "navigate directly in the requested browser",
+      "evidence_limitations": "source receipt has no document URL witness",
+      "fixture": "python_replays.json"
+    },
+    {
+      "id": "notes_relative_routing",
+      "source_session": "session_4a09e788eb",
+      "source_event": "call_uQyzkX2AEkFBndi5",
+      "spoken_command": "Open the note under our current note.",
+      "current_disposition": "current Notes context routed to a vault search",
+      "intended_disposition": "select the next note in Apple Notes",
+      "evidence_limitations": "source records wrong route, not the intended native selection result",
+      "fixture": "python_replays.json"
+    },
+    {
+      "id": "repeated_snapshot_context",
+      "source_session": "session_86cb484325",
+      "source_event": "call_w9et9NHYknhBLpkQ",
+      "spoken_command": "Play the video.",
+      "current_disposition": "five search terms returned the same 34-node tree",
+      "intended_disposition": "one replaceable zero-match candidate observation",
+      "evidence_limitations": "fixture retains counts and representative nodes instead of private page text",
+      "fixture": "python_replays.json"
+    },
+    {
+      "id": "barge_in_splice",
+      "source_session": "session_4a09e788eb",
+      "source_event": "resp_E1FRo06TJwhpeuxg7OidW",
+      "spoken_command": "Delete the note.",
+      "current_disposition": "old speech prefixed the new refusal",
+      "intended_disposition": "new response contains only the refusal",
+      "evidence_limitations": "trace contains transcript text but no recorded output PCM",
+      "fixture": "python_replays.json"
+    }
+  ]
+}

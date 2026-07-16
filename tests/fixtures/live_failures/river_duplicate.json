@@ -1,0 +1,44 @@
+{
+  "source_session": "session_a7613a568b",
+  "bundle_id": "org.mozilla.firefox",
+  "window_id": 105,
+  "window_title": "Techmeme",
+  "selected_ref": "top-river",
+  "nodes": [
+    {
+      "ref": "header",
+      "parent_ref": "web-area",
+      "role": "AXGroup",
+      "title": "",
+      "description": "header navigation",
+      "path": [0, 0, 3, 0, 0, 0, 8],
+      "frame": {"x": 442.5, "y": 211.5, "width": 1143.5, "height": 18}
+    },
+    {
+      "ref": "top-river",
+      "parent_ref": "header",
+      "role": "AXLink",
+      "title": "RIVER",
+      "description": "",
+      "path": [0, 0, 3, 0, 0, 0, 8, 2],
+      "sibling_index": 2,
+      "frame": {"x": 499, "y": 211.5, "width": 49.5, "height": 18},
+      "supported_actions": ["AXPress", "AXScrollToVisible", "AXShowMenu"],
+      "fingerprint": "a7dd9dd22ff8bcd989e2431b5961960c191eeb9509123f705e1a6973ba668163",
+      "measurement_status": "measured"
+    },
+    {
+      "ref": "secondary-river",
+      "parent_ref": "secondary-navigation",
+      "role": "AXLink",
+      "title": "RIVER",
+      "description": "",
+      "path": [0, 0, 3, 0, 0, 1, 4, 1],
+      "sibling_index": 1,
+      "frame": {"x": 1210, "y": 1030, "width": 49.5, "height": 18},
+      "supported_actions": ["AXPress", "AXScrollToVisible", "AXShowMenu"],
+      "fingerprint": "a7dd9dd22ff8bcd989e2431b5961960c191eeb9509123f705e1a6973ba668163",
+      "measurement_status": "reconstructed because the source artifact clipped before this branch"
+    }
+  ]
+}

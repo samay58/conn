@@ -8,7 +8,6 @@ response.create is the only spend trigger and every one flows through _exec.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import shutil
@@ -17,7 +16,9 @@ from typing import Callable
 
 from .approval import ApprovalManager
 from .actions import ActionOutcome
+from .artifacts import ArtifactWriter
 from .ax_bridge import AxBridge
+from .navigation import NavigationLease
 from .config import Config
 from .cost import CostMeter
 from .events import (
@@ -69,12 +70,15 @@ class ConnApp:
             watchdog_timeout_s=cfg.session.watchdog_timeout_s,
             computer_mutations=harness.computer_mutations)
         self.trace = TraceWriter(cfg.data_dir, self.session_id)
+        self.artifacts = ArtifactWriter(cfg.data_dir)
         self.trace.subscribe(lambda e: self.publish({"type": "trace", "event": e}))
         self.cost = CostMeter(pricing=cfg.pricing, budget=cfg.budget)
         self.approvals = ApprovalManager(on_timeout=self.dispatch_soon)
         self.console_capability = os.environ.pop("CONN_CONSOLE_CAPABILITY", None)
         self.ax_bridge = AxBridge()
         self.harness.ctx.ax_reader = self.ax_bridge
+        self.navigation = NavigationLease(self.session_id)
+        self.harness.ctx.navigation = self.navigation
         self.publisher: Callable[[dict], None] | None = None
         self._pump_task: asyncio.Task | None = None
         self._reconnect_task: asyncio.Task | None = None
@@ -93,6 +97,7 @@ class ConnApp:
         self._observation_epoch = 0
         self._turn_context: TurnContext | None = None
         self._tool_tasks: set[asyncio.Task] = set()
+        self._approval_tasks: set[asyncio.Task] = set()
         self._context_task: asyncio.Task | None = None
         self._stopping = False
         self._last_gesture_id: str | None = None
@@ -133,6 +138,8 @@ class ConnApp:
     async def stop(self) -> None:
         self._closing = True
         self._stopping = True
+        self.navigation.end_session()
+        self.publish_state()
         # A response abandoned mid-utterance still gets its words on the
         # record, and never bleeds into the next session's transcript.
         self._flush_model_transcript(self._current_response_id,
@@ -140,6 +147,7 @@ class ConnApp:
         self.approvals.clear()
         if self._context_task and not self._context_task.done():
             self._context_task.cancel()
+        await self._quiesce_approval_tasks()
         await self._quiesce_tool_tasks()
         reconnect_task = self._reconnect_task
         if reconnect_task and not reconnect_task.done():
@@ -169,6 +177,7 @@ class ConnApp:
         await self.stop()
         self._closing = False
         self.session_id = new_id("session")
+        self.navigation.begin_session(self.session_id)
         self.machine = SessionStateMachine(
             tap_threshold_ms=self.cfg.session.tap_threshold_ms,
             watchdog_timeout_s=self.cfg.session.watchdog_timeout_s,
@@ -190,6 +199,41 @@ class ConnApp:
         self._reconnect_task = None
         self._stopping = False
         await self.start()
+
+    def on_app_connection(self, client_id: str) -> None:
+        self.navigation.bind_connection(client_id)
+        self.trace.log("navigation_connection", generation=self.navigation.generation)
+
+    def on_app_disconnect(self, client_id: str) -> None:
+        if self.navigation.disconnect(client_id):
+            self.trace.log("navigation_disconnected", generation=self.navigation.generation)
+            self.publish_state()
+
+    async def on_navigation_grant(self, *, client_id: str | None) -> None:
+        if client_id is not None and self.navigation.grant(self.session_id, client_id):
+            self.trace.log("navigation_granted", generation=self.navigation.generation)
+            self.publish_state()
+
+    async def on_navigation_revoke(self, *, client_id: str | None) -> None:
+        if client_id is not None and self.navigation.revoke(self.session_id, client_id):
+            self.trace.log("navigation_revoked", generation=self.navigation.generation)
+            self.publish_state()
+
+    async def on_navigation_suspend(self, *, client_id: str | None) -> None:
+        if client_id is not None and self.navigation.suspend(self.session_id, client_id):
+            self.trace.log("navigation_suspended", generation=self.navigation.generation)
+            self.publish_state()
+
+    async def on_navigation_resume(
+        self, *, client_id: str | None, generation: int | None
+    ) -> None:
+        if client_id is not None and self.navigation.resume(
+            self.session_id,
+            client_id,
+            expected_generation=generation,
+        ):
+            self.trace.log("navigation_resumed", generation=self.navigation.generation)
+            self.publish_state()
 
 
     def dispatch_soon(self, ev: MachineInput) -> None:
@@ -244,6 +288,20 @@ class ConnApp:
                        latency_s=round(latency, 2) if latency is not None else None,
                        client_ts_ms=client_ts_ms)
         await self.dispatch(ApprovalDecision(call_id=call_id, approved=approved))
+
+    def on_approval_soon(
+        self,
+        call_id: str,
+        approved: bool,
+        client_ts_ms: int | None = None,
+    ) -> None:
+        task = asyncio.create_task(self.on_approval(
+            call_id,
+            approved,
+            client_ts_ms=client_ts_ms,
+        ))
+        self._approval_tasks.add(task)
+        task.add_done_callback(self._approval_tasks.discard)
 
     async def on_stop(self, client_ts_ms: int | None = None) -> None:
         self.trace.log("kill_switch", client_ts_ms=client_ts_ms)
@@ -356,6 +414,9 @@ class ConnApp:
                     ok = await self._create_response_gated()
             case CancelResponse():
                 if self.adapter.connected:
+                    self._flush_model_transcript(
+                        self._current_response_id, status="cancelled"
+                    )
                     self._response_provenance.cancel_current()
                     await self.adapter.cancel_response()
             case FlushPlayback():
@@ -389,10 +450,40 @@ class ConnApp:
                                plan_fingerprint=(call.prepared_plan or {}).get(
                                    "plan_fingerprint"
                                ))
-            case SendToolResult(call_id=call_id, ok=tool_ok, output=output):
+            case SendToolResult(
+                call_id=call_id,
+                ok=tool_ok,
+                output=output,
+                model_observation=model_observation,
+                visual_observation=visual_observation,
+            ):
                 self.trace.log("tool_result_sent", call_id=call_id, ok=tool_ok)
+                if visual_observation is not None:
+                    self.cost.record_visual_observation(visual_observation)
+                    self.trace.log("visual_observation_sent", **visual_observation.metadata)
+                    send_result = self.adapter.send_tool_result(
+                        call_id,
+                        output,
+                        visual_observation=visual_observation,
+                    )
+                elif model_observation is not None:
+                    self.cost.record_observation(model_observation)
+                    self.trace.log(
+                        "model_observation_sent",
+                        observation_id=model_observation.observation_id,
+                        snapshot_id=model_observation.snapshot_id,
+                        candidate_bytes=model_observation.byte_count,
+                        estimated_input_tokens=model_observation.estimated_input_tokens,
+                    )
+                    send_result = self.adapter.send_tool_result(
+                        call_id,
+                        output,
+                        model_observation=model_observation,
+                    )
+                else:
+                    send_result = self.adapter.send_tool_result(call_id, output)
                 ok = await self._send_or_disconnect(
-                    self.adapter.send_tool_result(call_id, output))
+                    send_result)
             case EndSession(reason=reason):
                 self.trace.log("upstream_session_end", reason=reason)
                 if self.adapter.connected:
@@ -467,7 +558,8 @@ class ConnApp:
             self.cost.screenshots += 1
         artifact = self._write_tool_result_artifact(call, result)
         self.trace.log("tool_result", call_id=call.call_id, name=call.name,
-                       ok=result.ok, output=result.output[:500],
+                       ok=result.ok,
+                       output=self.artifacts.trace_preview(call.name, result.output),
                        output_artifact=artifact)
         if result.action_trace is not None:
             self.trace.log(
@@ -489,6 +581,15 @@ class ConnApp:
     async def _quiesce_tool_tasks(self) -> None:
         while self._tool_tasks:
             pending = tuple(task for task in self._tool_tasks if not task.done())
+            if not pending:
+                return
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _quiesce_approval_tasks(self) -> None:
+        while self._approval_tasks:
+            pending = tuple(
+                task for task in self._approval_tasks if not task.done()
+            )
             if not pending:
                 return
             await asyncio.gather(*pending, return_exceptions=True)
@@ -620,30 +721,19 @@ class ConnApp:
             self.trace.log("support_envelope_failed", error=str(exc))
 
     def _write_tool_result_artifact(self, call, result) -> str | None:
-        """The trace keeps a 500-character preview; the linked file carries
-        the fuller envelope, bounded at 64KB. Arguments go through the same
-        hashing redaction as tool_proposed. Secure values, clipboard bodies,
-        and secrets never enter outputs, but read results (vault snippets,
-        snapshot renders) appear in full here; the file is local and
-        gitignored, and Report Last Command embeds only the trace preview."""
         try:
-            day = time.strftime("%Y-%m-%d")
-            out_dir = self.cfg.data_dir / "tool-results" / day / self.session_id
-            out_dir.mkdir(parents=True, exist_ok=True)
-            call_digest = hashlib.sha256(call.call_id.encode()).hexdigest()[:24]
-            path = out_dir / f"call-{call_digest}.json"
-            path.write_text(json.dumps({
-                "session_id": self.session_id,
-                "call_id": call.call_id,
-                "name": call.name,
-                "arguments": self.harness.trace_arguments(call.name, call.arguments),
-                "ok": result.ok,
-                "output": result.output[:65536],
-                "turn_id": call.turn_id,
-                "response_epoch": call.response_epoch,
-                "observation_epoch": call.observation_epoch,
-            }, indent=2))
-            return str(path)
+            artifact = self.artifacts.write(
+                session_id=self.session_id,
+                call_id=call.call_id,
+                name=call.name,
+                arguments=self.harness.trace_arguments(call.name, call.arguments),
+                ok=result.ok,
+                output=result.output,
+                turn_id=call.turn_id,
+                response_epoch=call.response_epoch,
+                observation_epoch=call.observation_epoch,
+            )
+            return str(artifact.path)
         except OSError as exc:
             self.trace.log("tool_result_artifact_failed", error=str(exc))
             return None
@@ -945,4 +1035,5 @@ class ConnApp:
         snap["session_id"] = self.session_id
         snap["connected"] = self.adapter.connected
         snap["spent_usd"] = round(self.cost.spent_usd, 4)
+        snap["navigation"] = self.navigation.public_snapshot()
         self.publish(snap)

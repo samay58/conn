@@ -10,6 +10,8 @@ import secrets
 from dataclasses import dataclass
 from typing import Callable
 
+from .observations import ObservationQuery
+
 from .events import new_id
 
 APP_HEALTH_PURPOSE = "conn-app-health-v1"
@@ -132,18 +134,20 @@ class AxBridge:
         *,
         turn_id: str,
         observation_epoch: int,
-        query: str | None = None,
+        query: ObservationQuery | str | None = None,
         denied_bundles: list[str] | None = None,
     ) -> NativeRpcResult:
+        if isinstance(query, ObservationQuery):
+            wire_query = query.as_wire()
+        else:
+            wire_query = ObservationQuery.from_tool_arguments({"query": query}).as_wire()
+        wire_query["denied_bundles"] = list(denied_bundles or [])
         return await self._ask_detailed(
             {
                 "type": "ax_action",
                 "op": "observe",
                 "params": {
-                    "query": {
-                        "search": query,
-                        "denied_bundles": list(denied_bundles or []),
-                    },
+                    "query": wire_query,
                     "include_selected_text": False,
                     "turn_id": turn_id,
                     "observation_epoch": observation_epoch,
@@ -152,6 +156,30 @@ class AxBridge:
                 "observation_epoch": observation_epoch,
             },
             "axobs",
+        )
+
+    async def observe_visual(
+        self,
+        *,
+        turn_id: str,
+        observation_epoch: int,
+        enabled: bool,
+        denied_bundles: list[str] | None = None,
+    ) -> NativeRpcResult:
+        return await self._ask_detailed(
+            {
+                "type": "ax_action",
+                "op": "observe_visual",
+                "params": {
+                    "enabled": enabled,
+                    "denied_bundles": list(denied_bundles or []),
+                    "turn_id": turn_id,
+                    "observation_epoch": observation_epoch,
+                },
+                "turn_id": turn_id,
+                "observation_epoch": observation_epoch,
+            },
+            "axvisual",
         )
 
     async def capability_report(
@@ -185,24 +213,28 @@ class AxBridge:
         turn_id: str,
         response_epoch: int,
         observation_epoch: int,
+        navigation_generation: int | None = None,
     ) -> NativeRpcResult:
+        params = {
+            "request": request,
+            "turn_id": turn_id,
+            "response_epoch": response_epoch,
+            "observation_epoch": observation_epoch,
+        }
+        if navigation_generation is not None:
+            params["navigation_generation"] = navigation_generation
         return await self._ask_detailed(
             {
                 "type": "ax_action",
                 "op": "prepare_action",
-                "params": {
-                    "request": request,
-                    "turn_id": turn_id,
-                    "response_epoch": response_epoch,
-                    "observation_epoch": observation_epoch,
-                },
+                "params": params,
                 "turn_id": turn_id,
                 "observation_epoch": observation_epoch,
             },
             "axplan",
         )
 
-    TRANSPORT_MARGIN_S = 1.5
+    TRANSPORT_MARGIN_S = 1.6
 
     def effective_timeout_s(self, timeout_ms: int | None) -> float:
         """The Python deadline for an execute is the authorized native
@@ -221,17 +253,21 @@ class AxBridge:
         response_epoch: int,
         observation_epoch: int,
         timeout_ms: int | None = None,
+        navigation_generation: int | None = None,
     ) -> NativeRpcResult:
+        params = {
+            "plan_fingerprint": plan_fingerprint,
+            "turn_id": turn_id,
+            "response_epoch": response_epoch,
+            "observation_epoch": observation_epoch,
+        }
+        if navigation_generation is not None:
+            params["navigation_generation"] = navigation_generation
         return await self._ask_detailed(
             {
                 "type": "ax_action",
                 "op": "execute_action",
-                "params": {
-                    "plan_fingerprint": plan_fingerprint,
-                    "turn_id": turn_id,
-                    "response_epoch": response_epoch,
-                    "observation_epoch": observation_epoch,
-                },
+                "params": params,
                 "turn_id": turn_id,
                 "observation_epoch": observation_epoch,
             },

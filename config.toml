@@ -16,8 +16,8 @@ input_device = ""         # substring match against input device names; empty me
 low_signal_rms = 150.0    # listening windows peaking below this show a "barely heard you" hint
 
 [budget]
-session_cap_usd = 1.00
-warn_at_usd = 0.50
+session_cap_usd = 5.00
+warn_at_usd = 2.50
 hard_stop = true          # false downgrades the cap to warn-only
 
 [session]
@@ -26,6 +26,10 @@ done_flash_ms = 1500      # how long the "done" state lingers before returning t
 tap_threshold_ms = 300    # a press shorter than this is an accidental tap: discarded, zero spend
 reconnect_window_s = 300  # keep a dropped upstream session visibly reconnecting for five minutes
 reconnect_max_delay_s = 30 # cap exponential retry spacing so recovery stays responsive
+
+[actions]
+visual_enabled = true
+create_verify_ms = 2500
 
 [apps]
 allowlist = ["Obsidian", "Google Chrome", "Safari", "Finder", "Notes", "Terminal"]

@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var primarySurface: ConnSurface!
     private var panelAutoReflectPhases = true
     private var currentGestureID: String?
-    private let bridgeToken = BridgeToken.generate()
+    private let bridgeToken = BridgeToken.resolve()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         client = DaemonClient(state: state, bridgeToken: bridgeToken)

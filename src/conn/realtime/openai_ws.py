@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import websockets
 
 from ..config import Config
+from ..events import ModelObservation, VisualObservation
 from .base import (
     RtAudioDelta, RtClosed, RtError, RtEvent, RtInputTranscript,
     RtResponseCancelled, RtResponseCreated, RtResponseDone, RtSessionReady,
@@ -29,6 +30,7 @@ WS_URL = "wss://api.openai.com/v1/realtime?model={model}"
 # use (deletion and error correlation both need to name the item before the
 # server acknowledges it), so they are minted under the limit by construction.
 ITEM_ID_MAX = 32
+ITEM_ACK_TIMEOUT_S = 2.0
 
 
 @dataclass
@@ -42,6 +44,8 @@ class _ItemRecord:
     doomed: bool = False
     create_event_id: str | None = None
     delete_event_id: str | None = None
+    create_ack: asyncio.Future | None = None
+    delete_ack: asyncio.Future | None = None
 
 
 class OpenAIRealtimeAdapter:
@@ -53,6 +57,11 @@ class OpenAIRealtimeAdapter:
         self._closing = False
         self._pending_calls: dict[str, dict[str, RtToolCall]] = {}
         self._semantic_item_id: str | None = None
+        self._pending_semantic_item_id: str | None = None
+        self._semantic_replace_lock = asyncio.Lock()
+        self._visual_item_id: str | None = None
+        self._pending_visual_item_id: str | None = None
+        self._visual_replace_lock = asyncio.Lock()
         self._items: dict[str, _ItemRecord] = {}
         self._event_causes: dict[str, tuple[str, str]] = {}
         self._active_response_id: str | None = None
@@ -67,6 +76,9 @@ class OpenAIRealtimeAdapter:
             raise RuntimeError("OPENAI_API_KEY is not set")
         self._closing = False
         self._semantic_item_id = None
+        self._pending_semantic_item_id = None
+        self._visual_item_id = None
+        self._pending_visual_item_id = None
         self._pending_calls.clear()
         self._items.clear()
         self._event_causes.clear()
@@ -161,64 +173,144 @@ class OpenAIRealtimeAdapter:
         assert len(item_id) <= ITEM_ID_MAX
         return item_id
 
-    async def _create_item(self, item_id: str, item: dict) -> None:
+    async def _create_item(self, item_id: str, item: dict) -> asyncio.Future:
         event_id = f"evt_{uuid.uuid4().hex[:16]}"
-        self._items[item_id] = _ItemRecord(state="create_sent",
-                                           create_event_id=event_id)
+        create_ack = asyncio.get_running_loop().create_future()
+        self._items[item_id] = _ItemRecord(
+            state="create_sent",
+            create_event_id=event_id,
+            create_ack=create_ack,
+        )
         self._event_causes[event_id] = ("item_create", item_id)
         await self._send({
             "type": "conversation.item.create",
             "event_id": event_id,
             "item": {**item, "id": item_id},
         })
+        return create_ack
 
-    async def _delete_item(self, item_id: str) -> None:
+    async def _delete_item(self, item_id: str) -> asyncio.Future | None:
         record = self._items.get(item_id)
         if record is None or record.state == "delete_sent":
-            return
+            return record.delete_ack if record is not None else None
         if record.state == "create_sent":
             record.doomed = True
-            return
+            return None
         record.state = "delete_sent"
         event_id = f"evt_{uuid.uuid4().hex[:16]}"
+        delete_ack = asyncio.get_running_loop().create_future()
         record.delete_event_id = event_id
+        record.delete_ack = delete_ack
         self._event_causes[event_id] = ("item_delete", item_id)
         await self._send({"type": "conversation.item.delete",
                           "event_id": event_id, "item_id": item_id})
+        return delete_ack
 
     async def clear_semantic_context(self) -> None:
-        if self._semantic_item_id is None:
-            return
-        item_id, self._semantic_item_id = self._semantic_item_id, None
-        await self._delete_item(item_id)
+        async with self._semantic_replace_lock:
+            item_id = self._semantic_item_id
+            if item_id is None:
+                return
+            delete_ack = await self._delete_item(item_id)
+            if delete_ack is not None:
+                await self._require_ack(delete_ack, "observation item delete failed")
+            self._semantic_item_id = None
 
     async def upsert_semantic_context(self, text: str) -> None:
-        await self.clear_semantic_context()
-        item_id = self._new_item_id()
-        await self._create_item(item_id, {
+        await self._replace_semantic_item({
             "type": "message",
             "role": "system",
             "content": [{"type": "input_text", "text": text}],
         })
-        self._semantic_item_id = item_id
 
-    async def send_tool_result(self, call_id: str, output: str) -> None:
-        item_id = None
-        try:
-            payload = json.loads(output)
-        except (TypeError, json.JSONDecodeError):
-            payload = None
-        data = payload.get("data") if isinstance(payload, dict) else None
-        if isinstance(data, dict) and isinstance(data.get("snapshot_id"), str):
-            await self.clear_semantic_context()
+    async def replace_visual_context(self, observation: VisualObservation) -> None:
+        metadata = json.dumps(
+            observation.metadata, sort_keys=True, separators=(",", ":")
+        )
+        item = {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": f"Current window capture metadata: {metadata}"},
+                {
+                    "type": "input_image",
+                    "image_url": observation.image_data_url,
+                    "detail": "low",
+                },
+            ],
+        }
+        async with self._visual_replace_lock:
+            previous_id = self._visual_item_id
             item_id = self._new_item_id()
+            self._pending_visual_item_id = item_id
+            try:
+                create_ack = await self._create_item(item_id, item)
+                await self._require_ack(create_ack, "visual item create failed")
+                if previous_id is not None:
+                    delete_ack = await self._delete_item(previous_id)
+                    if delete_ack is not None:
+                        await self._require_ack(delete_ack, "visual item delete failed")
+                self._visual_item_id = item_id
+            finally:
+                if self._pending_visual_item_id == item_id:
+                    self._pending_visual_item_id = None
+
+    async def clear_visual_context(self) -> None:
+        async with self._visual_replace_lock:
+            item_id = self._visual_item_id
+            if item_id is None:
+                return
+            delete_ack = await self._delete_item(item_id)
+            if delete_ack is not None:
+                await self._require_ack(delete_ack, "visual item delete failed")
+            self._visual_item_id = None
+
+    async def send_tool_result(
+        self,
+        call_id: str,
+        output: str,
+        model_observation: ModelObservation | None = None,
+        visual_observation: VisualObservation | None = None,
+    ) -> None:
         item = {"type": "function_call_output", "call_id": call_id,
                 "output": output}
-        if item_id:
-            await self._create_item(item_id, item)
-            self._semantic_item_id = item_id
+        if model_observation is not None:
+            await self._replace_semantic_item(item)
         else:
             await self._send({"type": "conversation.item.create", "item": item})
+        if visual_observation is not None:
+            await self.replace_visual_context(visual_observation)
+
+    async def _replace_semantic_item(self, item: dict) -> None:
+        async with self._semantic_replace_lock:
+            previous_id = self._semantic_item_id
+            item_id = self._new_item_id()
+            self._pending_semantic_item_id = item_id
+            try:
+                create_ack = await self._create_item(item_id, item)
+                await self._require_ack(
+                    create_ack, "observation item create failed"
+                )
+                if previous_id is not None:
+                    delete_ack = await self._delete_item(previous_id)
+                    if delete_ack is not None:
+                        await self._require_ack(
+                            delete_ack, "observation item delete failed"
+                        )
+                self._semantic_item_id = item_id
+            finally:
+                if self._pending_semantic_item_id == item_id:
+                    self._pending_semantic_item_id = None
+
+    async def _require_ack(self, future: asyncio.Future, error: str) -> None:
+        try:
+            acknowledged = await asyncio.wait_for(
+                asyncio.shield(future), timeout=ITEM_ACK_TIMEOUT_S
+            )
+        except TimeoutError as exc:
+            raise RuntimeError(f"{error}: timeout") from exc
+        if acknowledged is not True:
+            raise RuntimeError(error)
 
     # ---- server events ----
 
@@ -264,13 +356,22 @@ class OpenAIRealtimeAdapter:
         match kind:
             case "session.created":
                 return [RtSessionReady(session_id=msg.get("session", {}).get("id", "?"))]
-            case "conversation.item.created":
+            case "conversation.item.created" | "conversation.item.added":
                 self._on_item_created(msg.get("item", {}).get("id"))
                 return []
+            case "conversation.item.done":
+                return []
             case "conversation.item.deleted":
-                record = self._items.pop(msg.get("item_id"), None)
+                record = self._items.get(msg.get("item_id"))
                 if record is not None and record.delete_event_id:
                     self._event_causes.pop(record.delete_event_id, None)
+                if (
+                    record is not None
+                    and record.delete_ack is not None
+                    and not record.delete_ack.done()
+                ):
+                    record.delete_ack.set_result(True)
+                self._items.pop(msg.get("item_id"), None)
                 return []
             case "response.created":
                 self._pending_calls.setdefault(response_id, {})
@@ -324,6 +425,8 @@ class OpenAIRealtimeAdapter:
         if record.create_event_id:
             self._event_causes.pop(record.create_event_id, None)
             record.create_event_id = None
+        if record.create_ack is not None and not record.create_ack.done():
+            record.create_ack.set_result(True)
         if record.doomed:
             record.doomed = False
             asyncio.ensure_future(self._flush_doomed(item_id))
@@ -350,11 +453,21 @@ class OpenAIRealtimeAdapter:
         if kind == "item_create":
             # A failed create has no server-side item: drop the record
             # entirely so nothing ever targets or retains it.
-            self._items.pop(item_id, None)
-            if self._semantic_item_id == item_id:
-                self._semantic_item_id = None
+            record = self._items.pop(item_id, None)
+            if (
+                record is not None
+                and record.create_ack is not None
+                and not record.create_ack.done()
+            ):
+                record.create_ack.set_result(False)
         elif kind == "item_delete":
-            self._items.pop(item_id, None)
+            record = self._items.pop(item_id, None)
+            if (
+                record is not None
+                and record.delete_ack is not None
+                and not record.delete_ack.done()
+            ):
+                record.delete_ack.set_result(False)
         return f"{kind}:{item_id}"
 
     @staticmethod

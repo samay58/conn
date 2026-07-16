@@ -3,6 +3,15 @@ import AppKit
 MainActor.assumeIsolated {
     if CommandLine.arguments.contains("--preview") {
         PreviewRunner.run()
+    } else if CommandLine.arguments.contains("--request-screen-recording") {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        Task {
+            let granted = ScreenRecordingPermissionSetup.ensure()
+            print(granted ? "screen_recording=granted" : "screen_recording=denied")
+            NSApp.terminate(nil)
+        }
+        app.run()
     } else if let index = CommandLine.arguments.firstIndex(of: "--action-probe"),
               CommandLine.arguments.indices.contains(index + 1) {
         let app = NSApplication.shared

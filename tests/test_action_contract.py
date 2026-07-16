@@ -29,7 +29,27 @@ def receipt(outcome: ActionOutcome, dispatch: DispatchState) -> ActionReceipt:
         evidence=(ActionEvidence(kind="window_count", summary="1 -> 2", matched=outcome is ActionOutcome.VERIFIED),),
         retry_safe=dispatch is DispatchState.NOT_DISPATCHED,
         duration_ms=83,
+        reason_code=None if outcome is ActionOutcome.VERIFIED else "test_unverified",
     )
+
+
+def test_non_verified_receipt_requires_stable_reason_code() -> None:
+    with pytest.raises(ValueError, match="reason code"):
+        ActionReceipt(
+            outcome=ActionOutcome.DISPATCH_ONLY,
+            dispatch_state=DispatchState.DISPATCHED,
+            strategy="ax_press",
+            lane="semantic",
+            target="button",
+            effect="effect not observed",
+            evidence=(ActionEvidence(
+                kind="dispatch_return",
+                summary="request accepted",
+                matched=False,
+            ),),
+            retry_safe=False,
+            duration_ms=1,
+        )
 
 
 def test_mutation_ok_is_true_only_for_verified() -> None:

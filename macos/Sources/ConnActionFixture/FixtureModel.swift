@@ -1,5 +1,118 @@
 import AppKit
+import CryptoKit
 import Foundation
+
+enum FixtureScene: String, CaseIterable {
+    case uniqueControl = "unique_control"
+    case stableDuplicate = "stable_duplicate"
+    case genuineAmbiguity = "genuine_ambiguity"
+    case secureField = "secure_field"
+    case lazyMenu = "lazy_menu"
+    case menuRecapture = "menu_recapture"
+    case nestedTabs = "nested_tabs"
+    case notesCollections = "notes_collections"
+    case delayedVerification = "delayed_verification"
+    case noEffect = "no_effect"
+    case opaqueMedia = "opaque_media"
+    case staleWindowFrame = "stale_window_frame"
+    case reorderedSiblings = "reordered_siblings"
+    case changedWindowApp = "changed_window_app"
+    case uncertainDispatch = "uncertain_dispatch"
+
+    static func select(
+        arguments: [String] = CommandLine.arguments,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> FixtureScene? {
+        if let index = arguments.firstIndex(of: "--scene") {
+            guard arguments.indices.contains(index + 1) else { return nil }
+            return FixtureScene(rawValue: arguments[index + 1])
+        }
+        if let name = environment["CONN_FIXTURE_SCENE"] {
+            return FixtureScene(rawValue: name)
+        }
+        return .noEffect
+    }
+
+    var initialState: [String: Any] {
+        let state: [String: Any]
+        switch self {
+        case .uniqueControl:
+            state = [
+                "control": "fixture.unique",
+                "label": "Continue",
+                "role": "AXCheckBox",
+                "value": false,
+            ]
+        case .stableDuplicate:
+            state = [
+                "label": "Duplicate",
+                "identifiers": ["fixture.stable.1", "fixture.stable.2"],
+            ]
+        case .genuineAmbiguity:
+            state = ["label": "Duplicate", "count": 2, "identifiers": []]
+        case .secureField:
+            state = ["field": "fixture.secure", "secure": true]
+        case .lazyMenu:
+            state = ["menu": "Actions", "item": "Lazy New Window", "lazy": true]
+        case .menuRecapture:
+            state = [
+                "menu": "Actions",
+                "item": "New Window",
+                "identifier": "fixture.menu.new_window",
+            ]
+        case .nestedTabs:
+            state = [
+                "collection": "fixture.tab.collection",
+                "item_role": "AXRadioButton",
+                "descendant_count": 2,
+                "direct_item_count": 0,
+            ]
+        case .notesCollections:
+            state = [
+                "collections": [
+                    ["identifier": "fixture.notes.primary", "rows": 2],
+                    ["identifier": "fixture.notes.secondary", "rows": 1],
+                ],
+                "item_role": "AXRow",
+            ]
+        case .delayedVerification:
+            state = ["control": "fixture.delayed", "delay_ms": 250]
+        case .noEffect:
+            state = ["control": "fixture.no_effect", "effect": "none"]
+        case .opaqueMedia:
+            state = ["surface": "fixture.opaque_media", "playback": "play"]
+        case .staleWindowFrame:
+            state = ["control": "fixture.window.move", "window_origin": [100, 100]]
+        case .reorderedSiblings:
+            state = [
+                "container": "fixture.reorder.container",
+                "order": ["fixture.duplicate.1", "fixture.duplicate.2"],
+            ]
+        case .changedWindowApp:
+            state = ["control": "fixture.window.change", "window": "main"]
+        case .uncertainDispatch:
+            state = ["control": "fixture.uncertain", "exit_after_first_input": true]
+        }
+        return [
+            "schema_version": 1,
+            "scene": rawValue,
+            "state": state,
+        ]
+    }
+
+    var initialStateData: Data {
+        try! JSONSerialization.data(
+            withJSONObject: initialState,
+            options: [.sortedKeys, .withoutEscapingSlashes]
+        )
+    }
+
+    var initialStateDigest: String {
+        SHA256.hash(data: initialStateData).map {
+            String(format: "%02x", $0)
+        }.joined()
+    }
+}
 
 final class FixtureTruthLog {
     private let url: URL
@@ -9,16 +122,25 @@ final class FixtureTruthLog {
         let path = environment["CONN_FIXTURE_TRUTH_LOG"]
             ?? "/tmp/ConnActionFixture.truth.jsonl"
         url = URL(fileURLWithPath: path)
-        try? FileManager.default.removeItem(at: url)
-        FileManager.default.createFile(atPath: url.path, contents: nil)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
     }
 
-    func record(_ effect: String, value: String? = nil) {
+    func record(
+        _ effect: String,
+        value: String? = nil,
+        fields: [String: Any] = [:]
+    ) {
         var payload: [String: Any] = [
             "effect": effect,
             "monotonic_ns": DispatchTime.now().uptimeNanoseconds,
         ]
         if let value { payload["value"] = value }
+        for (key, fieldValue) in fields
+        where !["effect", "monotonic_ns", "value"].contains(key) {
+            payload[key] = fieldValue
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let handle = try? FileHandle(forWritingTo: url) else { return }
         lock.lock()
@@ -27,6 +149,13 @@ final class FixtureTruthLog {
         handle.write(data)
         handle.write(Data([0x0A]))
         try? handle.close()
+    }
+
+    func recordSceneReady(_ scene: FixtureScene) {
+        record("scene_ready", fields: [
+            "scene": scene.rawValue,
+            "initial_state_digest": scene.initialStateDigest,
+        ])
     }
 
     func entries() -> [[String: Any]] {
@@ -47,10 +176,54 @@ final class NoEffectButton: NSButton {
     }
 }
 
-final class InaccessibleCanvas: NSView {
+final class OpaquePlaybackTarget: NSView {
+    private let truth: FixtureTruthLog
+    private(set) var state = "play"
+
+    init(
+        truth: FixtureTruthLog,
+        frame: NSRect = NSRect(x: 0, y: 0, width: 240, height: 64)
+    ) {
+        self.truth = truth
+        super.init(frame: frame)
+        wantsLayer = true
+        setAccessibilityIdentifier("fixture.opaque_media")
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.systemPurple.setFill()
-        bounds.insetBy(dx: 8, dy: 8).fill()
+        NSColor(calibratedWhite: 0.12, alpha: 1).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
+        let label = state == "play" ? "Play" : "Pause"
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.systemFont(ofSize: 18, weight: .semibold),
+        ]
+        let size = label.size(withAttributes: attributes)
+        label.draw(
+            at: NSPoint(
+                x: (bounds.width - size.width) / 2,
+                y: (bounds.height - size.height) / 2
+            ),
+            withAttributes: attributes
+        )
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        activate()
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    func activate() {
+        state = state == "play" ? "pause" : "play"
+        needsDisplay = true
+        truth.record("playback_changed", value: state)
     }
 
     override func isAccessibilityElement() -> Bool { false }
@@ -58,19 +231,19 @@ final class InaccessibleCanvas: NSView {
 }
 
 @MainActor
-final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate, NSTextFieldDelegate {
+final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private(set) var scene: FixtureScene
     let truth: FixtureTruthLog
     private var mainWindow: NSWindow?
     private var statusLabel = NSTextField(labelWithString: "baseline")
-    private var toggle = NSButton(checkboxWithTitle: "Feature enabled", target: nil, action: nil)
-    private var tabs = NSTabView()
-    private var scrollView = NSScrollView()
     private var reorderContainer = NSStackView()
-    private var animationView = NSView()
-    private var animationTimer: Timer?
     private var childWindows: [NSWindow] = []
 
-    init(truth: FixtureTruthLog = FixtureTruthLog()) {
+    init(
+        scene: FixtureScene = FixtureScene.select() ?? .noEffect,
+        truth: FixtureTruthLog = FixtureTruthLog()
+    ) {
+        self.scene = scene
         self.truth = truth
     }
 
@@ -79,15 +252,33 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate, 
         installMenu()
         showMainWindow()
         truth.record("fixture_ready")
+        truth.recordSceneReady(scene)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func showMainWindow() {
-        let window = makeWindow(title: "Conn Action Fixture")
+        let window = makeWindow(title: "Conn Action Fixture: \(scene.rawValue)")
         window.contentView = buildContent()
         window.makeKeyAndOrderFront(nil)
         mainWindow = window
-        startBackgroundAnimation()
+    }
+
+    func reset(to nextScene: FixtureScene) {
+        childWindows.forEach { $0.close() }
+        childWindows.removeAll(keepingCapacity: true)
+        scene = nextScene
+        statusLabel = NSTextField(labelWithString: "baseline")
+        reorderContainer = NSStackView()
+        if let mainWindow {
+            installMenu()
+            mainWindow.title = "Conn Action Fixture: \(scene.rawValue)"
+            mainWindow.contentView = buildContent()
+            mainWindow.makeKeyAndOrderFront(nil)
+        }
+        truth.record("scene_reset", fields: [
+            "scene": scene.rawValue,
+            "initial_state_digest": scene.initialStateDigest,
+        ])
     }
 
     private func makeWindow(title: String) -> NSWindow {
@@ -101,83 +292,142 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate, 
         return window
     }
 
-    private func buildContent() -> NSView {
+    func buildContent() -> NSView {
         let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 10
         root.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
 
-        statusLabel.setAccessibilityIdentifier("fixture.status")
-        root.addArrangedSubview(statusLabel)
-        root.addArrangedSubview(button("Immediate change", #selector(immediateChange), id: "fixture.immediate"))
-        root.addArrangedSubview(button("Delayed change", #selector(delayedChange), id: "fixture.delayed"))
-
-        let noEffect = NoEffectButton(title: "Reports success, no effect", target: self, action: #selector(noEffect))
-        noEffect.bezelStyle = .rounded
-        noEffect.setAccessibilityIdentifier("fixture.no_effect")
-        root.addArrangedSubview(noEffect)
-
-        toggle.target = self
-        toggle.action = #selector(toggleChanged)
-        toggle.setAccessibilityIdentifier("fixture.toggle")
-        root.addArrangedSubview(toggle)
-
-        tabs.addTabViewItem(NSTabViewItem(identifier: "first"))
-        tabs.tabViewItems[0].label = "First tab"
-        tabs.tabViewItems[0].view = NSTextField(labelWithString: "First tab content")
-        tabs.addTabViewItem(NSTabViewItem(identifier: "second"))
-        tabs.tabViewItems[1].label = "Second tab"
-        tabs.tabViewItems[1].view = NSTextField(labelWithString: "Second tab content")
-        tabs.frame.size = NSSize(width: 340, height: 90)
-        root.addArrangedSubview(tabs)
-
-        let field = NSTextField(string: "")
-        field.placeholderString = "Plain text field"
-        field.delegate = self
-        field.setAccessibilityIdentifier("fixture.text")
-        root.addArrangedSubview(field)
-
-        let secure = NSSecureTextField(string: "")
-        secure.placeholderString = "Secure field"
-        secure.setAccessibilityIdentifier("fixture.secure")
-        root.addArrangedSubview(secure)
-
-        scrollView.hasVerticalScroller = true
-        scrollView.frame.size = NSSize(width: 340, height: 90)
-        let scrollContent = NSStackView()
-        scrollContent.orientation = .vertical
-        for index in 1...20 {
-            scrollContent.addArrangedSubview(NSTextField(labelWithString: "Scroll row \(index)"))
+        switch scene {
+        case .uniqueControl:
+            let control = NSButton(
+                checkboxWithTitle: "Continue",
+                target: self,
+                action: #selector(uniqueChanged)
+            )
+            control.setAccessibilityIdentifier("fixture.unique")
+            root.addArrangedSubview(control)
+        case .stableDuplicate:
+            root.addArrangedSubview(button(
+                "Duplicate", #selector(duplicatePressed), id: "fixture.stable.1"
+            ))
+            root.addArrangedSubview(button(
+                "Duplicate", #selector(duplicatePressed), id: "fixture.stable.2"
+            ))
+        case .genuineAmbiguity:
+            root.addArrangedSubview(button(
+                "Duplicate", #selector(duplicatePressed), id: nil
+            ))
+            root.addArrangedSubview(button(
+                "Duplicate", #selector(duplicatePressed), id: nil
+            ))
+        case .secureField:
+            let secure = NSSecureTextField(string: "")
+            secure.placeholderString = "Secure field"
+            secure.setAccessibilityIdentifier("fixture.secure")
+            root.addArrangedSubview(secure)
+        case .lazyMenu, .menuRecapture:
+            root.addArrangedSubview(NSTextField(
+                labelWithString: "Use the Actions menu"
+            ))
+        case .nestedTabs:
+            root.addArrangedSubview(nestedTabCollection())
+        case .notesCollections:
+            root.addArrangedSubview(notesCollection(
+                identifier: "fixture.notes.primary", rows: 2
+            ))
+            root.addArrangedSubview(notesCollection(
+                identifier: "fixture.notes.secondary", rows: 1
+            ))
+        case .delayedVerification:
+            addStatus(to: root)
+            root.addArrangedSubview(button(
+                "Delayed change", #selector(delayedChange), id: "fixture.delayed"
+            ))
+        case .noEffect:
+            addStatus(to: root)
+            let noEffect = NoEffectButton(
+                title: "Reports success, no effect",
+                target: self,
+                action: #selector(noEffect)
+            )
+            noEffect.bezelStyle = .rounded
+            noEffect.setAccessibilityIdentifier("fixture.no_effect")
+            root.addArrangedSubview(noEffect)
+        case .opaqueMedia:
+            root.addArrangedSubview(OpaquePlaybackTarget(truth: truth))
+        case .staleWindowFrame:
+            root.addArrangedSubview(button(
+                "Move window", #selector(moveWindow), id: "fixture.window.move"
+            ))
+        case .reorderedSiblings:
+            reorderContainer.orientation = .horizontal
+            reorderContainer.setAccessibilityIdentifier("fixture.reorder.container")
+            reorderContainer.addArrangedSubview(button(
+                "Duplicate", #selector(duplicatePressed), id: "fixture.duplicate.1"
+            ))
+            reorderContainer.addArrangedSubview(button(
+                "Duplicate", #selector(duplicatePressed), id: "fixture.duplicate.2"
+            ))
+            reorderContainer.addArrangedSubview(button(
+                "Reorder siblings", #selector(reorderSiblings), id: "fixture.reorder"
+            ))
+            root.addArrangedSubview(reorderContainer)
+        case .changedWindowApp:
+            root.addArrangedSubview(button(
+                "Change window", #selector(changeWindow), id: "fixture.window.change"
+            ))
+        case .uncertainDispatch:
+            root.addArrangedSubview(button(
+                "Dispatch then exit", #selector(uncertainInput), id: "fixture.uncertain"
+            ))
         }
-        scrollView.documentView = scrollContent
-        root.addArrangedSubview(scrollView)
-
-        reorderContainer.orientation = .horizontal
-        reorderContainer.addArrangedSubview(button("Duplicate", #selector(duplicatePressed), id: "fixture.duplicate.1"))
-        reorderContainer.addArrangedSubview(button("Duplicate", #selector(duplicatePressed), id: "fixture.duplicate.2"))
-        reorderContainer.addArrangedSubview(button("Reorder siblings", #selector(reorderSiblings), id: "fixture.reorder"))
-        root.addArrangedSubview(reorderContainer)
-
-        root.addArrangedSubview(button("Create window", #selector(createWindow), id: "fixture.window.create"))
-        root.addArrangedSubview(button("Close created window", #selector(closeWindow), id: "fixture.window.close"))
-        root.addArrangedSubview(button("Create sheet", #selector(createSheet), id: "fixture.sheet.create"))
-        root.addArrangedSubview(button("Change title", #selector(changeTitle), id: "fixture.title.change"))
-
-        let canvas = InaccessibleCanvas(frame: NSRect(x: 0, y: 0, width: 180, height: 44))
-        root.addArrangedSubview(canvas)
-
-        animationView.wantsLayer = true
-        animationView.layer?.backgroundColor = NSColor.systemBlue.cgColor
-        animationView.frame.size = NSSize(width: 16, height: 16)
-        root.addArrangedSubview(animationView)
         return root
     }
 
-    private func button(_ title: String, _ action: Selector, id: String) -> NSButton {
+    private func addStatus(to root: NSStackView) {
+        statusLabel.setAccessibilityIdentifier("fixture.status")
+        root.addArrangedSubview(statusLabel)
+    }
+
+    private func nestedTabCollection() -> NSView {
+        let collection = NSStackView()
+        collection.orientation = .vertical
+        collection.setAccessibilityIdentifier("fixture.tab.collection")
+        let nested = NSStackView()
+        nested.orientation = .horizontal
+        for index in 1...2 {
+            let tab = NSButton(
+                radioButtonWithTitle: "Tab \(index)", target: nil, action: nil
+            )
+            tab.setAccessibilityIdentifier("fixture.tab.\(index)")
+            nested.addArrangedSubview(tab)
+        }
+        collection.addArrangedSubview(nested)
+        return collection
+    }
+
+    private func notesCollection(identifier: String, rows: Int) -> NSView {
+        let list = NSStackView()
+        list.orientation = .vertical
+        list.setAccessibilityIdentifier(identifier)
+        list.setAccessibilityRole(.list)
+        for index in 1...rows {
+            let row = NSTextField(labelWithString: "Note \(index)")
+            row.setAccessibilityIdentifier("\(identifier).row.\(index)")
+            row.setAccessibilityRole(.row)
+            list.addArrangedSubview(row)
+        }
+        return list
+    }
+
+    private func button(
+        _ title: String, _ action: Selector, id: String?
+    ) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
-        button.setAccessibilityIdentifier(id)
+        if let id { button.setAccessibilityIdentifier(id) }
         return button
     }
 
@@ -200,14 +450,37 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate, 
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let item = NSMenuItem(title: "Lazy New Window", action: #selector(createWindow), keyEquivalent: "n")
+        let title: String
+        switch scene {
+        case .lazyMenu:
+            title = "Lazy New Window"
+        case .menuRecapture:
+            title = "New Window"
+        default:
+            return
+        }
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(createWindow),
+            keyEquivalent: "n"
+        )
         item.target = self
+        if scene == .menuRecapture {
+            item.setAccessibilityIdentifier("fixture.menu.new_window")
+        }
         menu.addItem(item)
     }
 
     @objc private func immediateChange() {
         statusLabel.stringValue = "immediate changed"
         truth.record("status_changed", value: statusLabel.stringValue)
+    }
+
+    @objc private func uniqueChanged(_ sender: NSButton) {
+        truth.record(
+            "control_changed",
+            value: sender.state == .on ? "on" : "off"
+        )
     }
 
     @objc private func delayedChange() {
@@ -219,10 +492,6 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate, 
     }
 
     @objc private func noEffect() {}
-
-    @objc private func toggleChanged() {
-        truth.record("toggle_changed", value: toggle.state == .on ? "on" : "off")
-    }
 
     @objc private func duplicatePressed() {
         truth.record("duplicate_pressed")
@@ -245,43 +514,29 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate, 
         truth.record("window_created", value: window.title)
     }
 
-    @objc private func closeWindow() {
-        guard let window = childWindows.popLast() else { return }
-        window.close()
-        truth.record("window_closed", value: window.title)
-    }
-
-    @objc private func createSheet() {
+    @objc private func moveWindow() {
         guard let mainWindow else { return }
-        let sheet = makeWindow(title: "Fixture sheet")
-        sheet.contentView = NSTextField(labelWithString: "Created sheet")
-        mainWindow.beginSheet(sheet)
-        truth.record("sheet_created")
+        let origin = mainWindow.frame.origin
+        mainWindow.setFrameOrigin(NSPoint(x: origin.x + 40, y: origin.y + 20))
+        truth.record("window_moved", fields: [
+            "x": mainWindow.frame.origin.x,
+            "y": mainWindow.frame.origin.y,
+        ])
     }
 
-    @objc private func changeTitle() {
-        mainWindow?.title = "Conn Action Fixture Changed"
-        truth.record("title_changed", value: mainWindow?.title)
+    @objc private func changeWindow() {
+        let window = makeWindow(title: "Fixture changed window")
+        window.contentView = NSTextField(labelWithString: "Changed window")
+        window.makeKeyAndOrderFront(nil)
+        mainWindow?.orderOut(nil)
+        childWindows.append(window)
+        truth.record("window_changed", value: window.title)
     }
 
-    func controlTextDidChange(_ obj: Notification) {
-        guard let field = obj.object as? NSTextField else { return }
-        truth.record("text_changed", value: field.stringValue)
-    }
-
-    private func startBackgroundAnimation() {
-        animationTimer = Timer.scheduledTimer(
-            timeInterval: 0.2,
-            target: self,
-            selector: #selector(backgroundTick),
-            userInfo: nil,
-            repeats: true
-        )
-    }
-
-    @objc private func backgroundTick() {
-        guard let layer = animationView.layer else { return }
-        layer.backgroundColor = layer.backgroundColor == NSColor.systemBlue.cgColor
-            ? NSColor.systemGreen.cgColor : NSColor.systemBlue.cgColor
+    @objc private func uncertainInput() {
+        truth.record("first_input_received")
+        DispatchQueue.main.async {
+            NSApp.terminate(nil)
+        }
     }
 }

@@ -1,0 +1,20 @@
+{
+  "source_session": "session_a7613a568b",
+  "bundle_id": "com.apple.Safari",
+  "window_id": 212,
+  "nodes": [
+    {"ref": "window", "role": "AXWindow", "path": [0]},
+    {"ref": "tab-strip", "parent_ref": "window", "role": "AXTabGroup", "path": [0, 2]},
+    {"ref": "tab-items", "parent_ref": "tab-strip", "role": "AXGroup", "path": [0, 2, 0]},
+    {"ref": "tab-1", "parent_ref": "tab-items", "role": "AXRadioButton", "path": [0, 2, 0, 0], "selected": true},
+    {"ref": "tab-2", "parent_ref": "tab-items", "role": "AXRadioButton", "path": [0, 2, 0, 1], "selected": false},
+    {"ref": "sidebar", "parent_ref": "window", "role": "AXOutline", "path": [0, 3]},
+    {"ref": "sidebar-item", "parent_ref": "sidebar", "role": "AXRow", "path": [0, 3, 0]}
+  ],
+  "witness": {
+    "collection_ref": "tab-strip",
+    "descendant_role": "AXRadioButton",
+    "baseline_count": 2,
+    "intended_current_count": 3
+  }
+}

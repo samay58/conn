@@ -1,35 +1,97 @@
 # Conn: state of play
 
-Updated 2026-07-13. Read this first. Use `docs/2026-07-07-roadmap.md`
+Updated 2026-07-16. Read this first. Use `docs/2026-07-07-roadmap.md`
 for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 
 ## Current verdict
 
-The voice-first reliability program (packets R0 through R8 of
-`docs/2026-07-12-voice-first-reliability-spec.md`) is implemented and
-mechanically green. Every July 12 deterministic defect has a pinned fix:
-context item IDs obey the live limit and follow server acknowledgements,
-cancellation binds an active response, the daemon carries an ownership lease
-and exits with its app, playback-contaminated pre-roll is suppressed, short
-voiced holds are accepted while silent taps reject visibly, and the
-model-facing action contract no longer asks the model for menu paths, key
-chords, or effect predicates. Ordinary actions flow through two bounded
-semantic intent tools (`computer_create`, `computer_select_relative`) that
-Conn.app lowers onto live native affordances with compiler-owned witnesses.
+The capable-navigation recovery and Conn Lab are implemented. The final L9
+boundary passed 741 Python tests with three intentional deselections and two
+dependency warnings, three lifecycle tests, 14 harness evals, and 232 Swift
+tests. The 86 focused lab tests exercise the public command surface, typed
+scenario catalog, bounded private guest execution, receipt-to-oracle records,
+and artifact metadata.
+
+The authoritative live intent corpus passed 225 of 226 items, or 99.56
+percent, in
+`data/intent-evals/2026-07-16/results-1784228271.json`. It cost $1.392171.
+The sole miss asked to press Refresh; the model proposed unsupported key `r`
+instead of grounding the visible button. The failure remains in the grader.
 
 The safety kernel is unchanged and still pinned: mutations serialize, raw
 native success cannot produce `Done.`, `possibly_dispatched` never retries,
 one replan is permitted only after proven `not_dispatched`, and approval
-remains pointer-only in the signed app.
+remains owned by the signed app.
 
-The July 13 verified-outcome follow-up is also mechanically green. It fixed
-empty native targets, grounded create witnesses in real Safari and Notes
-hierarchies, named destructive requests as out of scope, raised the live
-intent gate above target, extended reconnect recovery, and isolated test
-artifacts from dogfood data. Human acceptance is still open: the signed voice
-runs need an eye verdict, followed by the acoustic and product drills.
+Conn Lab now runs the real daemon, signed app, native observation and input,
+fixtures, Safari, Notes, Firefox, and the current Realtime model in disposable
+macOS guests. It compares every Conn receipt with an independent oracle. The
+20-run fresh-clone suite and 100-iteration scripted matrix passed with no host
+state change. This moves repeated engineering probes off Samay's desktop.
+Twelve public scenarios come from one validated JSON catalog instead of a
+second CLI registry. Each run writes typed run, oracle, and artifact records.
+Guest-only secrets travel through a bounded standard-input envelope and never
+appear in host process arguments or reports.
 
-## July 13 verified-outcome evidence
+The implementation now permits broad reversible foreground navigation after
+one pointer-only session grant. Accessibility remains the preferred lane.
+Conn.app can capture one bounded current-window image, bind normalized visual
+grounding to it, revalidate app, window, frame, scale, grant, and connection,
+then dispatch one bounded pointer sequence. The code default remains off for
+missing or old config, while this candidate's repository config enables the
+lane after its transport and adversarial gates passed. Destructive actions remain
+refused; consequential actions keep one-action pointer approval. Apps resolve
+dynamically through installed identity, and direct browser navigation honors
+the requested or current browser. The design is in
+`docs/2026-07-13-capable-navigation-spec.md`, with the execution contract in
+`docs/2026-07-13-capable-navigation-implementation-plan.md`.
+
+The lab contract is `docs/2026-07-16-conn-lab-spec.md`. Its implementation
+record is `docs/2026-07-16-conn-lab-implementation-plan.md`.
+
+The default session budget is now $5.00 with a $2.50 warning. The hard stop
+remains enabled. This raises headroom without weakening cost accounting or the
+explicit one-session override.
+
+## July 13 post-release dogfood verdict
+
+The full analysis is
+`docs/2026-07-13-dogfood-failure-analysis.md`. The four shipped-build sessions
+contain 29 user turns, 40 tool proposals, 9 predispatch blocks, and 12 action
+receipts:
+
+| Outcome | Count |
+|---|---:|
+| Verified app opens | 3 |
+| Dispatch only | 7 |
+| No effect | 1 |
+| Failed after possible dispatch | 1 |
+
+The sessions cost $2.554. The main confirmed causes are:
+
+- snapshot search terms are silently ignored by Swift, so the model receives
+  raw trees instead of bounded candidates
+- repeated observations accumulate in model context and can exhaust the
+  session budget before the task finishes
+- duplicate fingerprints return ambiguity before the resolver tries its
+  stronger structural locator
+- clarification answers are not bound to real candidates
+- the production action surface cannot control an opaque video player
+- browser search cannot perform direct navigation or honor an explicit browser
+- the native transaction deadline can expire while a successful action is
+  still returning its receipt
+- Safari and Notes create witnesses do not generalize across real layouts
+- barge-in can splice unfinished result speech into the next response
+- most non-verified receipts have no reason code, and large artifacts can be
+  truncated into invalid nested JSON
+
+The Firefox video refusal itself was safe: the tree exposed repeated anonymous
+full-window groups and no named Play control. The product failure is that Conn
+had no visual or semantic fallback after that honest ceiling. The Techmeme
+`RIVER` refusal was a resolver defect because a named link had stronger
+structural identity that the resolver never consulted.
+
+## July 13 targeted witness evidence
 
 The first live reliability-build session is
 `data/traces/2026-07-13/session_64e67d4bf3.jsonl`. App opens verified and the
@@ -37,7 +99,7 @@ voice loop behaved correctly, but Safari New Tab returned `no_effect` twice
 after visible dispatch, Notes New Note returned `dispatch_only`, and grounded
 click plans with an empty title were rejected as missing a safe target.
 
-The follow-up closed those mechanical gaps:
+The follow-up closed selected fixture and probe gaps:
 
 - empty titles now fall through to the first non-empty safe target
 - Safari create binds a descendant-role count to the tab collection subtree;
@@ -145,9 +207,10 @@ trace hints and cannot verify an action without targeted state evidence.
 
 Recovery is bounded per turn: one replan after a proven `not_dispatched`
 failure, at most two predispatch compile failures, and no identical failed
-plan shape twice. Every receipt carries a `reason_code` and a
-`safe_user_message` with no internal terminology; ambiguity asks exactly one
-question.
+plan shape twice. The receipt contract requires a `reason_code` and a
+`safe_user_message` with no internal terminology. Tests now pin a stable reason
+on every non-verified outcome. Predicate evidence records baseline, current
+value, match rule, and match Boolean.
 
 ## Supported semantic operations
 
@@ -164,47 +227,51 @@ question.
 - lazy menu traversal and leaf dispatch
 - raw menu paths and allowlisted key chords remain policy-gated diagnostics,
   hidden from the default model surface
+- dynamic app open and switch through installed identity discovery
+- direct HTTP and HTTPS navigation in the named or current browser
+- pointer-only navigation lease for reversible foreground actions
+- bounded current-window visual observation through Conn.app
+- semantic or capture-bound activation and a fixed navigation-key vocabulary
 
 Menu commands, raw key chords, and submit without a surviving target-bound
 effect return `dispatch_only`. Global window changes and bounded-tree absence
 do not count as proof because unrelated activity can produce both.
 
-Secure fields, denied bundles, ambiguous targets, stale plans, and legacy
-native mutation RPC refuse before dispatch. Production has no Python AX/input
-fallback. Visual coordinates, OCR, screenshots-to-model, macros, and a second
-computer-use model remain outside this slice.
+Secure fields, denied bundles, destructive effects, ambiguous targets, stale
+plans, and legacy native mutation RPC refuse before dispatch. Production has
+no Python Accessibility, screenshot, or input fallback. OCR, macros, app
+command catalogs, and a second computer-use model remain out of scope.
 
 ## Measured evidence
 
-Latest mechanical run (2026-07-13, after the reliability program):
+Latest recorded evidence before the final L9 gate:
 
 | Gate | Result |
 |---|---|
-| Python | 573 passed, 3 deselected; 2 existing dependency warnings |
+| Python boundary | 741 passed, 3 deselected; 2 dependency warnings |
 | Harness evals (harness-only label) | 14 of 14 passed |
 | Strict Realtime replay | 1,000 turns plus the July 12 cassette, zero protocol errors |
-| Lifecycle cycles (real processes) | 50 graceful quit/reopen, 20 crash/relaunch, 3 orphan exits |
+| Lifecycle | 3 tests passed on port 18787; 50 graceful quits, 20 crash relaunches, and 3 orphan exits |
 | PTT cycles (machine) | 500 with zero stuck phases, duplicate turns, or lost releases |
 | Soak | three 100-turn scripted sessions, zero upstream errors or stuck states |
-| Swift | 144 passed, including real-shape witness and adversarial refusal cases |
-| Release build | passed and installed with the persistent signing identity |
-| Live intent eval (full corpus) | 217 of 219 (99.1 percent); `results-1783960836.json` |
+| Swift | 232 passed |
+| Release build | signed with `Conn Dev Signing` |
+| Live intent sample | 25 of 25; `results-1784226540.json`; $0.266418 |
+| Live intent full corpus | 225 of 226 (99.56 percent); `results-1784228271.json`; $1.392171 |
+| Fresh-clone release transactions | 20 of 20; p50 31.014s, p95 31.434s |
+| Scripted adversarial matrix | 100 of 100 |
+| Live-model VM transactions | control verified; Safari tab verified; Firefox Play dispatch-only with matching oracle |
+| Automatic latency report | command passed; newest harness trace had no PTT turns, so live spans were N/A |
 
-The intent bar is met. Named note opens now route to `phoenix_search`, semantic
-screen reads precede screenshots, and app-routing cases use off-target injected
-context. All four destructive asks produced no tool proposal and exactly the
-one-sentence safe refusal. The two retained misses were `Another tab`, which
-selected the next tab instead of creating one, and `Select the following note`,
-where the model asked for a name without proposing a tool. The grader was not
-weakened.
+The 97 percent intent bar is met. The one residual miss is not waived.
 
 Reconnect recovery now retries for five minutes with exponential spacing
 capped at 30 seconds. Concurrent disconnect paths share one reconnect task.
 Tests prove the state remains `FAILED`, shown as `Reconnecting`, until a
 complete connection succeeds. The shared pytest config writes below its
-temporary directory. A full 573-test run left the real
-`data/` tree at the same 1,156 files and the same manifest digest,
-`5a232aa99afadfb958ae3f82194e7bf739e178d7fc303516803dcf6f416ee78a`. The cleanup
+temporary directory. After final billed evidence, a full 644-test run left the
+real `data/` tree unchanged at 1,415 files, 6,048,162 bytes, and manifest digest
+`bd59fbaacacfb8e8a73c475350a3887240ae7a6ee911f5eec8cea05fdc6cbfbb`. The cleanup
 removed 659 traces that never entered `session_start`, 82 linked receipts, 121
 linked tool-result files, and 31 linked support rows; all 424 initialized traces
 were preserved.
@@ -231,8 +298,9 @@ Other live smoke evidence from 2026-07-12:
   `verified`; WindowServer's top visible window matched the expected bundle.
 - Repeating a switch while that app was already frontmost refused with
   `effect_already_satisfied` before dispatch.
-- Google Chrome is not installed. Its signer is therefore unproven and Conn
-  blocks it before native preparation.
+- Google Chrome was not installed for this 2026-07-12 smoke run. The engine at
+  that time used a fixed support map; the new candidate uses live installed-app
+  and signer resolution.
 
 These are installation and transaction smoke checks. They do not establish
 the spec's 95 percent six-app semantic-action bar.
@@ -260,23 +328,75 @@ zero reportable findings. Regression tests pin every production fix. Obsidian
 is bound to team `6JSW4SJWN9`. Chrome stays blocked until its installed
 signature can be inspected.
 
+## Conn Lab evidence
+
+The pinned guest is macOS 26.5 build `25F71` under Tart 2.32.1. Runs use
+default Tart NAT, no host clipboard or audio sharing, a read-only source
+mount, one read-write artifact mount, and guest port 18787. Softnet remains an
+optional explicit mode and is not a release gate.
+
+The final ordinary Python run left the real `data/` tree unchanged at 3,813
+files and 34,117,511 bytes, with manifest digest
+`106ba2217f93c3a960037bb8915f6c7b237041669781484c47c37e64d0516d03`.
+Fixed navigation keys now refuse when the focused element is a secure field or
+an unclassified text entry, including a fresh recheck immediately before
+native dispatch.
+
+Live receipts and separate oracles:
+
+| Goal | Receipt | Independent result |
+|---|---|---|
+| Press fixture control | `verified` | `control_changed` once |
+| Open Safari tab | `verified`; tab count 2 to 3 | original page hidden once |
+| Create Notes note | `verified`; row count 2 to 3 | disposable database count 1 to 2 |
+| Type Notes scratch text | `verified` | exact title changed to `conn lab scratch` |
+| Select previous Notes note | `verified` | selected Notes object changed |
+| Click Firefox Play | `dispatch_only`; `no_trustworthy_witness` | `pointer_play` once |
+
+Firefox is an honest capability ceiling. The action completed according to the
+local page, but Conn did not claim verified because visual motion is not a
+trusted semantic witness.
+
+The final public smoke artifact is
+`data/lab-runs/2026-07-16/lab-smoke-170232-summary.json`: one verified receipt,
+one matching oracle, 100 of 100 scripted adversarial iterations, no observed
+host change, $0.0022 recorded cost, and 31.979 seconds total. The direct VNC
+boot is headless. Cleanup left no Tart, disposable guest, or Screen Sharing
+process.
+
+Two structural follow-ons remain for the capability-breadth delivery. Split
+the full-stack scenario driver into capsule-owned setup and oracle seams, and
+put semantic and visual native plan routing behind one explicit action
+facade. Neither changes the current transaction contract.
+
+`data/lab-runs/2026-07-16/lab-release-161704-summary.json` contains 20 of 20
+verified fresh-clone transactions and 20 matching oracles. Its command exited
+red only because the old host snapshot gate treated Samay's pointer and
+clipboard activity as lab activity. That gate now reports raw host activity
+without failing the transaction suite. Mounts, ports, audio, clipboard
+sharing, VM names, and cleanup remain enforced boundaries.
+
+One earlier release run returned `kAXErrorCannotComplete` after the fixture
+changed exactly once. Conn recorded failed and possibly dispatched, did not
+retry, and did not claim verified. The artifact is
+`data/lab-runs/2026-07-16/lab-release-160545-19`. This is an honest native
+uncertainty, not a false verified result.
+
 ## Open gates
 
-The reliability program and the verified-outcome follow-up are mechanically
-green. What remains is live and human evidence against the installed build:
+Engineering acceptance in the VM is complete after the L9 release suite. Human
+product acceptance remains:
 
-- signed-build voice runs: `Open a new tab` in Safari and `New note` in Notes,
-  end to end through the microphone with receipts checked against eyes
-- a live barge-in probe confirming the pre-roll suppression acoustically
-  (the recorded-PCM watermark proof is synthetic)
-- the safe drill in `docs/MANUAL-TESTING.md`, including the real
-  ConnActionFixture matrix against its independent truth log
-- at least 95 percent first-try verified across observable actions in
-  Terminal, Safari, Chrome, Notes, and Obsidian (Chrome still needs an
-  installed, signer-pinned build or a spec change)
-- menu-toggle mark-state witnesses and ref-targeted partial rereads remain
-  future work; verification today rereads the bounded tree on an adaptive
-  backoff
+- relaunch the installed candidate if an older Conn process is running
+- run the physical microphone acoustic barge-in check
+- run `docs/MANUAL-TESTING.md`
+- complete the 30-command product gate across three ordinary work sessions
+
+Visual dispatch is enabled for this candidate behind the existing config kill
+switch. The latest live latency evidence is still the
+July 13 eight-turn session: release-to-first-token p50 898ms and p95 1,724ms.
+The automatic P9 report ran against a harness trace with no PTT spans, so it
+does not replace that live measurement.
 
 Product acceptance then needs 30 ordinary commands across three work sessions,
 zero false completion language, and at least 90 percent of supported actions
@@ -289,6 +409,12 @@ Do not call the semantic engine accepted for daily use until those gates pass.
 | File | Purpose |
 |---|---|
 | `docs/2026-07-12-voice-first-reliability-spec.md` | Current reliability diagnosis, architecture, packets, and daily-driver bars |
+| `docs/2026-07-13-dogfood-failure-analysis.md` | Aggregated post-release evidence and root causes |
+| `docs/2026-07-13-capable-navigation-spec.md` | Approved product contract for one-grant reversible navigation |
+| `docs/2026-07-13-capable-navigation-implementation-plan.md` | Packet order, code seams, TDD gates, migration, and release evidence |
+| `docs/2026-07-16-conn-lab-spec.md` | Disposable macOS lab contract, interfaces, truth, and acceptance |
+| `docs/2026-07-16-conn-lab-implementation-plan.md` | L0 through L9 execution record and evidence |
+| `docs/2026-07-16-conn-lab-platform-proof.md` | Pinned VM and native capability proof |
 | `docs/agent-wargames/2026-07-12-voice-first-reliability-wargame.md` | Adversarial decision record for the capability-compiled control loop |
 | `docs/2026-07-09-verified-action-engine-spec.md` | Approved architecture and acceptance bars |
 | `docs/agent-wargames/2026-07-09-verified-action-engine-wargame.md` | July 9 adversarial decision record |

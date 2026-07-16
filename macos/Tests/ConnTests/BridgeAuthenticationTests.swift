@@ -148,6 +148,7 @@ final class BridgeAuthenticationTests: XCTestCase {
     @MainActor
     func testNativeActionPolicyRejectsLegacyExecutorOperations() {
         XCTAssertNil(DaemonClient.rejectedNativeActionData(for: "observe"))
+        XCTAssertNil(DaemonClient.rejectedNativeActionData(for: "observe_visual"))
 
         let rejection = DaemonClient.rejectedNativeActionData(for: "press_menu_path")
 
@@ -160,6 +161,51 @@ final class BridgeAuthenticationTests: XCTestCase {
     func testGeneratedBridgeTokenIs256Bits() {
         let token = BridgeToken.generate()
         XCTAssertEqual(Data(base64Encoded: token)?.count, 32)
+    }
+
+    func testLabGuestCanUseRunnerOwnedBridgeToken() {
+        let token = Data(repeating: 7, count: 32).base64EncodedString()
+
+        XCTAssertEqual(
+            BridgeToken.resolve(
+                environment: [
+                    "CONN_LAB_GUEST": "1",
+                    "CONN_SERVER_PORT": "18787",
+                    "CONN_BRIDGE_TOKEN": token,
+                ],
+                fileExists: { $0 == "/Users/admin/.conn-lab-guest" },
+                generate: { "generated" }
+            ),
+            token
+        )
+    }
+
+    func testBridgeTokenOverrideIsRefusedOutsideMarkedLabGuest() {
+        let token = Data(repeating: 7, count: 32).base64EncodedString()
+        let environments = [
+            ["CONN_SERVER_PORT": "18787", "CONN_BRIDGE_TOKEN": token],
+            [
+                "CONN_LAB_GUEST": "1",
+                "CONN_SERVER_PORT": "8787",
+                "CONN_BRIDGE_TOKEN": token,
+            ],
+            [
+                "CONN_LAB_GUEST": "1",
+                "CONN_SERVER_PORT": "18787",
+                "CONN_BRIDGE_TOKEN": "short",
+            ],
+        ]
+
+        for environment in environments {
+            XCTAssertEqual(
+                BridgeToken.resolve(
+                    environment: environment,
+                    fileExists: { _ in false },
+                    generate: { "generated" }
+                ),
+                "generated"
+            )
+        }
     }
 
     func testGeneratedHealthChallengeUsesOnlyServerAcceptedCharacters() {

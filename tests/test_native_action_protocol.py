@@ -1,15 +1,19 @@
 import asyncio
+import base64
 import dataclasses
+import hashlib
 import json
 
 import pytest
 from pydantic import ValidationError
 
 from conn.ax_bridge import NativeRpcResult
-from conn.events import Gate, ResponseProvenance
-from conn.tools.native_actions import compile_action_request
-from conn.config import Config
+from conn.events import Gate, ResponseProvenance, ToolCall
+from conn.tools.native_actions import compile_action_request, validate_plan
+from conn.tools.registry import build_registry, export_openai
+from conn.config import Config, PROJECT_ROOT, load_config
 from conn.realtime.openai_ws import OpenAIRealtimeAdapter
+from conn.observations import parse_model_observation
 from conn.app import ConnApp
 from conn.realtime.fake import FakeRealtimeAdapter
 from conn.realtime.base import RtResponseCreated, RtToolCall
@@ -44,6 +48,10 @@ class NativeBridge:
         self.observed.append(request)
         return NativeRpcResult(self.observation, True)
 
+    async def observe_visual(self, **request):
+        self.observed.append(request)
+        return NativeRpcResult(self.observation, True)
+
 
 def provenance():
     return ResponseProvenance(
@@ -51,6 +59,157 @@ def provenance():
         response_epoch=3,
         observation_epoch=7,
     )
+
+
+def test_activate_and_semantic_key_compile_without_raw_coordinates(cfg):
+    registry = build_registry()
+    semantic = compile_action_request(
+        registry["computer_activate"],
+        {"goal": "Play video", "snapshot_id": "snap", "ref": "play"},
+        cfg,
+    )
+    visual = compile_action_request(
+        registry["computer_activate"],
+        {
+            "goal": "Play video",
+            "grounding": {
+                "capture_id": "capture_1",
+                "region": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                "label": "Play",
+                "confidence": 0.94,
+            },
+        },
+        cfg,
+    )
+    key = compile_action_request(
+        registry["computer_key"], {"key": "space"}, cfg
+    )
+
+    assert semantic["operation"] == "activate"
+    assert semantic["target"] == {"snapshot_id": "snap", "ref": "play"}
+    assert semantic["payload"] == {"goal": "Play video"}
+    assert visual["operation"] == "activate"
+    assert visual["target"] is None
+    assert visual["payload"]["visual_grounding"] == {
+        "capture_id": "capture_1",
+        "region": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+        "label": "Play",
+        "confidence": 0.94,
+    }
+    assert visual["visual_enabled"] is False
+    assert key["operation"] == "key_chord"
+    assert key["payload"] == {"keys": ["space"]}
+    assert "coordinate" not in json.dumps(visual)
+
+
+def test_candidate_config_enables_gated_visual_lane():
+    assert load_config(PROJECT_ROOT / "config.toml").actions.visual_enabled is True
+
+
+def test_visual_activation_schema_requires_bounded_current_capture_grounding():
+    tools = {
+        item["name"]: item
+        for item in export_openai(build_registry())
+    }
+    grounding = tools["computer_activate"]["parameters"]["properties"][
+        "grounding"
+    ]
+
+    assert grounding["additionalProperties"] is False
+    assert set(grounding["required"]) == {
+        "capture_id",
+        "region",
+        "label",
+        "confidence",
+    }
+    assert grounding["properties"]["confidence"] == {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+    }
+    region = grounding["properties"]["region"]
+    assert region["additionalProperties"] is False
+    assert set(region["required"]) == {"x", "y", "width", "height"}
+    for field in ("x", "y"):
+        assert region["properties"][field] == {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+        }
+    for field in ("width", "height"):
+        assert region["properties"][field] == {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+        }
+
+
+def test_visual_strategy_requires_the_visual_activation_lane():
+    plan = {
+        "plan_fingerprint": "visual_plan",
+        "preview": "Activate Play",
+        "target": "Play in current window",
+        "effect": "Play becomes Pause",
+        "authorized_strategies": ["visual_coordinate_press"],
+    }
+
+    assert "unauthorized strategy" in validate_plan(plan)
+    assert validate_plan(plan, allow_visual=True) is None
+
+
+def test_table_selected_rows_is_an_authorized_semantic_strategy():
+    plan = {
+        "plan_fingerprint": "selected_rows_plan",
+        "preview": "Focus the previous note",
+        "target": "Notes",
+        "effect": "The previous note becomes selected",
+        "authorized_strategies": ["ax_set_selected_rows"],
+    }
+
+    assert validate_plan(plan) is None
+
+
+def test_visual_observation_returns_metadata_and_private_typed_image(harness, ctx, cfg):
+    image = b"\xff\xd8\xffvisual-fixture"
+    ctx.ax_reader = NativeBridge(observation={
+        "outcome": "observed",
+        "ok": True,
+        "capture_id": "capture_1",
+        "image_data_url": "data:image/jpeg;base64," + base64.b64encode(image).decode(),
+        "image_sha256": hashlib.sha256(image).hexdigest(),
+        "image_bytes": len(image),
+        "mime_type": "image/jpeg",
+        "pixel_width": 20,
+        "pixel_height": 10,
+        "scale": 1.0,
+        "window_id": 1,
+        "bundle_id": "com.conn.fixture",
+        "window_frame": {"x": 0, "y": 0, "width": 20, "height": 10},
+        "captured_ms": 10,
+        "excluded_conn_surfaces": True,
+    })
+    cfg.actions.visual_enabled = True
+    call = ToolCall(
+        call_id="visual_1",
+        name="computer_visual_observe",
+        arguments={},
+        gate=Gate.AUTO,
+        preview="Observe current window visually",
+        turn_id="turn_current",
+        response_epoch=3,
+        observation_epoch=7,
+        execution_id=1,
+    )
+
+    result = asyncio.run(harness.run(call))
+
+    assert result.ok is True
+    assert result.visual_observation is not None
+    assert result.visual_observation.image_data_url.endswith(
+        base64.b64encode(image).decode()
+    )
+    assert "visual-fixture" not in result.output
+    assert json.loads(result.output)["data"]["capture_id"] == "capture_1"
 
 
 def test_native_plan_preparation_precedes_policy_gate(harness, ctx):
@@ -163,6 +322,103 @@ def test_prepared_action_executes_only_approved_fingerprint(harness, ctx):
     )]
 
 
+def test_revoked_navigation_plan_never_reaches_native_execute(harness, ctx):
+    from conn.navigation import NavigationLease
+
+    lease = NavigationLease("session-a")
+    lease.bind_connection("app-a")
+    lease.grant("session-a", "app-a")
+    ctx.navigation = lease
+    plan = {
+        "plan_fingerprint": "plan_reversible",
+        "preview": "Press Play",
+        "target": "Play",
+        "effect": "play state changes",
+        "authorized_strategies": ["ax_press"],
+        "effect_class": "reversible_navigation",
+        "navigation_generation": lease.generation,
+        "target_role": "AXButton",
+        "secure": False,
+        "denied": False,
+    }
+    bridge = NativeBridge(plan=plan)
+    ctx.ax_reader = bridge
+    call = asyncio.run(harness.prepare_call(
+        "call_reversible",
+        "computer_click",
+        '{"snapshot_id":"native_snapshot","ref":"play"}',
+        provenance(),
+    ))
+    assert call.gate is Gate.AUTO
+
+    lease.revoke("session-a", "app-a")
+    result = asyncio.run(harness.run(call))
+    visible = json.loads(result.output)
+
+    assert visible["outcome"] == "blocked"
+    assert visible["dispatch_state"] == "not_dispatched"
+    assert visible["reason_code"] == "navigation_lease_stale"
+    assert bridge.executed == []
+
+
+def test_ten_reversible_transactions_use_one_grant_without_approval(harness, ctx):
+    from conn.navigation import NavigationLease
+
+    lease = NavigationLease("session-a")
+    lease.bind_connection("app-a")
+    lease.grant("session-a", "app-a")
+    ctx.navigation = lease
+    bridge = NativeBridge()
+    ctx.ax_reader = bridge
+
+    for index in range(10):
+        fingerprint = f"reversible_{index}"
+        bridge.plan = {
+            "plan_fingerprint": fingerprint,
+            "preview": f"Press control {index}",
+            "target": f"Control {index}",
+            "effect": "selection changes",
+            "authorized_strategies": ["ax_press"],
+            "effect_class": "reversible_navigation",
+            "navigation_generation": lease.generation,
+            "target_role": "AXRadioButton",
+            "secure": False,
+            "denied": False,
+        }
+        bridge.receipt = {
+            "outcome": "verified",
+            "ok": True,
+            "dispatch_state": "dispatched",
+            "strategy": "ax_press",
+            "lane": "semantic",
+            "target": f"Control {index}",
+            "effect": "selection changes",
+            "evidence": [{
+                "kind": "element_attribute_equals",
+                "summary": "selected",
+                "matched": True,
+            }],
+            "retry_safe": False,
+            "duration_ms": 1,
+            "plan_fingerprint": fingerprint,
+        }
+        call = asyncio.run(harness.prepare_call(
+            f"call_{index}",
+            "computer_click",
+            f'{{"snapshot_id":"snapshot","ref":"control-{index}"}}',
+            provenance(),
+        ))
+
+        assert call.gate is Gate.AUTO
+        result = asyncio.run(harness.run(call))
+        assert json.loads(result.output)["outcome"] == "verified"
+
+    assert len(bridge.executed) == 10
+    assert {item[1]["navigation_generation"] for item in bridge.executed} == {
+        lease.generation
+    }
+
+
 def test_native_receipt_must_match_approved_plan_fingerprint(harness, ctx):
     plan = {
         "plan_fingerprint": "approved_plan",
@@ -205,9 +461,15 @@ def test_semantic_snapshot_reads_from_native_observation_store(harness, ctx):
     observation = {
         "snapshot_id": "snapshot_native_1",
         "observation_id": "observation_1",
+        "turn_id": "turn_current",
+        "observation_epoch": 7,
         "bundle_id": "com.apple.Safari",
         "window_id": 42,
-        "render": "snapshot snapshot_native_1 app=com.apple.Safari window=Docs",
+        "candidate_count": 0,
+        "total_match_count": 0,
+        "candidate_bytes": 2,
+        "truncated": False,
+        "candidates": [],
     }
     bridge = NativeBridge(observation=observation)
     ctx.ax_reader = bridge
@@ -219,15 +481,14 @@ def test_semantic_snapshot_reads_from_native_observation_store(harness, ctx):
 
     assert result.ok is True
     assert json.loads(result.output)["data"] == observation
-    assert bridge.observed == [{
-        "turn_id": "turn_current",
-        "observation_epoch": 7,
-        "query": "Docs",
-        "denied_bundles": [
-            "com.1password.1password",
-            "com.apple.keychainaccess",
-        ],
-    }]
+    assert len(bridge.observed) == 1
+    assert bridge.observed[0]["turn_id"] == "turn_current"
+    assert bridge.observed[0]["observation_epoch"] == 7
+    assert bridge.observed[0]["query"].as_wire()["search_terms"] == ["Docs"]
+    assert bridge.observed[0]["denied_bundles"] == [
+        "com.1password.1password",
+        "com.apple.keychainaccess",
+    ]
 
 
 def test_denied_bundle_is_excluded_from_model_observation(harness, ctx):
@@ -286,7 +547,7 @@ def test_native_requests_match_native_payload_contract(harness):
     )
 
     assert (app["operation"], app["payload"]) == (
-        "open", {"app_name": "Safari", "bundle_id": "com.apple.Safari"}
+        "open", {"app_name": "Safari", "bundle_id_hint": "com.apple.Safari"}
     )
     assert url["operation"] == "open_url"
     assert url["payload"] == {
@@ -295,6 +556,78 @@ def test_native_requests_match_native_payload_contract(harness):
     assert menu["payload"] == {"menu_path": ["File", "New Tab"]}
     assert chord["payload"] == {"keys": ["cmd", "shift", "t"]}
     assert scroll["payload"] == {"direction": "down", "amount": 1.5}
+
+
+def test_dynamic_app_request_uses_config_only_as_an_identity_hint(harness):
+    safari = compile_action_request(
+        harness.registry["app_open"], {"app": "Safari"}, harness.cfg
+    )
+    outside_config = compile_action_request(
+        harness.registry["app_open"], {"app": "Firefox"}, harness.cfg
+    )
+
+    assert safari["payload"] == {
+        "app_name": "Safari",
+        "bundle_id_hint": "com.apple.Safari",
+    }
+    assert outside_config["payload"] == {"app_name": "Firefox"}
+
+
+def test_browser_navigate_normalizes_and_binds_browser_scope(harness):
+    request = compile_action_request(
+        harness.registry["browser_navigate"],
+        {"url": "example.com/watch?v=1", "browser_scope": "Safari"},
+        harness.cfg,
+    )
+
+    assert request["operation"] == "navigate"
+    assert request["payload"] == {
+        "url": "example.com/watch?v=1",
+        "browser_scope": "Safari",
+        "bundle_id_hint": "com.apple.Safari",
+    }
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///tmp/report",
+        "javascript:alert(1)",
+        "https://user:secret@example.com",
+        "https://example.com/\nnext",
+        "https://example.com/" + "x" * 4096,
+    ],
+)
+def test_browser_navigate_rejects_unsafe_urls_before_native(harness, url):
+    call = harness.gate(
+        "unsafe_url",
+        "browser_navigate",
+        json.dumps({"url": url}),
+    )
+
+    assert call.gate is Gate.BLOCKED
+    assert call.block_reason.startswith(("browser_url_", "invalid_arguments:"))
+
+
+def test_native_app_ambiguity_preserves_real_candidates(harness, ctx):
+    candidates = [
+        {"display": "Fixture (com.example.one)", "app_name": "Fixture"},
+        {"display": "Fixture (com.example.two)", "app_name": "Fixture"},
+    ]
+    bridge = NativeBridge(plan={
+        "outcome": "ambiguous",
+        "error": "app_name_ambiguous",
+        "reason_code": "app_name_ambiguous",
+        "candidates": candidates,
+    })
+    ctx.ax_reader = bridge
+
+    call = asyncio.run(harness.prepare_call(
+        "ambiguous_app", "app_open", '{"app":"Fixture"}', provenance()
+    ))
+
+    assert call.prepared_failure["outcome"] == "ambiguous"
+    assert call.prepared_failure["data"]["candidates"] == candidates
 
 
 def test_native_request_operation_comes_from_tool_metadata(harness):
@@ -307,19 +640,19 @@ def test_native_request_operation_comes_from_tool_metadata(harness):
     assert request["operation"] == "test_operation"
 
 
-def test_app_action_without_exact_bundle_mapping_is_blocked(harness, cfg):
-    cfg.apps.allowlist.append("Unmapped App")
+def test_app_action_without_config_mapping_reaches_native_resolution(harness):
+    call = harness.gate("dynamic_app", "app_open", '{"app":"Unmapped App"}')
 
-    call = harness.gate("missing_bundle", "app_open", '{"app":"Unmapped App"}')
-
-    assert call.gate is Gate.BLOCKED
-    assert call.block_reason == "app_bundle_id_missing: 'Unmapped App'"
+    assert call.gate is Gate.AUTO
+    assert call.block_reason is None
 
 
-def test_non_apple_app_without_signer_mapping_is_blocked_before_native(
-    harness, cfg, ctx
-):
-    bridge = NativeBridge(plan={})
+def test_native_identity_failure_is_preserved_for_dynamic_app(harness, ctx):
+    bridge = NativeBridge(plan={
+        "outcome": "blocked",
+        "error": "app_identity_unproven",
+        "reason_code": "app_identity_unproven",
+    })
     ctx.ax_reader = bridge
 
     call = asyncio.run(harness.prepare_call(
@@ -327,11 +660,11 @@ def test_non_apple_app_without_signer_mapping_is_blocked_before_native(
     ))
 
     assert call.gate is Gate.BLOCKED
-    assert call.block_reason == "app_signer_not_configured: 'Google Chrome'"
-    assert bridge.prepared == []
+    assert call.block_reason == "app_identity_unproven"
+    assert len(bridge.prepared) == 1
 
 
-def test_app_request_carries_proven_signer_and_apple_uses_anchor(harness):
+def test_app_request_carries_identity_hints_without_claiming_authority(harness):
     registry = harness.registry
 
     obsidian = compile_action_request(
@@ -343,20 +676,20 @@ def test_app_request_carries_proven_signer_and_apple_uses_anchor(harness):
 
     assert obsidian["payload"] == {
         "app_name": "Obsidian",
-        "bundle_id": "md.obsidian",
-        "team_id": "6JSW4SJWN9",
+        "bundle_id_hint": "md.obsidian",
     }
     assert safari["payload"] == {
         "app_name": "Safari",
-        "bundle_id": "com.apple.Safari",
+        "bundle_id_hint": "com.apple.Safari",
     }
 
 
-def test_prepare_app_action_without_exact_bundle_mapping_fails_closed(
-    harness, cfg, ctx
-):
-    cfg.apps.allowlist.append("Unmapped App")
-    bridge = NativeBridge(plan={})
+def test_prepare_unmapped_app_sends_goal_without_identity_fields(harness, ctx):
+    bridge = NativeBridge(plan={
+        "outcome": "failed",
+        "error": "app_not_found",
+        "reason_code": "app_not_found",
+    })
     ctx.ax_reader = bridge
 
     call = asyncio.run(harness.prepare_call(
@@ -364,7 +697,9 @@ def test_prepare_app_action_without_exact_bundle_mapping_fails_closed(
     ))
 
     assert call.gate is Gate.BLOCKED
-    assert call.block_reason == "app_bundle_id_missing: 'Unmapped App'"
+    assert call.block_reason == "app_not_found"
+    request = bridge.prepared[0][0]
+    assert request["payload"] == {"app_name": "Unmapped App"}
 
 
 def test_native_plan_cannot_downgrade_secure_or_high_risk_action(harness, ctx):
@@ -445,28 +780,50 @@ def test_realtime_keeps_only_one_semantic_context_item():
     adapter = CapturingAdapter()
 
     async def scenario():
-        await adapter.upsert_semantic_context("app=Safari window=Docs")
-        first_id = adapter._semantic_item_id
-        # The server acknowledges the create; only acknowledged items may be
-        # deleted (R1 ledger rule).
+        first = asyncio.create_task(
+            adapter.upsert_semantic_context("app=Safari window=Docs")
+        )
+        await asyncio.sleep(0)
+        first_id = adapter._pending_semantic_item_id
         adapter._normalize({"type": "conversation.item.created",
                             "item": {"id": first_id}})
-        await adapter.send_tool_result(
+        await first
+        native = {
+            "snapshot_id": "snapshot_2",
+            "observation_id": "observation_2",
+            "turn_id": "turn",
+            "observation_epoch": 2,
+            "bundle_id": "com.apple.Safari",
+            "window_id": 42,
+            "candidate_count": 0,
+            "candidate_bytes": 2,
+            "candidates": [],
+        }
+        second = asyncio.create_task(adapter.send_tool_result(
             "call_snapshot",
-            json.dumps({
-                "ok": True,
-                "data": {"snapshot_id": "snapshot_2", "render": "safe tree"},
-            }),
-        )
-        return first_id
+            json.dumps({"ok": True, "data": native}),
+            model_observation=parse_model_observation(native),
+        ))
+        await asyncio.sleep(0)
+        second_id = adapter._pending_semantic_item_id
+        adapter._normalize({"type": "conversation.item.created",
+                            "item": {"id": second_id}})
+        for _ in range(10):
+            await asyncio.sleep(0)
+            if adapter.sent[-1]["type"] == "conversation.item.delete":
+                break
+        adapter._normalize({"type": "conversation.item.deleted",
+                            "item_id": first_id})
+        await second
+        return first_id, second_id
 
-    first_id = asyncio.run(scenario())
+    first_id, second_id = asyncio.run(scenario())
 
     assert adapter.sent[0]["type"] == "conversation.item.create"
-    assert adapter.sent[1]["type"] == "conversation.item.delete"
-    assert adapter.sent[1]["item_id"] == first_id
-    assert adapter.sent[2]["item"]["type"] == "function_call_output"
-    assert adapter._semantic_item_id == adapter.sent[2]["item"]["id"]
+    assert adapter.sent[1]["item"]["type"] == "function_call_output"
+    assert adapter.sent[2]["type"] == "conversation.item.delete"
+    assert adapter.sent[2]["item_id"] == first_id
+    assert adapter._semantic_item_id == second_id
 
 
 def test_text_turn_injects_only_validated_app_and_window_identifiers(
@@ -506,8 +863,14 @@ def test_prompt_treats_only_verified_as_completion():
     assert "only when the result outcome is verified" in INSTRUCTIONS
     assert "safe_user_message" in INSTRUCTIONS
     assert "Retry only when the result says retry_safe=true" in INSTRUCTIONS
+    assert "at most two accessibility snapshots" in INSTRUCTIONS
     assert "never repeat the same failed one" in INSTRUCTIONS
     assert "at most one state-changing computer action" in INSTRUCTIONS
+    assert (
+        "For navigation_grant_required, speak safe_user_message exactly."
+        in INSTRUCTIONS
+    )
+    assert "Never create navigation grant instructions yourself." in INSTRUCTIONS
 
 
 def test_prompt_declines_destructive_requests_before_inspection():
@@ -646,6 +1009,10 @@ def test_app_routes_realtime_mutation_through_prepared_native_transaction(
     app = ConnApp(cfg, adapter, harness)
     app.ax_bridge = bridge
     ctx.ax_reader = bridge
+    app.on_app_connection("signed-app")
+    app.navigation.grant(app.session_id, "signed-app")
+    bridge.plan["effect_class"] = "reversible_navigation"
+    bridge.plan["navigation_generation"] = app.navigation.generation
     app.machine.phase = Phase.THINKING
     app._start_turn_context()
 

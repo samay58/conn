@@ -60,6 +60,32 @@ class ToolCall:
     prepared_failure: dict | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ModelObservation:
+    observation_id: str
+    snapshot_id: str
+    bundle_id: str
+    window_id: int
+    text: str
+    byte_count: int
+    estimated_input_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class VisualObservation:
+    capture_id: str
+    image_data_url: str
+    image_sha256: str
+    image_bytes: int
+    pixel_size: tuple[int, int]
+    scale: float
+    window_id: int
+    bundle_id: str
+    window_frame: dict[str, float]
+    captured_ms: int
+    metadata: dict
+
+
 # Machine inputs
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +122,8 @@ class ToolFinished:
     observation_epoch: int | None = None
     execution_id: int | None = None
     action_trace: dict | None = None
+    model_observation: ModelObservation | None = None
+    visual_observation: VisualObservation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +263,8 @@ class SendToolResult:
     call_id: str
     ok: bool
     output: str
+    model_observation: ModelObservation | None = None
+    visual_observation: VisualObservation | None = None
 
 
 @dataclass(frozen=True, slots=True)

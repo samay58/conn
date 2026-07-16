@@ -1,15 +1,18 @@
 # Conn manual test range
 
-Updated 2026-07-13. Fifteen-minute confidence drill. Not product acceptance.
+Updated 2026-07-16. Fifteen-minute confidence drill. Not product acceptance.
 
-Status 2026-07-13: the reliability packets are mechanically green and the
-July 12 defects have pinned fixes. Run this range against a freshly installed
-build (`make-app.sh install`, then relaunch) to collect live evidence; the
-range still does not establish readiness on its own.
+Conn Lab now covers the repeatable transaction, app, recovery, and stale-state
+checks in disposable guests. This drill is the physical-Mac layer. Run it
+against the freshly installed build after launching Conn.app and clicking the
+pointer-only navigation grant. It still does not establish readiness on its
+own.
 
 ## Rules
 
 - One spoken mutation per turn.
+- Start a fresh daemon session. Confirm the app shows navigation granted only
+  after the pointer click.
 - Use scratch content only.
 - No Messages, Mail, purchases, accounts, secrets, or deletion.
 - Judge eyes and Conn separately. Visible success does not excuse wrong words.
@@ -30,6 +33,10 @@ open .build/fixture/ConnActionFixture.app
 
 App quit, crash relaunch, and orphan exit recovery are mechanically proven.
 If Conn fails to reconnect during this drill, preserve the trace and stop.
+
+Do not repeat VM-covered setup probes unless the physical Mac disagrees with a
+recorded lab result. The purpose here is microphone, hardware hotkey, visible
+surface, and ordinary-use judgment.
 
 ## PTT circuit
 
@@ -55,6 +62,9 @@ These should verify from state.
 | Text | Focus scratch note body. `Type alpha bravo 42 here` | Exact text, exact target | Focus rechecked; value or hash matches |
 | Tab | From Safari: `Focus the tab named Example Domain` | Correct unique tab selected | Selected or focused state verifies |
 | Scroll | On Wikipedia: `Scroll until References is visible` | References enters viewport | Viewport or directional value evidence matches |
+| Dynamic app | Open one harmless installed app that is not in the configured alias list | Exact requested app opens | Installed bundle and signing identity bind before dispatch |
+| Direct URL | `Open example.com in Safari` | Safari shows Example Domain, not search results | Normalized document URL verifies, or honest dispatch-only if Safari hides it |
+| Visual Play | In ConnActionFixture: `Play the video` | Opaque target changes from Play to Pause once | Receipt agrees with the separate fixture truth log; visual motion alone does not verify |
 
 Repeat one command after effect already exists. Expected: refusal before
 dispatch, not fake success.
@@ -79,6 +89,8 @@ Use ConnActionFixture. Failure is desired.
 | Secure field | Type harmless text into secure field | `Did not run.` No text dispatch |
 | No-effect control | Press control that reports AX success but changes nothing | No `Done.` No retry |
 | Reordered siblings | Identify target, reorder fixture, then act on stale ref | Stale target refuses |
+| Revoked grant | Prepare a reversible target, revoke navigation, then continue | No input dispatch; old plan refuses |
+| Stale visual frame | Capture the fixture, move or resize its window, then activate | No click; receipt names the stale visual plan |
 
 ## Bug packet
 

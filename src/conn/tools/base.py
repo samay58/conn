@@ -49,3 +49,4 @@ class ExecutionContext:
     # through the app's Accessibility grant (TCC binds to the binary, and
     # the grant lives on Conn.app, not on the spawned python).
     ax_reader: object | None = None
+    navigation: object | None = None

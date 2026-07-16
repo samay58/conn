@@ -18,7 +18,7 @@ from conn.events import (
 )
 from conn.state import Phase, SessionStateMachine
 
-MUTATIONS = frozenset({"computer_create", "app_open"})
+MUTATIONS = frozenset({"computer_create", "app_open", "computer_click"})
 
 
 def machine() -> SessionStateMachine:
@@ -104,6 +104,7 @@ class TestReplanBudget:
             strategy="ax_menu_action", lane="semantic", target="New Tab",
             effect="requested effect was not observed",
             evidence=(), retry_safe=False, duration_ms=900,
+            reason_code="witness_not_matched",
         ))
         m.handle(ResponseDone(had_tool_calls=True))
         second = call("c2", args={"kind": "window"})
@@ -150,6 +151,134 @@ class TestRepeatedPlanShapes:
         cmds = m.handle(ToolProposed(again))
         assert any(isinstance(c, ExecTool) for c in cmds)
 
+    def test_ephemeral_native_refs_do_not_bypass_the_shape_limit(self):
+        m = machine()
+        first = ToolCall(
+            call_id="c1", name="computer_click",
+            arguments={"snapshot_id": "snapshot-old", "ref": "node-old"},
+            gate=Gate.AUTO, preview="Press RIVER",
+            prepared_plan={
+                "target_fingerprint": "river-fingerprint",
+                "target_role": "AXLink",
+                "authorized_strategies": ["ax_press"],
+                "risk": "navigation",
+            },
+        )
+        m.handle(ToolProposed(first))
+        finish(m, first, not_dispatched_failure_receipt(
+            target="RIVER", strategy="native_bridge", duration_ms=2,
+            summary="stale_snapshot",
+        ))
+        m.handle(ResponseDone(had_tool_calls=True))
+        second = ToolCall(
+            call_id="c2", name="computer_click",
+            arguments={"snapshot_id": "snapshot-new", "ref": "node-new"},
+            gate=Gate.AUTO, preview="Press RIVER",
+            prepared_plan={
+                "target_fingerprint": "river-fingerprint",
+                "target_role": "AXLink",
+                "authorized_strategies": ["ax_press"],
+                "risk": "navigation",
+            },
+        )
+
+        commands = m.handle(ToolProposed(second))
+
+        assert not any(isinstance(command, ExecTool) for command in commands)
+        assert "repeated_plan_shape" in (m.ledger["c2"].output or "")
+
+    def test_ambiguous_mutation_closes_further_grounding_reads(self):
+        m = machine()
+        first = call("c1")
+        m.handle(ToolProposed(first))
+        finish(m, first, ambiguous_receipt(
+            target="RIVER",
+            data={"candidates": ["RIVER in header", "RIVER in sidebar"]},
+            duration_ms=2,
+        ))
+        read = ToolCall(
+            call_id="look-again",
+            name="computer_ax_snapshot",
+            arguments={"query": "RIVER", "ancestor_ref": "new-node-id"},
+            gate=Gate.AUTO,
+            preview="Read accessibility snapshot",
+        )
+
+        commands = m.handle(ToolProposed(read))
+
+        assert not any(isinstance(command, ExecTool) for command in commands)
+        assert "clarification_exhausted" in (m.ledger["look-again"].output or "")
+
+
+class TestGroundingReadBudget:
+    @staticmethod
+    def _read(call_id: str) -> ToolCall:
+        return ToolCall(
+            call_id=call_id,
+            name="computer_ax_snapshot",
+            arguments={"query": "Play"},
+            gate=Gate.AUTO,
+            preview="Read accessibility snapshot",
+        )
+
+    @staticmethod
+    def _finish_empty(m: SessionStateMachine, call_id: str) -> None:
+        running = m.ledger[call_id].call
+        m.handle(ToolFinished(
+            call_id=call_id,
+            ok=True,
+            output='{"ok":true,"data":{"candidate_count":0,"candidates":[]}}',
+            turn_id=running.turn_id,
+            response_epoch=running.response_epoch,
+            observation_epoch=running.observation_epoch,
+            execution_id=running.execution_id,
+        ))
+        m.handle(ResponseDone(had_tool_calls=True))
+
+    def test_third_grounding_read_in_one_turn_is_refused(self):
+        m = machine()
+        for call_id in ("read-1", "read-2"):
+            proposed = self._read(call_id)
+            assert any(
+                isinstance(command, ExecTool)
+                for command in m.handle(ToolProposed(proposed))
+            )
+            self._finish_empty(m, call_id)
+
+        commands = m.handle(ToolProposed(self._read("read-3")))
+
+        assert not any(isinstance(command, ExecTool) for command in commands)
+        assert "grounding_read_limit" in (m.ledger["read-3"].output or "")
+
+    def test_fresh_turn_restores_the_grounding_read_budget(self):
+        m = machine()
+        for call_id in ("read-1", "read-2"):
+            m.handle(ToolProposed(self._read(call_id)))
+            self._finish_empty(m, call_id)
+        m.handle(ResponseDone(had_tool_calls=False))
+        m.handle(PttDown(ts_ms=60_000))
+        m.handle(PttUp(ts_ms=61_000, voiced=True))
+
+        commands = m.handle(ToolProposed(self._read("fresh-read")))
+
+        assert any(isinstance(command, ExecTool) for command in commands)
+
+
+def test_ambiguity_message_uses_current_descriptor_choices_exactly():
+    receipt = ambiguous_receipt(
+        target="RIVER",
+        data={"candidates": [
+            {"descriptor": {"display": "RIVER in header navigation"}},
+            {"descriptor": {"display": "RIVER in secondary navigation"}},
+        ]},
+        duration_ms=2,
+    )
+
+    assert receipt.safe_user_message() == (
+        "I found more than one match: RIVER in header navigation, "
+        "RIVER in secondary navigation. Which one?"
+    )
+
 
 class TestCompileFailureBudget:
     def _blocked_compile_call(self, call_id: str, kind: str) -> ToolCall:
@@ -194,7 +323,7 @@ class TestSafeUserMessages:
                 dispatch_state=DispatchState.DISPATCHED,
                 strategy="ax_menu_action", lane="semantic", target="New Tab",
                 effect="effect not observed", evidence=(), retry_safe=False,
-                duration_ms=10,
+                duration_ms=10, reason_code="no_trustworthy_witness",
             ),
             "possibly": uncertain_failure_receipt(
                 target="t", strategy="s", duration_ms=1, summary="timeout"),

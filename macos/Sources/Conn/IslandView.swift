@@ -129,7 +129,7 @@ struct IslandView: View {
                     .contentTransition(.opacity)
             }
             if showsCost {
-                // Two decimals at the cap: "$1.00" reads as money. Everywhere
+                // Two decimals at the cap reads as money. Everywhere
                 // else three: sub-cent spend is real information while it counts.
                 Text(String(format: state.phase == "budget_hold" ? "$%.2f" : "$%.3f",
                             state.spentUSD))

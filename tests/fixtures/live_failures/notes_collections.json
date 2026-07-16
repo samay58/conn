@@ -1,0 +1,22 @@
+{
+  "source_session": "session_4a09e788eb",
+  "bundle_id": "com.apple.Notes",
+  "window_id": 252,
+  "nodes": [
+    {"ref": "folders", "role": "AXOutline", "path": [0, 1]},
+    {"ref": "folder-row", "parent_ref": "folders", "role": "AXRow", "path": [0, 1, 0]},
+    {"ref": "notes-list", "role": "AXTable", "path": [0, 2]},
+    {"ref": "note-row-1", "parent_ref": "notes-list", "role": "AXRow", "path": [0, 2, 0]},
+    {"ref": "note-row-2", "parent_ref": "notes-list", "role": "AXRow", "path": [0, 2, 1]},
+    {"ref": "other-notes", "role": "AXTable", "path": [0, 3]},
+    {"ref": "other-row", "parent_ref": "other-notes", "role": "AXRow", "path": [0, 3, 0]}
+  ],
+  "unique_case": {
+    "compatible_collection": "notes-list",
+    "folders_are_not_notes": true
+  },
+  "ambiguous_case": {
+    "compatible_collections": ["notes-list", "other-notes"]
+  },
+  "genuine_ambiguity_refuses": true
+}

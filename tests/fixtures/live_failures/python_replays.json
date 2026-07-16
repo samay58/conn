@@ -1,0 +1,44 @@
+{
+  "direct_url": {
+    "source_session": "session_a7613a568b",
+    "call_id": "call_fuZFcnJ03O1OAp20",
+    "context_bundle": "com.apple.Safari",
+    "utterance": "Open techmeme.com in Safari.",
+    "current_tool": "browser_search",
+    "current_target": "https://www.google.com/search?q=https%3A%2F%2Fwww.techmeme.com%2F",
+    "intended_tool": "browser_navigate",
+    "intended_url": "https://www.techmeme.com/",
+    "intended_browser": "Safari"
+  },
+  "notes_relative": {
+    "source_session": "session_4a09e788eb",
+    "call_id": "call_uQyzkX2AEkFBndi5",
+    "context_bundle": "com.apple.Notes",
+    "utterance": "Open the note under our current note.",
+    "current_tool": "phoenix_search",
+    "intended_tool": "computer_select_relative",
+    "intended_relation": "next"
+  },
+  "repeated_snapshot": {
+    "source_session": "session_86cb484325",
+    "queries": ["play", "video", "play", "video", "control"],
+    "observations": 5,
+    "unique_tree_shapes": 1,
+    "nodes_per_observation": 34,
+    "input_tokens": [11384, 21413, 31427, 41343, 51196]
+  },
+  "delayed_type": {
+    "source_session": "session_4a09e788eb",
+    "call_id": "call_UXsljq8vJBbYTK3f",
+    "duration_ms": 2701,
+    "dispatch_state": "possibly_dispatched",
+    "current_error": "native_bridge_timeout"
+  },
+  "barge_in": {
+    "source_session": "session_4a09e788eb",
+    "response_id": "resp_E1FRo06TJwhpeuxg7OidW",
+    "stale_prefix": "I sent it,",
+    "observed_transcript": "I sent it,I can't help with destructive actions yet.",
+    "intended_transcript": "I can't help with destructive actions yet."
+  }
+}

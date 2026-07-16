@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .config import BudgetCfg, PricingCfg
 from .trace import write_receipt
+from .events import ModelObservation, VisualObservation
 
 DEFAULT_FIRST_TURN_ESTIMATE_USD = 0.03
 
@@ -29,6 +30,7 @@ class TurnCost:
     audio_in: int = 0
     audio_out: int = 0
     cached_in: int = 0
+    image_in: int = 0
     usd: float = 0.0
 
 
@@ -45,9 +47,23 @@ class CostMeter:
     screenshots: int = 0
     action_outcomes: dict[str, int] = field(default_factory=dict)
     overridden: bool = False
+    observation_count: int = 0
+    observation_bytes: int = 0
+    observation_estimated_tokens: int = 0
+    visual_observation_count: int = 0
+    visual_observation_bytes: int = 0
 
     def count_action_outcome(self, outcome: str) -> None:
         self.action_outcomes[outcome] = self.action_outcomes.get(outcome, 0) + 1
+
+    def record_observation(self, observation: ModelObservation) -> None:
+        self.observation_count += 1
+        self.observation_bytes += observation.byte_count
+        self.observation_estimated_tokens += observation.estimated_input_tokens
+
+    def record_visual_observation(self, observation: VisualObservation) -> None:
+        self.visual_observation_count += 1
+        self.visual_observation_bytes += observation.image_bytes
 
     def ingest(self, usage: dict) -> TurnCost:
         in_details = usage.get("input_token_details", {})
@@ -56,13 +72,16 @@ class CostMeter:
         cached_split = in_details.get("cached_tokens_details", {})
         cached_text = cached_split.get("text_tokens", cached)
         cached_audio = cached_split.get("audio_tokens", 0)
+        cached_image = cached_split.get("image_tokens", 0)
 
         text_in = max(in_details.get("text_tokens", 0) - cached_text, 0)
         audio_in = max(in_details.get("audio_tokens", 0) - cached_audio, 0)
+        image_in = max(in_details.get("image_tokens", 0) - cached_image, 0)
         turn = TurnCost(
             text_in=text_in,
             audio_in=audio_in,
             cached_in=cached,
+            image_in=image_in,
             text_out=out_details.get("text_tokens", 0),
             audio_out=out_details.get("audio_tokens", 0),
         )
@@ -73,6 +92,7 @@ class CostMeter:
             + turn.audio_in * p.audio_in
             + turn.audio_out * p.audio_out
             + turn.cached_in * p.cached_in
+            + turn.image_in * p.image_in
         ) / 1_000_000
         self.turns.append(turn)
         return turn
@@ -103,6 +123,7 @@ class CostMeter:
             total.audio_in += t.audio_in
             total.audio_out += t.audio_out
             total.cached_in += t.cached_in
+            total.image_in += t.image_in
         return {
             "duration_s": round(time.time() - self.started_at, 1),
             "user_turns": self.user_turns,
@@ -111,12 +132,22 @@ class CostMeter:
                 "text_in": total.text_in, "text_out": total.text_out,
                 "audio_in": total.audio_in, "audio_out": total.audio_out,
                 "cached_in": total.cached_in,
+                "image_in": total.image_in,
             },
             "tool_calls": self.tool_calls,
             "tool_proposals": self.tool_proposals,
             "blocked_proposals": self.blocked_proposals,
             "action_outcomes": dict(self.action_outcomes),
             "screenshots": self.screenshots,
+            "observations": {
+                "count": self.observation_count,
+                "candidate_bytes": self.observation_bytes,
+                "estimated_input_tokens": self.observation_estimated_tokens,
+            },
+            "visual_observations": {
+                "count": self.visual_observation_count,
+                "image_bytes": self.visual_observation_bytes,
+            },
             "estimated_usd": round(self.spent_usd, 4),
             "cap_usd": self.budget.session_cap_usd,
             "per_response_usd": [round(t.usd, 4) for t in self.turns],

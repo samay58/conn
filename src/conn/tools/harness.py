@@ -25,7 +25,18 @@ from ..actions import (
 )
 from ..events import Gate, ToolCall, ToolFinished
 from .base import ExecutionContext, ToolError
-from .native_actions import compile_action_request, safe_plan, validate_plan
+from .native_actions import (
+    compile_action_request,
+    safe_failure_data,
+    safe_plan,
+    validate_plan,
+)
+from ..observations import (
+    ObservationQuery,
+    ObservationValidationError,
+    parse_model_observation,
+    parse_visual_observation,
+)
 from .registry import ToolSpec, computer_mutation_names
 from .risk import argument_guard, gate_for, gate_for_prepared
 
@@ -271,13 +282,23 @@ class ToolHarness:
                     summary=reason,
                 ).as_dict(),
             )
-        response = await bridge.prepare_action(
-            request,
-            turn_id=provenance.turn_id,
-            response_epoch=provenance.response_epoch,
-            observation_epoch=provenance.observation_epoch,
+        preparation_context = {
+            "turn_id": provenance.turn_id,
+            "response_epoch": provenance.response_epoch,
+            "observation_epoch": provenance.observation_epoch,
+        }
+        if self.ctx.navigation is not None:
+            preparation_context["navigation_generation"] = (
+                self.ctx.navigation.generation
+            )
+        response = await bridge.prepare_action(request, **preparation_context)
+        problem = validate_plan(
+            response.data,
+            require_navigation=self.ctx.navigation is not None,
+            allow_visual=(
+                name == "computer_activate" and self.cfg.actions.visual_enabled
+            ),
         )
-        problem = validate_plan(response.data)
         if problem:
             raw_failure = response.data if isinstance(response.data, dict) else {}
             reason = response.error or str(raw_failure.get("error") or problem)
@@ -292,6 +313,7 @@ class ToolHarness:
                     outcome=outcome,
                     target=self._safe_preview(spec, args),
                     summary=reason,
+                    data=safe_failure_data(raw_failure),
                 ).as_dict()
             return ToolCall(
                 call_id=call_id,
@@ -309,7 +331,7 @@ class ToolHarness:
         plan = safe_plan(response.data)
         try:
             gate, reason, preview = gate_for_prepared(
-                name, spec.risk, args, plan, self.cfg
+                name, spec.risk, args, plan, self.cfg, self.ctx.navigation
             )
         except Exception as exc:
             gate = Gate.BLOCKED
@@ -410,7 +432,14 @@ class ToolHarness:
         )
 
     @staticmethod
-    def _result(call: ToolCall, *, ok: bool, output: str) -> ToolFinished:
+    def _result(
+        call: ToolCall,
+        *,
+        ok: bool,
+        output: str,
+        model_observation=None,
+        visual_observation=None,
+    ) -> ToolFinished:
         return ToolFinished(
             call_id=call.call_id,
             ok=ok,
@@ -419,6 +448,8 @@ class ToolHarness:
             response_epoch=call.response_epoch,
             observation_epoch=call.observation_epoch,
             execution_id=call.execution_id,
+            model_observation=model_observation,
+            visual_observation=visual_observation,
         )
 
     async def run(self, call: ToolCall) -> ToolFinished:
@@ -439,9 +470,13 @@ class ToolHarness:
             return self._result(call, ok=False, output=json.dumps(envelope))
         if (
             self._executors is None
-            and call.name in {"computer_get_context", "computer_ax_snapshot"}
+            and call.name in {
+                "computer_get_context", "computer_ax_snapshot", "computer_visual_observe"
+            }
             and hasattr(self.ctx.ax_reader, "observe")
         ):
+            if call.name == "computer_visual_observe":
+                return await self._run_native_visual_observation(call, started)
             return await self._run_native_observation(call, started)
         if self.is_computer_mutation(call.name) and call.prepared_plan is not None:
             return await self._run_prepared_action(call, spec, started)
@@ -535,7 +570,8 @@ class ToolHarness:
         plan = call.prepared_plan or {}
         try:
             gate, reason, _preview = gate_for_prepared(
-                call.name, spec.risk, call.arguments, plan, self.cfg
+                call.name, spec.risk, call.arguments, plan, self.cfg,
+                self.ctx.navigation,
             )
         except Exception as exc:
             gate = Gate.BLOCKED
@@ -558,13 +594,17 @@ class ToolHarness:
             ))
 
         plan_timeout = plan.get("timeout_ms")
-        response = await bridge.execute_action(
-            fingerprint,
-            turn_id=call.turn_id or "",
-            response_epoch=int(call.response_epoch or 0),
-            observation_epoch=int(call.observation_epoch or 0),
-            timeout_ms=plan_timeout if isinstance(plan_timeout, int) else None,
-        )
+        execution_context = {
+            "turn_id": call.turn_id or "",
+            "response_epoch": int(call.response_epoch or 0),
+            "observation_epoch": int(call.observation_epoch or 0),
+            "timeout_ms": plan_timeout if isinstance(plan_timeout, int) else None,
+        }
+        if self.ctx.navigation is not None:
+            execution_context["navigation_generation"] = (
+                self.ctx.navigation.generation
+            )
+        response = await bridge.execute_action(fingerprint, **execution_context)
         duration_ms = int((time.monotonic() - started) * 1000)
         if isinstance(response.data, dict):
             if response.data.get("plan_fingerprint") != fingerprint:
@@ -652,7 +692,7 @@ class ToolHarness:
         response = await self.ctx.ax_reader.observe(
             turn_id=call.turn_id or "system",
             observation_epoch=int(call.observation_epoch or 0),
-            query=call.arguments.get("query"),
+            query=ObservationQuery.from_tool_arguments(call.arguments),
             denied_bundles=list(self.cfg.ax.deny_bundles),
         )
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -688,5 +728,62 @@ class ToolHarness:
                 if key in data
             }
             data["source"] = "app"
+        model_observation = None
+        if call.name == "computer_ax_snapshot":
+            try:
+                model_observation = parse_model_observation(data)
+            except ObservationValidationError as exc:
+                envelope = {
+                    "ok": False,
+                    "error": f"native_observation_invalid: {exc}",
+                    "duration_ms": duration_ms,
+                }
+                return self._result(call, ok=False, output=json.dumps(envelope))
         envelope = {"ok": True, "data": data, "duration_ms": duration_ms}
-        return self._result(call, ok=True, output=json.dumps(envelope))
+        return self._result(
+            call,
+            ok=True,
+            output=json.dumps(envelope),
+            model_observation=model_observation,
+        )
+
+    async def _run_native_visual_observation(
+        self, call: ToolCall, started: float
+    ) -> ToolFinished:
+        response = await self.ctx.ax_reader.observe_visual(
+            turn_id=call.turn_id or "system",
+            observation_epoch=int(call.observation_epoch or 0),
+            enabled=self.cfg.actions.visual_enabled,
+            denied_bundles=list(self.cfg.ax.deny_bundles),
+        )
+        duration_ms = int((time.monotonic() - started) * 1000)
+        if not isinstance(response.data, dict) or response.data.get("ok") is not True:
+            data = response.data if isinstance(response.data, dict) else {}
+            reason = response.error or data.get("reason_code") or "native_visual_unavailable"
+            return self._result(
+                call,
+                ok=False,
+                output=json.dumps({"ok": False, "error": reason, "duration_ms": duration_ms}),
+            )
+        try:
+            observation = parse_visual_observation(response.data)
+        except ObservationValidationError as exc:
+            return self._result(
+                call,
+                ok=False,
+                output=json.dumps({
+                    "ok": False,
+                    "error": f"native_visual_invalid: {exc}",
+                    "duration_ms": duration_ms,
+                }),
+            )
+        return self._result(
+            call,
+            ok=True,
+            output=json.dumps({
+                "ok": True,
+                "data": observation.metadata,
+                "duration_ms": duration_ms,
+            }),
+            visual_observation=observation,
+        )

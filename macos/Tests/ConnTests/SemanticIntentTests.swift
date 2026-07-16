@@ -36,9 +36,62 @@ final class SemanticIntentTests: XCTestCase {
             "plan_fingerprint": fingerprint,
             "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
         ])
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.captureIncludesMenu.first, true)
+        XCTAssertEqual(backend.captureIncludesMenu.last, true)
+        XCTAssertNil(backend.captureDeadlines.first ?? nil)
+        XCTAssertNotNil(backend.captureDeadlines.last ?? nil)
+        XCTAssertEqual(receipt["ok"] as? Bool, true)
+    }
+
+    func testNestedSafariTabStripWithOneTabBindsTheStableCollection() async throws {
+        let backend = IntentFixtureBackend()
+        backend.usePersistentNestedTabStripWithOneInitialTab()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "tab"]))
+        let predicates = try XCTUnwrap(plan?["predicates"] as? [[String: Any]])
+
+        XCTAssertEqual(predicates.first?["ref"] as? String, "tab-bar")
+    }
+
+    func testCreateTabWitnessAllowsOnlyTheCollectionDescriptionToChange() async throws {
+        let backend = IntentFixtureBackend()
+        backend.usePersistentNestedTabStripWithOneInitialTab()
+        backend.includeDynamicTabDescription = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "tab"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
 
         XCTAssertEqual(receipt["outcome"] as? String, "verified")
         XCTAssertEqual(receipt["ok"] as? Bool, true)
+    }
+
+    func testCreateTabWitnessRefusesChangedCollectionIdentity() async throws {
+        let backend = IntentFixtureBackend()
+        backend.usePersistentNestedTabStripWithOneInitialTab()
+        backend.changeTabCollectionIdentityAfterDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "tab"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
+        XCTAssertEqual(receipt["ok"] as? Bool, false)
     }
 
     func testCreateTabCapsAtDispatchOnlyWhenCollectionAppearsAfterDispatch() async throws {
@@ -140,6 +193,24 @@ final class SemanticIntentTests: XCTestCase {
         XCTAssertEqual(receipt["ok"] as? Bool, false)
     }
 
+    func testVirtualizedNoteListIdentityChangeUsesTargetBoundWitness() async throws {
+        let backend = IntentFixtureBackend()
+        backend.includeNewNoteMenu = true
+        backend.virtualizeNoteListAfterDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
     func testCreateWindowDerivesAWindowCountWitness() async throws {
         let backend = IntentFixtureBackend()
         backend.includeNewWindowMenu = true
@@ -157,6 +228,62 @@ final class SemanticIntentTests: XCTestCase {
         ])
 
         XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
+    func testCreateWindowCanVerifyAfterNewWindowTakesFocus() async throws {
+        let backend = IntentFixtureBackend()
+        backend.includeNewWindowMenu = true
+        backend.focusCreatedWindowOnDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "window"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(receipt["ok"] as? Bool, true)
+    }
+
+    func testCreateWindowDiscoversLazyMenuAndKeepsItsExactPath() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useLazyNewWindowMenu()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "window"]))
+
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let candidates = try XCTUnwrap(plan?["candidates"] as? [[String: Any]])
+        XCTAssertEqual(candidates.first?["menu_path"] as? [String],
+                       ["Actions", "New Window"])
+        XCTAssertEqual(backend.menuDiscoveryCount, 1)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastMenuPath, ["Actions", "New Window"])
+    }
+
+    func testCreateWindowRefusesAmbiguousLazyMenuPaths() async {
+        let backend = IntentFixtureBackend()
+        backend.useAmbiguousLazyNewWindowMenus()
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "window"]))
+
+        XCTAssertEqual(plan?["outcome"] as? String, "ambiguous")
+        XCTAssertEqual(plan?["dispatch_state"] as? String, "not_dispatched")
+        XCTAssertEqual(backend.dispatchCount, 0)
     }
 
     func testPlanDeclaresItsReadAndWitnessSets() async throws {
@@ -243,6 +370,64 @@ final class SemanticIntentTests: XCTestCase {
         XCTAssertEqual(backend.lastDispatchedIdentifier, "notes.row.1")
     }
 
+    func testSelectRelativeNoteIgnoresSelectedFolderOutline() async throws {
+        let backend = IntentFixtureBackend()
+        backend.includeFolderOutline = true
+        backend.selectLastRow()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+        XCTAssertEqual(
+            plan?["authorized_strategies"] as? [String],
+            ["ax_set_selected_rows", "ax_set_selected"]
+        )
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedIdentifier, "notes.row.1")
+    }
+
+    func testSelectRelativeNoteRefusesTwoSelectedMultiRowNoteLists() async {
+        let backend = IntentFixtureBackend()
+        backend.includeSecondNoteList = true
+        backend.selectLastRow()
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+
+        XCTAssertEqual(plan?["outcome"] as? String, "ambiguous")
+        XCTAssertEqual(plan?["error"] as? String, "ambiguous_intent")
+        XCTAssertEqual(backend.dispatchCount, 0)
+    }
+
+    func testSelectRelativeNoteReResolvesAnonymousRowsByDescendantTitle() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useAnonymousNoteRows()
+        backend.selectLastRow()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedRef, "row-1")
+    }
+
     func testSelectRelativeTabKindUsesTheTabGroup() async throws {
         let backend = IntentFixtureBackend()
         backend.effectOnDispatch = true
@@ -322,23 +507,49 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     var includeNewNoteMenu = false
     var includeFolderOutline = false
     var includeSecondNoteList = false
+    var virtualizeNoteListAfterDispatch = false
+    var includeDynamicTabDescription = false
+    var changeTabCollectionIdentityAfterDispatch = false
+    var focusCreatedWindowOnDispatch = false
+    private(set) var captureIncludesMenu: [Bool] = []
+    private(set) var captureDeadlines: [Int?] = []
     private(set) var dispatchCount = 0
     private(set) var lastDispatchedIdentifier: String?
+    private(set) var lastDispatchedRef: String?
+    private(set) var lastMenuPath: [String]?
+    private(set) var menuDiscoveryCount = 0
     private var selectedRow = 1
     private var selectedTab = 1
     private var tabCount = 2
     private var noteCount = 2
     private var windowCount = 1
+    private var windowID: UInt32 = 7
     private var nestedTabStrip = false
+    private var persistentNestedTabStrip = false
     private var createTabOnDispatch = true
     private var addUnrelatedRadioOnDispatch = false
+    private var lazyNewWindowMenu = false
+    private var menuDiscoveryActive = false
+    private var ambiguousLazyNewWindowMenus = false
+    private var anonymousNoteRows = false
+    private var lazyMenuParentTitle = "Actions"
 
     func selectLastRow() {
         selectedRow = 2
     }
 
+    func useAnonymousNoteRows() {
+        anonymousNoteRows = true
+    }
+
     func useNestedTabStripWithOneInitialTab() {
         nestedTabStrip = true
+        tabCount = 1
+    }
+
+    func usePersistentNestedTabStripWithOneInitialTab() {
+        nestedTabStrip = true
+        persistentNestedTabStrip = true
         tabCount = 1
     }
 
@@ -348,9 +559,21 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         addUnrelatedRadioOnDispatch = true
     }
 
+    func useLazyNewWindowMenu() {
+        lazyNewWindowMenu = true
+        includeNewWindowMenu = true
+    }
+
+    func useAmbiguousLazyNewWindowMenus() {
+        useLazyNewWindowMenu()
+        ambiguousLazyNewWindowMenus = true
+    }
+
     func capture(
         turnID: String, observationEpoch: Int, query: NativeObservationQuery
     ) -> NativeCapturedObservation {
+        captureIncludesMenu.append(query.includeMenu)
+        captureDeadlines.append(query.deadlineMs)
         var nodes = [
             NativeObservationNode(ref: "menu-bar", role: "AXMenuBar"),
             NativeObservationNode(
@@ -365,10 +588,21 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
                 title: "New Private Window", enabled: true,
                 supportedActions: ["AXPress"]),
         ]
-        if includeNewWindowMenu {
+        if includeNewWindowMenu && (!lazyNewWindowMenu || menuDiscoveryActive) {
+            let parentRef = lazyNewWindowMenu
+                ? "menu-\(lazyMenuParentTitle.lowercased())" : "file-menu"
             nodes.append(NativeObservationNode(
-                ref: "new-window", parentRef: "file-menu", role: "AXMenuItem",
+                ref: "new-window",
+                parentRef: parentRef,
+                role: "AXMenuItem",
                 title: "New Window", enabled: true,
+                supportedActions: ["AXPress"]))
+        }
+        if lazyNewWindowMenu {
+            nodes.append(NativeObservationNode(
+                ref: "menu-\(lazyMenuParentTitle.lowercased())",
+                parentRef: "menu-bar",
+                role: "AXMenuBarItem", title: lazyMenuParentTitle,
                 supportedActions: ["AXPress"]))
         }
         if includeNewNoteMenu {
@@ -379,26 +613,40 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         }
         if includeTabGroup {
             nodes.append(NativeObservationNode(
-                ref: "tab-group", path: [0], role: "AXTabGroup"))
+                ref: "tab-group", path: [0], role: "AXTabGroup",
+                description: includeDynamicTabDescription
+                    ? "Browser tabs, \(tabCount) tabs" : nil))
             let tabParent: String
             let tabParentPath: [Int]
             if nestedTabStrip {
+                nodes.append(NativeObservationNode(
+                    ref: "browser-window", path: [1], role: "AXWindow",
+                    title: includeDynamicTabDescription
+                        ? "Selected tab \(tabCount)" : "Selected tab"))
                 nodes.append(NativeObservationNode(
                     ref: "tab-content", parentRef: "tab-group", path: [0, 0],
                     role: "AXScrollArea"))
                 tabParent = "tab-bar"
                 tabParentPath = [1]
-                if tabCount > 1 {
+                if tabCount > 1 || persistentNestedTabStrip {
                     nodes.append(NativeObservationNode(
-                        ref: tabParent, path: tabParentPath,
+                        ref: tabParent, parentRef: "browser-window",
+                        path: tabParentPath,
                         role: "AXOpaqueProviderGroup",
-                        identifier: "TabBar?isSeparate=false"))
+                        description: includeDynamicTabDescription
+                            ? "Tab bar, \(tabCount) tabs" : nil,
+                        identifier: (
+                            changeTabCollectionIdentityAfterDispatch
+                                && dispatchCount > 0
+                        )
+                            ? "ReplacementTabBar"
+                            : "TabBar?isSeparate=false"))
                 }
             } else {
                 tabParent = "tab-group"
                 tabParentPath = [0]
             }
-            if !nestedTabStrip || tabCount > 1 {
+            if !nestedTabStrip || tabCount > 1 || persistentNestedTabStrip {
                 for index in 1...tabCount {
                     nodes.append(NativeObservationNode(
                         ref: "tab-\(index)", parentRef: tabParent,
@@ -412,28 +660,47 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
                 }
             }
         }
+        let notesListRef = virtualizeNoteListAfterDispatch && dispatchCount > 0
+            ? "notes-list-v2" : "notes-list"
         nodes.append(NativeObservationNode(
-            ref: "notes-list", path: [2], role: "AXTable"))
+            ref: notesListRef, path: [2], role: "AXTable"))
         for index in 1...noteCount {
             nodes.append(NativeObservationNode(
-                ref: "row-\(index)", parentRef: "notes-list", path: [2, index - 1],
+                ref: "row-\(index)", parentRef: notesListRef, path: [2, index - 1],
                 role: "AXRow", title: index == 1 ? "Groceries" : "Ideas",
-                identifier: "notes.row.\(index)", selected: selectedRow == index,
+                identifier: anonymousNoteRows ? nil : "notes.row.\(index)",
+                selected: selectedRow == index,
                 settableAttributes: ["AXSelected"]))
+            if anonymousNoteRows {
+                nodes[nodes.count - 1].title = nil
+                nodes.append(NativeObservationNode(
+                    ref: "row-\(index)-title",
+                    parentRef: "row-\(index)",
+                    path: [2, index - 1, 0],
+                    role: "AXStaticText",
+                    title: index == 1 ? "Groceries" : "Ideas"
+                ))
+            }
         }
         if includeFolderOutline {
             nodes.append(NativeObservationNode(
                 ref: "folders", path: [3], role: "AXOutline"))
             nodes.append(NativeObservationNode(
                 ref: "folder-row", parentRef: "folders", path: [3, 0],
-                role: "AXRow", title: "Folder"))
+                role: "AXRow", title: "Folder", selected: true))
+            nodes.append(NativeObservationNode(
+                ref: "folder-row-2", parentRef: "folders", path: [3, 1],
+                role: "AXRow", title: "Recently Deleted"))
         }
         if includeSecondNoteList {
             nodes.append(NativeObservationNode(
                 ref: "other-notes", path: [4], role: "AXTable"))
             nodes.append(NativeObservationNode(
-                ref: "other-row", parentRef: "other-notes", path: [4, 0],
-                role: "AXRow", title: "Other"))
+                ref: "other-row-1", parentRef: "other-notes", path: [4, 0],
+                role: "AXRow", title: "Other", selected: true))
+            nodes.append(NativeObservationNode(
+                ref: "other-row-2", parentRef: "other-notes", path: [4, 1],
+                role: "AXRow", title: "Another"))
         }
         if addUnrelatedRadioOnDispatch && dispatchCount > 0 {
             nodes.append(NativeObservationNode(
@@ -445,10 +712,33 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             observationEpoch: observationEpoch,
             nodes: nodes,
             bundleID: bundleID,
-            windowID: 7
+            windowID: windowID
         )
         observation.windowCount = windowCount
         return observation
+    }
+
+    func captureMenuForPreparation(
+        request: NativeActionRequest,
+        query: NativeObservationQuery,
+        matchingTitles: Set<String>
+    ) -> [NativeCapturedObservation] {
+        menuDiscoveryCount += 1
+        menuDiscoveryActive = true
+        defer { menuDiscoveryActive = false }
+        let first = capture(
+            turnID: request.turnID,
+            observationEpoch: request.observationEpoch,
+            query: query
+        )
+        guard ambiguousLazyNewWindowMenus else { return [first] }
+        lazyMenuParentTitle = "Window"
+        defer { lazyMenuParentTitle = "Actions" }
+        return [first, capture(
+            turnID: request.turnID,
+            observationEpoch: request.observationEpoch,
+            query: query
+        )]
     }
 
     func applicationIdentityMatches(
@@ -463,6 +753,8 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     ) -> NativeDispatchResult {
         dispatchCount += 1
         lastDispatchedIdentifier = target?.current.identifier
+        lastDispatchedRef = target?.current.ref
+        lastMenuPath = request.payload.menuPath
         guard effectOnDispatch else {
             return NativeDispatchResult(state: .dispatched, nativeError: nil)
         }
@@ -471,6 +763,9 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             if leaf == "New Tab" && createTabOnDispatch { tabCount += 1 }
             if leaf == "New Note" { noteCount += 1 }
             if leaf == "New Window" { windowCount += 1 }
+            if leaf == "New Window" && focusCreatedWindowOnDispatch {
+                windowID += 1
+            }
         }
         switch target?.current.identifier {
         case "tabs.2": selectedTab = 2
@@ -478,6 +773,13 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         case "notes.row.2": selectedRow = 2
         case "notes.row.1": selectedRow = 1
         default: break
+        }
+        if anonymousNoteRows {
+            switch target?.current.ref {
+            case "row-2": selectedRow = 2
+            case "row-1": selectedRow = 1
+            default: break
+            }
         }
         return NativeDispatchResult(state: .dispatched, nativeError: nil)
     }

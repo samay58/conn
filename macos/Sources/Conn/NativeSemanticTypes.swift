@@ -5,6 +5,7 @@ enum NativeActionOperation: String, CaseIterable {
     case openApp = "open"
     case switchApp = "switch"
     case openURL = "open_url"
+    case navigate
     case clipboardWrite = "clipboard_write"
     case focusTab = "focus_tab"
     case scroll
@@ -29,6 +30,7 @@ enum NativeActionOperation: String, CaseIterable {
             "app_menu": .menu,
             "hotkey": .keyChord,
             "computer_hotkey": .keyChord,
+            "activate": .press,
         ]
         if let alias = aliases[wireValue] {
             self = alias
@@ -44,6 +46,7 @@ enum NativeActionStrategy: String, Codable {
     case axPress = "ax_press"
     case axSetValue = "ax_set_value"
     case axSetSelected = "ax_set_selected"
+    case axSetSelectedRows = "ax_set_selected_rows"
     case axScrollToVisible = "ax_scroll_to_visible"
     case axMenuAction = "ax_menu_action"
     case liveMenuShortcut = "live_menu_shortcut"
@@ -64,6 +67,14 @@ enum NativeActionOutcome: String {
     case blocked
     case ambiguous
     case failed
+}
+
+enum NativeEffectClass: String, Equatable {
+    case reversibleNavigation = "reversible_navigation"
+    case consequential
+    case destructive
+    case secureOrDenied = "secure_or_denied"
+    case unknown
 }
 
 struct NativeRect: Equatable {
@@ -288,6 +299,8 @@ struct NativeCapturedObservation {
             processStartIdentity ?? "",
             String(windowID ?? 0),
             windowTitle ?? "",
+            documentURL.flatMap(NativeActionCompiler.normalizeBrowserURL)
+                .map(NativeHash.sha256) ?? "",
             nodes.map { "\($0.semanticFingerprint):\($0.valueHash ?? ""):" +
                 "\($0.selected.map(String.init) ?? "")" }.joined(separator: "|"),
         ].joined(separator: "\u{1e}"))
@@ -322,6 +335,12 @@ struct NativeCapturedObservation {
     }
 }
 
+enum NativeObservationScope: String, Equatable {
+    case currentWindow = "current_window"
+    case currentApp = "current_app"
+    case descendant
+}
+
 struct NativeObservationQuery {
     var bundleID: String?
     var pid: Int32?
@@ -329,18 +348,97 @@ struct NativeObservationQuery {
     var maxNodes: Int
     var maxDepth: Int
     var deniedBundles: Set<String>
+    var searchTerms: [String]
+    var expectedRoles: Set<String>
+    var expectedActions: Set<String>
+    var scope: NativeObservationScope
+    var ancestorRef: String?
+    var resultLimit: Int
+    var deadlineMs: Int?
+
+    init(
+        bundleID: String? = nil,
+        pid: Int32? = nil,
+        includeMenu: Bool = false,
+        maxNodes: Int = 300,
+        maxDepth: Int = 12,
+        deniedBundles: Set<String> = [],
+        searchTerms: [String] = [],
+        expectedRoles: Set<String> = [],
+        expectedActions: Set<String> = [],
+        scope: NativeObservationScope = .currentWindow,
+        ancestorRef: String? = nil,
+        resultLimit: Int = 20,
+        deadlineMs: Int? = nil
+    ) {
+        self.bundleID = bundleID
+        self.pid = pid
+        self.includeMenu = includeMenu
+        self.maxNodes = min(max(maxNodes, 1), 500)
+        self.maxDepth = min(max(maxDepth, 1), 20)
+        self.deniedBundles = deniedBundles
+        self.searchTerms = searchTerms
+        self.expectedRoles = expectedRoles
+        self.expectedActions = expectedActions
+        self.scope = scope
+        self.ancestorRef = ancestorRef
+        self.resultLimit = min(max(resultLimit, 1), 20)
+        self.deadlineMs = deadlineMs
+    }
 
     static func parse(_ value: Any?) -> Self {
         let dictionary = value as? [String: Any] ?? [:]
         let denied = dictionary["denied_bundles"] as? [String] ?? []
+        let explicitTerms = dictionary["search_terms"] as? [String]
+        let legacyTerms = (dictionary["search"] as? String)?.split {
+            $0.isWhitespace
+        }.map(String.init) ?? []
+        let terms = boundedUnique(explicitTerms ?? legacyTerms, count: 8, length: 128)
+        let roles = boundedUnique(
+            dictionary["expected_roles"] as? [String] ?? [], count: 16, length: 64
+        )
+        let actions = boundedUnique(
+            dictionary["expected_actions"] as? [String] ?? [], count: 16, length: 64
+        )
         return Self(
             bundleID: dictionary["bundle_id"] as? String,
             pid: (dictionary["pid"] as? Int).map(Int32.init),
             includeMenu: dictionary["include_menu"] as? Bool ?? false,
-            maxNodes: min(max(dictionary["max_nodes"] as? Int ?? 300, 1), 500),
-            maxDepth: min(max(dictionary["max_depth"] as? Int ?? 12, 1), 20),
-            deniedBundles: Set(denied)
+            maxNodes: dictionary["max_nodes"] as? Int ?? 300,
+            maxDepth: dictionary["max_depth"] as? Int ?? 12,
+            deniedBundles: Set(denied),
+            searchTerms: terms,
+            expectedRoles: Set(roles),
+            expectedActions: Set(actions),
+            scope: NativeObservationScope(
+                rawValue: dictionary["scope"] as? String ?? "current_window"
+            ) ?? .currentWindow,
+            ancestorRef: nonempty(dictionary["ancestor_ref"] as? String),
+            resultLimit: dictionary["result_limit"] as? Int ?? 20
         )
+    }
+
+    private static func boundedUnique(
+        _ values: [String], count: Int, length: Int
+    ) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for raw in values {
+            let value = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(length))
+            let key = value.folding(
+                options: [.caseInsensitive, .diacriticInsensitive], locale: .current
+            )
+            guard !value.isEmpty, seen.insert(key).inserted else { continue }
+            result.append(value)
+            if result.count == count { break }
+        }
+        return result
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        return String(value.prefix(128))
     }
 }
 
@@ -350,6 +448,7 @@ struct NativeActionTarget {
     var identifier: String?
     var title: String?
     var bundleID: String?
+    var descendantKey: String? = nil
 
     static func parse(_ value: Any?) -> Self {
         let dictionary = value as? [String: Any] ?? [:]
@@ -364,11 +463,14 @@ struct NativeActionTarget {
 }
 
 struct NativeActionPayload {
+    var goal: String?
     var text: String?
     var bundleID: String?
     var teamID: String?
+    var bundleIDHint: String?
     var appName: String?
     var url: String?
+    var browserScope: String?
     var direction: String?
     var amount: Double?
     var keys: [String]
@@ -380,17 +482,22 @@ struct NativeActionPayload {
 
     static func parse(_ value: Any?) -> Self {
         if let text = value as? String {
-            return Self(text: text, bundleID: nil, teamID: nil, appName: nil, url: nil,
+            return Self(goal: nil, text: text, bundleID: nil, teamID: nil,
+                        bundleIDHint: nil, appName: nil, url: nil,
+                        browserScope: nil,
                         direction: nil, amount: nil, keys: [], menuPath: [], submit: false,
                         intentFamily: nil, intentKind: nil, intentRelation: nil)
         }
         let dictionary = value as? [String: Any] ?? [:]
         return Self(
+            goal: dictionary["goal"] as? String,
             text: dictionary["text"] as? String ?? dictionary["value"] as? String,
             bundleID: dictionary["bundle_id"] as? String,
             teamID: dictionary["team_id"] as? String,
+            bundleIDHint: dictionary["bundle_id_hint"] as? String,
             appName: dictionary["app_name"] as? String ?? dictionary["name"] as? String,
             url: dictionary["url"] as? String,
+            browserScope: dictionary["browser_scope"] as? String,
             direction: dictionary["direction"] as? String,
             amount: (dictionary["amount"] as? NSNumber)?.doubleValue,
             keys: dictionary["keys"] as? [String] ?? [],
@@ -405,7 +512,8 @@ struct NativeActionPayload {
 
     var hash: String {
         NativeHash.sha256([
-            text ?? "", bundleID ?? "", teamID ?? "", appName ?? "", url ?? "",
+            goal ?? "", text ?? "", bundleID ?? "", teamID ?? "", bundleIDHint ?? "",
+            appName ?? "", url ?? "", browserScope ?? "",
             direction ?? "", amount.map { String($0) } ?? "",
             keys.joined(separator: ","), menuPath.joined(separator: ">"),
             String(submit),
@@ -463,7 +571,7 @@ struct NativeEffectPredicate: Equatable {
                 "element_exists", "element_disappears",
                 "element_attribute_equals", "element_attribute_changes",
                 "focused_element_equals", "text_contains", "text_hash_equals",
-                "clipboard_hash_equals", "notification",
+                "clipboard_hash_equals", "document_url_equals", "notification",
               ]).contains(kind) else { return nil }
         let expectedValue = dictionary["expected"] ?? dictionary["value"]
         return Self(
@@ -526,6 +634,9 @@ struct NativeActionRequest {
     var responseEpoch: Int
     var observationEpoch: Int
     var deniedBundles: Set<String>
+    var applicationBinding: NativeApplicationBinding?
+    var navigationGeneration: Int
+    var executionConnectionID: String
 
     static func parse(_ params: [String: Any]) -> Self? {
         let raw = params["request"] as? [String: Any] ?? params
@@ -551,7 +662,10 @@ struct NativeActionRequest {
             responseEpoch: params["response_epoch"] as? Int ?? raw["response_epoch"] as? Int ?? 0,
             observationEpoch: params["observation_epoch"] as? Int
                 ?? raw["observation_epoch"] as? Int ?? 0,
-            deniedBundles: Set(denied)
+            deniedBundles: Set(denied),
+            applicationBinding: nil,
+            navigationGeneration: params["navigation_generation"] as? Int ?? 0,
+            executionConnectionID: params["execution_connection_id"] as? String ?? "test"
         )
     }
 }
@@ -595,6 +709,10 @@ enum NativeClock {
 enum NativeHash {
     static func sha256(_ text: String) -> String {
         SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 

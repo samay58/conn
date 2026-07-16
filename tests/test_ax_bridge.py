@@ -13,6 +13,7 @@ import threading
 from unittest.mock import patch
 
 from conn.ax_bridge import APP_WEBSOCKET_PURPOSE, AxBridge, hmac_proof
+from conn.observations import ObservationQuery
 from conn.tools import mac
 
 
@@ -29,6 +30,86 @@ def attach_app(bridge: AxBridge, client_id: str = "test-app") -> str:
 
 
 class TestAxBridge:
+    def test_visual_observation_uses_authenticated_native_rpc(self):
+        async def scenario():
+            published = []
+            bridge = AxBridge(timeout_s=1.0, expected_token="test-token")
+            bridge.bind(asyncio.get_running_loop(), published.append)
+            client_id = attach_app(bridge)
+            task = asyncio.create_task(bridge.observe_visual(
+                turn_id="turn_visual",
+                observation_epoch=7,
+                enabled=True,
+                denied_bundles=["com.apple.keychainaccess"],
+            ))
+            while not published:
+                await asyncio.sleep(0)
+            request = published[0]
+            bridge.resolve(
+                request["request_id"], {"ok": True},
+                client_id=client_id,
+                sequence=request["sequence"],
+                turn_id=request["turn_id"],
+                observation_epoch=request["observation_epoch"],
+            )
+            return request, await task
+
+        request, result = run_loop_test(scenario())
+        assert request["type"] == "ax_action"
+        assert request["op"] == "observe_visual"
+        assert request["params"] == {
+            "enabled": True,
+            "denied_bundles": ["com.apple.keychainaccess"],
+            "turn_id": "turn_visual",
+            "observation_epoch": 7,
+        }
+        assert result.data == {"ok": True}
+
+    def test_candidate_query_fields_reach_the_native_wire(self):
+        async def scenario():
+            published = []
+            bridge = AxBridge(timeout_s=1.0, expected_token="test-token")
+            bridge.bind(asyncio.get_running_loop(), published.append)
+            client_id = attach_app(bridge)
+            task = asyncio.create_task(bridge.observe(
+                turn_id="turn_1",
+                observation_epoch=4,
+                query=ObservationQuery.from_tool_arguments({
+                    "query": "play video",
+                    "expected_roles": ["AXButton"],
+                    "expected_actions": ["AXPress"],
+                    "scope": "descendant",
+                    "ancestor_ref": "player",
+                    "result_limit": 20,
+                    "include_menu": True,
+                }),
+                denied_bundles=["com.apple.keychainaccess"],
+            ))
+            while not published:
+                await asyncio.sleep(0)
+            request = published[0]
+            bridge.resolve(
+                request["request_id"], {"candidates": []},
+                client_id=client_id,
+                sequence=request["sequence"],
+                turn_id=request["turn_id"],
+                observation_epoch=request["observation_epoch"],
+            )
+            await task
+            return request
+
+        request = run_loop_test(scenario())
+        assert request["params"]["query"] == {
+            "search_terms": ["play", "video"],
+            "expected_roles": ["AXButton"],
+            "expected_actions": ["AXPress"],
+            "scope": "descendant",
+            "ancestor_ref": "player",
+            "result_limit": 20,
+            "include_menu": True,
+            "denied_bundles": ["com.apple.keychainaccess"],
+        }
+
     def test_environment_token_is_captured_then_removed(self):
         with patch.dict(os.environ, {"CONN_BRIDGE_TOKEN": "environment-token"}):
             bridge = AxBridge()

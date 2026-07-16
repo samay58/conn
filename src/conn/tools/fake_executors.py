@@ -32,6 +32,17 @@ def _browser_search(args: dict, ctx: ExecutionContext) -> dict:
         target="browser search", effect="browser search URL opened", data=data)
 
 
+def _browser_navigate(args: dict, ctx: ExecutionContext) -> dict:
+    data = {
+        "url": args.get("url"),
+        "browser_scope": args.get("browser_scope"),
+        "simulated": True,
+    }
+    return simulated_verified_receipt(
+        target=str(args.get("url")), effect="document URL matches requested URL", data=data
+    )
+
+
 def _phoenix_search(args: dict, ctx: ExecutionContext) -> dict:
     return {
         "query": args.get("query"),
@@ -138,6 +149,7 @@ FAKE_EXECUTORS = {
     "app_open": _open_app,
     "app_switch": _open_app,
     "browser_search": _browser_search,
+    "browser_navigate": _browser_navigate,
     "phoenix_search": _phoenix_search,
     "phoenix_open_note": _open_note,
     "clipboard_set": _clipboard_set,

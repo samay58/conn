@@ -38,14 +38,19 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
     private var evidenceObserver: AXObserver?
     private var evidenceBuffer: NativeAXNotificationBuffer?
 
+    init(configureProcessTimeout: (Float) -> Void = { timeout in
+        _ = AXUIElementSetMessagingTimeout(
+            AXUIElementCreateSystemWide(),
+            timeout
+        )
+    }) {
+        configureProcessTimeout(messagingTimeout)
+    }
+
     static func codeSigningRequirement(bundleID: String, teamID: String?) -> String? {
-        guard NativeAppIdentity.validBundleID(bundleID) else { return nil }
-        if bundleID.hasPrefix("com.apple.") {
-            return "anchor apple and identifier \"\(bundleID)\""
-        }
-        guard let teamID, NativeAppIdentity.validTeamID(teamID) else { return nil }
-        return "anchor apple generic and identifier \"\(bundleID)\" "
-            + "and certificate leaf[subject.OU] = \"\(teamID)\""
+        NativeApplicationResolver.codeSigningRequirement(
+            bundleID: bundleID, teamID: teamID
+        )
     }
 
     func capture(
@@ -80,7 +85,9 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             title: windowTitle,
             frame: windowFrame
         )
-        let documentURL = stringAttribute(focusedWindow, kAXDocumentAttribute)
+        let windowDocumentURL = stringAttribute(
+            focusedWindow, kAXDocumentAttribute
+        )
         let clipboardHash = NSPasteboard.general.string(forType: .string).map(NativeHash.sha256)
         guard !denied else {
             return NativeCapturedObservation(
@@ -96,7 +103,7 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 windowID: windowID,
                 windowTitle: windowTitle,
                 windowFrame: windowFrame,
-                documentURL: documentURL,
+                documentURL: windowDocumentURL,
                 focusedWindowRef: nil,
                 focusedElementRef: nil,
                 nodes: [],
@@ -114,13 +121,22 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
            let menuBar = elementAttribute(appElement, kAXMenuBarAttribute) {
             roots.append(menuBar)
         }
-        if let focusedWindow { roots.append(focusedWindow) }
+        if query.scope == .currentApp {
+            roots.append(contentsOf: windows)
+        } else if let focusedWindow {
+            roots.append(focusedWindow)
+        }
         if roots.isEmpty { roots.append(appElement) }
         let tree = boundedTree(
             roots: roots,
             snapshotID: snapshotID,
             maxNodes: query.maxNodes,
-            maxDepth: query.maxDepth
+            maxDepth: query.maxDepth,
+            deadlineMs: query.deadlineMs
+        )
+        let documentURL = windowDocumentURL ?? webAreaDocumentURL(
+            in: tree,
+            deadlineMs: query.deadlineMs
         )
         let focusedWindowRef = ref(for: focusedWindow, elements: latestElements)
         let focusedElementRef = ref(for: focusedElement, elements: latestElements)
@@ -150,6 +166,47 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         )
     }
 
+    static func uniqueWebAreaDocumentURL(
+        _ candidates: [(role: String, values: [String?])]
+    ) -> String? {
+        let normalized = Set(candidates.flatMap { candidate in
+            guard candidate.role == "AXWebArea" else { return [String]() }
+            return candidate.values.compactMap {
+                $0.flatMap(NativeActionCompiler.normalizeBrowserURL)
+            }
+        })
+        return normalized.count == 1 ? normalized.first : nil
+    }
+
+    static func urlText(_ value: AnyObject?) -> String? {
+        if let text = value as? String { return text }
+        if let url = value as? NSURL { return url.absoluteString }
+        return nil
+    }
+
+    private func webAreaDocumentURL(
+        in nodes: [NativeObservationNode],
+        deadlineMs: Int?
+    ) -> String? {
+        let candidates = nodes.compactMap { node -> (
+            role: String, values: [String?]
+        )? in
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true {
+                return nil
+            }
+            guard node.role == "AXWebArea",
+                  let element = latestElements[node.ref] else { return nil }
+            return (
+                role: node.role,
+                values: [
+                    urlAttribute(element, kAXURLAttribute),
+                    urlAttribute(element, kAXDocumentAttribute),
+                ]
+            )
+        }
+        return Self.uniqueWebAreaDocumentURL(candidates)
+    }
+
     func dispatch(
         strategy: NativeActionStrategy,
         request: NativeActionRequest,
@@ -174,6 +231,8 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             return performAction(kAXPressAction, target: target)
         case .axSetSelected:
             return setAttribute(kAXSelectedAttribute, value: true, target: target)
+        case .axSetSelectedRows:
+            return setSelectedRows(target: target)
         case .axSetValue:
             return setValue(request: request, target: target)
         case .axScrollToVisible:
@@ -193,6 +252,50 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         case .keyChord:
             return postKeyChord(request.payload.keys)
         }
+    }
+
+    func captureMenuForPreparation(
+        request: NativeActionRequest,
+        query: NativeObservationQuery,
+        matchingTitles: Set<String>
+    ) -> [NativeCapturedObservation] {
+        guard query.includeMenu, AXIsProcessTrusted(),
+              let application = application(for: query) else { return [] }
+        latestApplication = application
+        let app = AXUIElementCreateApplication(application.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, messagingTimeout)
+        guard let menuBar = elementAttribute(app, kAXMenuBarAttribute) else {
+            return []
+        }
+        let wanted = Set(matchingTitles.map(normalizedTitle))
+        var matches: [NativeCapturedObservation] = []
+        let menuItems = elementArrayAttribute(menuBar, kAXChildrenAttribute)
+        for item in menuItems.prefix(16) {
+            let actions = actionNames(item)
+            guard let openAction = actions.contains(kAXShowMenuAction)
+                ? kAXShowMenuAction
+                : actions.contains(kAXPressAction) ? kAXPressAction : nil
+            else { continue }
+            let opened = Self.classifyDispatchError(
+                AXUIElementPerformAction(item, openAction as CFString)
+            )
+            guard opened.state != .notDispatched else { continue }
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+            let observation = capture(
+                turnID: request.turnID,
+                observationEpoch: request.observationEpoch,
+                query: query
+            )
+            dismissMenu(item)
+            if observation.nodes.contains(where: {
+                $0.role == "AXMenuItem"
+                    && $0.enabled != false
+                    && wanted.contains(normalizedTitle($0.title ?? ""))
+            }) {
+                matches.append(observation)
+            }
+        }
+        return matches
     }
 
     func beginEvidenceObservation(
@@ -260,11 +363,16 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         return applicationIdentityIsValid(bundleURL, request: request)
     }
 
+    func applicationBindingMatches(_ binding: NativeApplicationBinding) -> Bool {
+        NativeApplicationResolver.bindingIsValid(binding)
+    }
+
     private func boundedTree(
         roots: [AXUIElement],
         snapshotID: String,
         maxNodes: Int,
-        maxDepth: Int
+        maxDepth: Int,
+        deadlineMs: Int?
     ) -> [NativeObservationNode] {
         struct Pending {
             var element: AXUIElement
@@ -280,6 +388,7 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         var nodes: [NativeObservationNode] = []
         var visited = Set<CFHashCode>()
         while !queue.isEmpty, nodes.count < maxNodes {
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true { break }
             let pending = queue.removeFirst()
             let hash = CFHash(pending.element)
             guard visited.insert(hash).inserted else { continue }
@@ -294,6 +403,10 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 kAXMenuItemCmdModifiersAttribute,
                 NSAccessibility.Attribute.containsProtectedContent.rawValue,
             ])
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true {
+                latestElements.removeValue(forKey: ref)
+                break
+            }
             let role = values[kAXRoleAttribute] as? String ?? "AXUnknown"
             let subrole = values[kAXSubroleAttribute] as? String
             let secure = role == "AXSecureTextField" || subrole == "AXSecureTextField"
@@ -306,8 +419,25 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 return unsafeDowncast(value, to: AXUIElement.self)
             }
             let actions = actionNames(pending.element)
-            let settable = [kAXFocusedAttribute, kAXSelectedAttribute, kAXValueAttribute]
-                .filter { attributeIsSettable(pending.element, $0) }
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true {
+                latestElements.removeValue(forKey: ref)
+                break
+            }
+            var settable: [String] = []
+            for attribute in [
+                kAXFocusedAttribute,
+                kAXSelectedAttribute,
+                kAXValueAttribute,
+            ] {
+                if deadlineMs.map({ NativeClock.ms() >= $0 }) == true { break }
+                if attributeIsSettable(pending.element, attribute) {
+                    settable.append(attribute)
+                }
+            }
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true {
+                latestElements.removeValue(forKey: ref)
+                break
+            }
             let frame = rect(
                 position: values[kAXPositionAttribute],
                 size: values[kAXSizeAttribute]
@@ -344,7 +474,10 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 )
             ))
             guard pending.depth < maxDepth else { continue }
-            let signature = childSignature(children)
+            let signature = childSignature(
+                children,
+                deadlineMs: deadlineMs
+            )
             for (index, child) in children.enumerated() {
                 queue.append(Pending(
                     element: child,
@@ -359,6 +492,27 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
     }
 
     private func dispatchLaunch(_ request: NativeActionRequest) -> NativeDispatchResult {
+        if request.operation == .navigate {
+            guard let text = request.payload.url,
+                  NativeActionCompiler.normalizeBrowserURL(text) == text,
+                  let url = URL(string: text),
+                  let binding = request.applicationBinding,
+                  NativeApplicationResolver.bindingIsValid(binding)
+            else {
+                return NativeDispatchResult(
+                    state: .notDispatched,
+                    nativeError: "app_identity_mismatch"
+                )
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.open(
+                [url],
+                withApplicationAt: binding.bundleURL,
+                configuration: configuration
+            ) { _, _ in }
+            return NativeDispatchResult(state: .dispatched, nativeError: nil)
+        }
         if request.operation == .openURL {
             guard let text = request.payload.url, let url = URL(string: text),
                   ["http", "https", "obsidian", "file"].contains(url.scheme?.lowercased() ?? "")
@@ -374,6 +528,32 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 state: .notDispatched,
                 nativeError: "missing_bundle_id"
             )
+        }
+        if let binding = request.applicationBinding {
+            guard NativeApplicationResolver.bindingIsValid(binding) else {
+                return NativeDispatchResult(
+                    state: .notDispatched,
+                    nativeError: "app_identity_mismatch"
+                )
+            }
+            if let running = NSRunningApplication.runningApplications(
+                withBundleIdentifier: binding.bundleID
+            ).first(where: {
+                $0.bundleURL?.standardizedFileURL == binding.bundleURL.standardizedFileURL
+            }) {
+                return NativeDispatchResult(
+                    state: running.activate(options: [.activateAllWindows])
+                        ? .dispatched : .notDispatched,
+                    nativeError: nil
+                )
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(
+                at: binding.bundleURL,
+                configuration: configuration
+            ) { _, _ in }
+            return NativeDispatchResult(state: .dispatched, nativeError: nil)
         }
         let running = NSRunningApplication.runningApplications(
             withBundleIdentifier: expectedBundleID
@@ -526,6 +706,14 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             return resolved.progress.failure(result.nativeError ?? "menu_action_failed")
         }
         return result
+    }
+
+    private func dismissMenu(_ item: AXUIElement) {
+        for child in elementArrayAttribute(item, kAXChildrenAttribute) {
+            _ = AXUIElementPerformAction(child, kAXCancelAction as CFString)
+        }
+        _ = AXUIElementPerformAction(item, kAXCancelAction as CFString)
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
     }
 
     private func menuLeaf(
@@ -784,6 +972,14 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         attribute(element, name) as? String
     }
 
+    private func urlAttribute(
+        _ element: AXUIElement?,
+        _ name: String
+    ) -> String? {
+        let value = attribute(element, name)
+        return Self.urlText(value)
+    }
+
     private func numberAttribute(_ element: AXUIElement?, _ name: String) -> NSNumber? {
         attribute(element, name) as? NSNumber
     }
@@ -811,6 +1007,33 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         var names: CFArray?
         guard AXUIElementCopyActionNames(element, &names) == .success else { return [] }
         return (names as? [String] ?? []).sorted()
+    }
+
+    private func setSelectedRows(
+        target: NativeResolvedTarget?
+    ) -> NativeDispatchResult {
+        guard let target,
+              target.current.role == "AXRow",
+              let parentRef = target.current.parentRef,
+              let row = latestElements[target.current.ref],
+              let parent = latestElements[parentRef],
+              attributeIsSettable(parent, kAXSelectedRowsAttribute) else {
+            return NativeDispatchResult(
+                state: .notDispatched,
+                nativeError: "selected_rows_not_settable"
+            )
+        }
+        let error = AXUIElementSetAttributeValue(
+            parent,
+            kAXSelectedRowsAttribute as CFString,
+            [row] as CFArray
+        )
+        return error == .success
+            ? NativeDispatchResult(state: .dispatched, nativeError: nil)
+            : NativeDispatchResult(
+                state: .notDispatched,
+                nativeError: "selected_rows_set_failed:\(error.rawValue)"
+            )
     }
 
     private func stringValue(_ value: Any?) -> String? {
@@ -871,9 +1094,17 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         }?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
     }
 
-    private func childSignature(_ children: [AXUIElement]) -> String {
-        let values = children.prefix(8).map {
-            "\(stringAttribute($0, kAXRoleAttribute) ?? ""):\(stringAttribute($0, kAXTitleAttribute) ?? "")"
+    private func childSignature(
+        _ children: [AXUIElement],
+        deadlineMs: Int?
+    ) -> String {
+        var values: [String] = []
+        for child in children.prefix(8) {
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true { break }
+            let role = stringAttribute(child, kAXRoleAttribute) ?? ""
+            if deadlineMs.map({ NativeClock.ms() >= $0 }) == true { break }
+            let title = stringAttribute(child, kAXTitleAttribute) ?? ""
+            values.append("\(role):\(title)")
         }
         return NativeHash.sha256(values.joined(separator: "|"))
     }

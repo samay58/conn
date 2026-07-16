@@ -23,8 +23,8 @@ class RealtimeCfg(BaseModel):
 
 
 class BudgetCfg(BaseModel):
-    session_cap_usd: float = 1.00
-    warn_at_usd: float = 0.50
+    session_cap_usd: float = 5.00
+    warn_at_usd: float = 2.50
     hard_stop: bool = True
 
 
@@ -65,7 +65,7 @@ class ScreenshotsCfg(BaseModel):
 
 class ServerCfg(BaseModel):
     host: str = "127.0.0.1"
-    port: int = 8787
+    port: int = Field(default=8787, ge=1, le=65535)
 
 
 class AxCfg(BaseModel):
@@ -81,6 +81,7 @@ class ActionsCfg(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     semantic_verify_ms: int = 1200
+    create_verify_ms: int = 2500
     launch_verify_ms: int = 4000
     max_fallbacks: int = 1
     require_verified_success: bool = True
@@ -143,8 +144,22 @@ class Config(BaseModel):
 
 def load_config(path: Path | None = None) -> Config:
     path = path or PROJECT_ROOT / "config.toml"
-    if not path.exists():
-        return Config()
-    with open(path, "rb") as f:
-        raw = tomllib.load(f)
+    raw = {}
+    if path.exists():
+        with open(path, "rb") as f:
+            raw = tomllib.load(f)
+    server_port = os.environ.get("CONN_SERVER_PORT")
+    if server_port is not None:
+        try:
+            port = int(server_port)
+        except ValueError as error:
+            raise ValueError("CONN_SERVER_PORT must be an integer") from error
+        if not 1 <= port <= 65535:
+            raise ValueError("CONN_SERVER_PORT must be between 1 and 65535")
+        raw = {**raw, "server": {**raw.get("server", {}), "port": port}}
+    data_dir = os.environ.get("CONN_DATA_DIR")
+    if data_dir is not None:
+        if not data_dir.strip():
+            raise ValueError("CONN_DATA_DIR must not be empty")
+        raw = {**raw, "data_dir": Path(data_dir).expanduser()}
     return Config(**raw, source_path=path)

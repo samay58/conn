@@ -179,6 +179,45 @@ class TestReconnectBackoff:
         assert set(adapter.phase_during_connect) == {Phase.FAILED}
         assert app.machine.phase is Phase.IDLE
 
+    def test_upstream_reconnect_preserves_local_navigation_grant(
+            self, cfg, ctx, monkeypatch):
+        monkeypatch.setattr(app_module.asyncio, "sleep", fast_sleep)
+
+        async def run():
+            app, _messages = build_app(cfg, ctx)
+            app.on_app_connection("signed-app")
+            await app.on_navigation_grant(client_id="signed-app")
+            before = app.navigation.public_snapshot()
+            app._loop = asyncio.get_running_loop()
+            await app._handle_disconnect("socket closed")
+            if app._pump_task:
+                app._pump_task.cancel()
+            return before, app.navigation.public_snapshot()
+
+        before, after = asyncio.run(run())
+        assert after == before
+        assert after["active"] is True
+
+    def test_app_bridge_reconnect_revokes_the_navigation_grant(
+            self, cfg, ctx):
+        async def run():
+            app, _messages = build_app(cfg, ctx)
+            app.on_app_connection("signed-app-a")
+            await app.on_navigation_grant(client_id="signed-app-a")
+            granted = app.navigation.public_snapshot()
+
+            app.on_app_connection("signed-app-b")
+            after_reconnect = app.navigation.public_snapshot()
+            await app.on_navigation_grant(client_id="signed-app-a")
+            after_stale_grant = app.navigation.public_snapshot()
+            return granted, after_reconnect, after_stale_grant
+
+        granted, after_reconnect, after_stale_grant = asyncio.run(run())
+        assert granted["active"] is True
+        assert after_reconnect["active"] is False
+        assert after_reconnect["generation"] > granted["generation"]
+        assert after_stale_grant == after_reconnect
+
     def test_concurrent_disconnect_paths_share_one_reconnect(self, cfg, ctx):
         async def run():
             harness = ToolHarness(build_registry(), cfg, ctx,
@@ -307,6 +346,35 @@ class TestSendFailureDisconnectContinued:
 class TestFixtureDataIsolation:
     def test_shared_config_writes_only_below_pytest_tmp(self, cfg, tmp_path):
         assert cfg.data_dir.is_relative_to(tmp_path)
+
+
+class TestBudgetSurface:
+    def test_warning_is_published_once_before_the_hard_stop(
+            self, cfg, ctx):
+        cfg.budget.warn_at_usd = 0.000001
+        app, messages = build_app(cfg, ctx)
+        app.cost.ingest({
+            "input_token_details": {
+                "text_tokens": 100,
+                "audio_tokens": 0,
+                "cached_tokens": 0,
+            },
+            "output_token_details": {
+                "text_tokens": 10,
+                "audio_tokens": 0,
+            },
+        })
+
+        app._maybe_warn_budget()
+        app._maybe_warn_budget()
+
+        warnings = [
+            message for message in messages
+            if message.get("type") == "toast"
+            and message.get("level") == "warn"
+        ]
+        assert len(warnings) == 1
+        assert "warn threshold" in warnings[0]["text"]
 
 
 class TestRejectInputPublished:

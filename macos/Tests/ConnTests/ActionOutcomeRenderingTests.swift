@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class ActionOutcomeRenderingTests: XCTestCase {
+    func testBudgetCapUsesRaisedDefaultAndAcceptsDaemonValue() {
+        let state = AppState()
+        XCTAssertEqual(state.capUSD, 5.0)
+
+        state.apply([
+            "type": "hello",
+            "cap_usd": 7.5,
+        ])
+
+        XCTAssertEqual(state.capUSD, 7.5)
+    }
+
     func testDispatchOnlyNeverRendersDoneOrGreenSuccess() {
         let state = AppState()
         state.modelLine = "The tab is open"

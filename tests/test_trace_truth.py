@@ -8,8 +8,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from pathlib import Path
 
 from conn.app import ConnApp
+from conn.events import PttDown, ResponseProvenance
 from conn.realtime.base import (
     RtResponseCreated, RtResponseDone, RtTextDelta, RtToolCall,
     RtTranscriptDelta,
@@ -138,6 +140,38 @@ class TestModelTranscript:
 
         assert asyncio.run(run()) == []
 
+    def test_barge_in_clears_cancelled_words_before_new_refusal(self, cfg, ctx):
+        async def run():
+            app = build_app(cfg, ctx)
+            app._loop = asyncio.get_running_loop()
+            await app.adapter.connect()
+            await begin_response(app, "resp_old")
+            await app._on_rt_event(
+                RtTranscriptDelta(text="Opening the old thing", response_id="resp_old")
+            )
+            await app.dispatch(PttDown(ts_ms=1_000))
+            app._response_provenance.request(
+                ResponseProvenance("turn_new", 2, 2)
+            )
+            await app._on_rt_event(RtResponseCreated(response_id="resp_new"))
+            await app._on_rt_event(
+                RtTranscriptDelta(
+                    text="I can't help with destructive actions yet.",
+                    response_id="resp_new",
+                )
+            )
+            await app._on_rt_event(RtResponseDone(
+                usage={}, had_tool_calls=False, response_id="resp_new"
+            ))
+            await app.stop()
+            return trace_events(app, "model_transcript")
+
+        events = asyncio.run(run())
+        assert [(event["status"], event["text"]) for event in events] == [
+            ("cancelled", "Opening the old thing"),
+            ("completed", "I can't help with destructive actions yet."),
+        ]
+
 
 class TestPttProvenance:
     def test_ptt_edges_trace_source_and_gesture(self, cfg, ctx):
@@ -189,6 +223,91 @@ class TestReceiptCounters:
 
 
 class TestToolResultArtifacts:
+    def test_large_json_artifact_stays_structurally_valid_and_links_full_content(
+            self, tmp_path):
+        from conn.artifacts import ArtifactWriter
+
+        output = json.dumps({"nodes": [
+            {"ref": f"node-{index}", "title": "x" * 200}
+            for index in range(500)
+        ]})
+        writer = ArtifactWriter(tmp_path, inline_limit=1024)
+
+        result = writer.write(
+            session_id="session-artifact",
+            call_id="call-large",
+            name="computer_ax_snapshot",
+            arguments={"query": "play"},
+            ok=True,
+            output=output,
+            turn_id="turn-1",
+            response_epoch=1,
+            observation_epoch=1,
+        )
+
+        wrapper = json.loads(result.path.read_text())
+        assert wrapper["output_truncated"] is True
+        assert wrapper["output"] is None
+        assert wrapper["output_sha256"] == hashlib.sha256(
+            output.encode()).hexdigest()
+        full_path = Path(wrapper["full_content_path"])
+        assert full_path.is_file()
+        assert json.loads(full_path.read_text()) == json.loads(output)
+        assert json.loads(result.preview)["output_truncated"] is True
+
+    def test_trace_preview_omits_image_bytes_clipboard_and_full_native_tree(
+            self, tmp_path):
+        from conn.artifacts import ArtifactWriter
+
+        output = json.dumps({
+            "ok": True,
+            "data": {
+                "image_data": "data:image/png;base64," + "A" * 4096,
+                "clipboard": "private clipboard body",
+                "nodes": [{"title": "private native tree text"}],
+                "snapshot_id": "snapshot-1",
+            },
+        })
+        preview = ArtifactWriter(tmp_path).trace_preview(
+            "computer_screenshot", output)
+
+        assert "AAAA" not in preview
+        assert "private clipboard body" not in preview
+        assert "private native tree text" not in preview
+        payload = json.loads(preview)
+        assert payload["data"]["snapshot_id"] == "snapshot-1"
+        assert payload["data"]["image_data"] == "<redacted>"
+        assert payload["data"]["clipboard"] == "<redacted>"
+        assert payload["data"]["nodes"] == "<native-tree-omitted>"
+
+    def test_artifact_storage_never_persists_visual_image_bytes(self, tmp_path):
+        from conn.artifacts import ArtifactWriter
+
+        marker = "PRIVATE_IMAGE_BYTES_MARKER"
+        output = json.dumps({
+            "ok": True,
+            "data": {
+                "capture_id": "capture-1",
+                "image_data_url": "data:image/jpeg;base64," + marker,
+                "image_sha256": "a" * 64,
+            },
+        })
+        result = ArtifactWriter(tmp_path).write(
+            session_id="session-visual",
+            call_id="call-visual",
+            name="computer_visual_observe",
+            arguments={},
+            ok=True,
+            output=output,
+            turn_id="turn-1",
+            response_epoch=1,
+            observation_epoch=1,
+        )
+
+        stored = result.path.read_text()
+        assert marker not in stored
+        assert json.loads(stored)["output"]["data"]["image_data_url"] == "<redacted>"
+
     def test_full_output_lands_in_linked_artifact(self, cfg, ctx):
         from conn.events import Gate, ToolCall
         from pathlib import Path
@@ -218,8 +337,10 @@ class TestToolResultArtifacts:
         payload = json.loads(Path(artifact).read_text())
         assert payload["call_id"] == "artifact-1"
         assert payload["name"] == "phoenix_search"
-        assert isinstance(payload["output"], str) and payload["output"]
-        assert len(result["output"]) <= 500
+        assert isinstance(payload["output"], dict) and payload["output"]
+        assert payload["output_format"] == "json"
+        assert payload["output_truncated"] is False
+        assert len(result["output"].encode()) <= 500
 
     def test_upstream_call_id_cannot_escape_artifact_directory(
             self, cfg, ctx, tmp_path):

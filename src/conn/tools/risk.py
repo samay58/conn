@@ -11,9 +11,11 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit
 
 from ..config import Config
 from ..events import Gate
+from ..navigation import NavigationEffect, NavigationLease
 from .ax_input import _normalize_combo
 from .base import ExecutionContext, app_matches_bundle
 
@@ -33,6 +35,7 @@ _LEVEL_TO_GATE = {
 }
 
 CLIPBOARD_MAX_CHARS = 100_000
+BROWSER_URL_MAX_CHARS = 4096
 
 
 def _guard_app_allowlist(args: dict, cfg: Config) -> str | None:
@@ -43,17 +46,41 @@ def _guard_app_allowlist(args: dict, cfg: Config) -> str | None:
     return None
 
 
-def _guard_launch_app(args: dict, cfg: Config) -> str | None:
-    reason = _guard_app_allowlist(args, cfg)
-    if reason:
-        return reason
-    app = str(args.get("app") or "")
-    bundle_id = cfg.apps.bundle_ids.get(app, "").strip()
-    if not bundle_id:
-        return f"app_bundle_id_missing: {app!r}"
-    if (not bundle_id.startswith("com.apple.")
-            and not cfg.apps.team_ids.get(app, "").strip()):
-        return f"app_signer_not_configured: {app!r}"
+def _guard_app_name(args: dict, cfg: Config) -> str | None:
+    app = str(args.get("app") or "").strip()
+    if not app:
+        return "app_name_missing"
+    if len(app) > 128 or any(ord(char) < 32 or ord(char) == 127 for char in app):
+        return "app_name_invalid"
+    return None
+
+
+def _guard_browser_url(args: dict, cfg: Config) -> str | None:
+    raw = str(args.get("url") or "")
+    if not raw:
+        return "browser_url_missing"
+    if len(raw) > BROWSER_URL_MAX_CHARS:
+        return "browser_url_too_large"
+    if raw != raw.strip() or any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        return "browser_url_invalid"
+    candidate = raw if "://" in raw else f"https://{raw}"
+    try:
+        parsed = urlsplit(candidate)
+        _ = parsed.port
+    except ValueError:
+        return "browser_url_invalid"
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return "browser_url_unsupported_scheme"
+    if not parsed.hostname:
+        return "browser_url_missing_host"
+    if parsed.username is not None or parsed.password is not None:
+        return "browser_url_credentials_refused"
+    scope = str(args.get("browser_scope") or "").strip()
+    if scope and (
+        len(scope) > 128
+        or any(ord(char) < 32 or ord(char) == 127 for char in scope)
+    ):
+        return "browser_url_invalid_browser_scope"
     return None
 
 
@@ -117,8 +144,9 @@ def _guard_scroll(args: dict, cfg: Config) -> str | None:
 
 
 ARG_GUARDS: dict[str, Callable[[dict, Config], str | None]] = {
-    "app_open": _guard_launch_app,
-    "app_switch": _guard_launch_app,
+    "app_open": _guard_app_name,
+    "app_switch": _guard_app_name,
+    "browser_navigate": _guard_browser_url,
     "phoenix_open_note": _guard_vault_path,
     "clipboard_set": _guard_clipboard_size,
     "computer_scroll": _guard_scroll,
@@ -260,6 +288,7 @@ def gate_for_prepared(
     args: dict,
     plan: dict,
     cfg: Config,
+    navigation: NavigationLease | None = None,
 ) -> tuple[Gate, str | None, str | None]:
     if level is RiskLevel.BLOCKED:
         return Gate.BLOCKED, "tool_disabled_in_v0", None
@@ -277,6 +306,37 @@ def gate_for_prepared(
         bundle_id = str(plan.get("bundle_id") or "")
         if app and (not bundle_id or not _app_matches_bundle(app, bundle_id, cfg)):
             return Gate.BLOCKED, f"app_not_frontmost: {app}", None
+
+    if navigation is not None:
+        try:
+            effect = NavigationEffect(str(plan.get("effect_class") or ""))
+        except ValueError:
+            return Gate.BLOCKED, "unknown_effect_class", None
+        generation = plan.get("navigation_generation")
+        if not isinstance(generation, int) or isinstance(generation, bool):
+            return Gate.BLOCKED, "navigation_generation_missing", None
+        if effect is NavigationEffect.DESTRUCTIVE:
+            return Gate.BLOCKED, "destructive_effect", None
+        if effect is NavigationEffect.SECURE_OR_DENIED:
+            return Gate.BLOCKED, "secure_or_denied_effect", None
+        if effect is NavigationEffect.UNKNOWN:
+            return Gate.BLOCKED, "unknown_effect", None
+        if effect is NavigationEffect.CONSEQUENTIAL:
+            return Gate.CONFIRM, None, str(plan["preview"])
+        if generation != navigation.generation:
+            return Gate.BLOCKED, "navigation_lease_stale", None
+        if not navigation.allows(effect, generation):
+            reason = (
+                "navigation_suspended"
+                if navigation.public_snapshot()["suspended"]
+                else "navigation_grant_required"
+            )
+            return Gate.BLOCKED, reason, None
+        if cfg.risk_overrides.get(name) == "blocked":
+            return Gate.BLOCKED, "blocked_by_config_override", None
+        if cfg.risk_overrides.get(name) == "confirm":
+            return Gate.CONFIRM, None, str(plan["preview"])
+        return Gate.AUTO, None, str(plan["preview"])
 
     if name == "computer_hotkey":
         gate, reason, _preview = _gate_hotkey(args, cfg)

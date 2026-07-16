@@ -86,28 +86,44 @@ def build_registry() -> dict[str, ToolSpec]:
             parameters=_obj({}, []),
             risk=RiskLevel.READ,
             preview=lambda a: "Take a screenshot",
-            executor=mac.screenshot,
+            executor=_native_only,
             good_examples=('{"name": "computer_screenshot", "arguments": {}}',),
             rejected_examples=(
                 'Repeated calls to watch the screen continuously: screenshots are on-demand only.',
             ),
+            diagnostic=True,
+        ),
+        ToolSpec(
+            name="computer_visual_observe",
+            description=(
+                "Observe the current window visually when named Accessibility "
+                "targets are unavailable. This reads one bounded current image."
+            ),
+            parameters=_obj({}, []),
+            risk=RiskLevel.READ,
+            preview=lambda a: "Observe current window visually",
+            executor=_native_only,
         ),
         ToolSpec(
             name="app_open",
-            description="Open an application by name. Only allowlisted apps succeed.",
-            parameters=_obj({"app": {"type": "string", "description": "Exact app name, e.g. 'Obsidian'"}}, ["app"]),
+            description="Open an installed application by its exact visible name.",
+            parameters=_obj({"app": {
+                "type": "string", "minLength": 1, "maxLength": 128,
+                "description": "Exact visible app name, e.g. 'Obsidian'",
+            }}, ["app"]),
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Open app: {a.get('app', '?')}",
             executor=mac.open_app,
             computer_mutation=True,
             semantic_operation="open",
             good_examples=('{"name": "app_open", "arguments": {"app": "Obsidian"}}',),
-            rejected_examples=('{"app": "Disk Utility"} when Disk Utility is not on the allowlist',),
         ),
         ToolSpec(
             name="app_switch",
-            description="Switch focus to an app that is already running. Only allowlisted apps succeed.",
-            parameters=_obj({"app": {"type": "string"}}, ["app"]),
+            description="Switch focus to an installed app that is already running.",
+            parameters=_obj({"app": {
+                "type": "string", "minLength": 1, "maxLength": 128,
+            }}, ["app"]),
             risk=RiskLevel.ACT_LOW,
             preview=lambda a: f"Switch to app: {a.get('app', '?')}",
             executor=mac.switch_app,
@@ -125,6 +141,29 @@ def build_registry() -> dict[str, ToolSpec]:
             computer_mutation=True,
             semantic_operation="open_url",
             good_examples=('{"name": "browser_search", "arguments": {"query": "openai realtime api docs"}}',),
+        ),
+        ToolSpec(
+            name="browser_navigate",
+            description=(
+                "Open a literal URL or hostname supplied by the user. Never infer "
+                "a site from an app or product name. Use browser_scope only when "
+                "the user names a browser; otherwise Conn uses the current browser."
+            ),
+            parameters=_obj({
+                "url": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "browser_scope": {
+                    "type": "string", "minLength": 1, "maxLength": 128,
+                    "description": "Exact visible browser name named by the user",
+                },
+            }, ["url"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: f"Open location: {a.get('url', '?')}",
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="navigate",
+            good_examples=(
+                '{"name": "browser_navigate", "arguments": {"url": "example.com", "browser_scope": "Safari"}}',
+            ),
         ),
         ToolSpec(
             name="phoenix_search",
@@ -178,8 +217,18 @@ def build_registry() -> dict[str, ToolSpec]:
         ),
         ToolSpec(
             name="computer_ax_snapshot",
-            description="Capture a bounded accessibility snapshot of the frontmost window for grounded UI actions.",
-            parameters=_obj({"query": {"type": "string"}}, []),
+            description="Find bounded native candidates in the current app for grounded UI actions.",
+            parameters=_obj({
+                "query": {"type": "string"},
+                "expected_roles": {"type": "array", "items": {"type": "string"}},
+                "expected_actions": {"type": "array", "items": {"type": "string"}},
+                "scope": {"type": "string", "enum": [
+                    "current_window", "current_app", "descendant",
+                ]},
+                "ancestor_ref": {"type": "string"},
+                "result_limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                "include_menu": {"type": "boolean"},
+            }, []),
             risk=RiskLevel.READ,
             preview=lambda a: "Read accessibility snapshot",
             executor=_ax_snapshot,
@@ -242,6 +291,94 @@ def build_registry() -> dict[str, ToolSpec]:
             executor=click,
             computer_mutation=True,
             semantic_operation="press",
+            diagnostic=True,
+        ),
+        ToolSpec(
+            name="computer_activate",
+            description=(
+                "Activate a reversible control such as Play, Pause, a link, "
+                "or a tab. Use a semantic snapshot reference when available; "
+                "otherwise use grounding from the current visual observation."
+            ),
+            parameters=_obj({
+                "goal": {"type": "string", "minLength": 1, "maxLength": 160},
+                "snapshot_id": {"type": "string"},
+                "ref": {"type": "string"},
+                "grounding": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "capture_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                        },
+                        "region": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "x": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1,
+                                },
+                                "y": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1,
+                                },
+                                "width": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1,
+                                },
+                                "height": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1,
+                                },
+                            },
+                            "required": ["x", "y", "width", "height"],
+                        },
+                        "label": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160,
+                        },
+                        "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                        },
+                    },
+                    "required": [
+                        "capture_id",
+                        "region",
+                        "label",
+                        "confidence",
+                    ],
+                },
+            }, ["goal"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: f"Activate: {a.get('goal', '?')}",
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="activate",
+        ),
+        ToolSpec(
+            name="computer_key",
+            description="Send one reversible navigation key to the foreground app.",
+            parameters=_obj({
+                "key": {"type": "string", "enum": [
+                    "space", "escape", "tab", "left", "right", "up", "down",
+                    "pageup", "pagedown", "home", "end",
+                ]},
+            }, ["key"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: f"Press key: {a.get('key', '?')}",
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="key_chord",
         ),
         ToolSpec(
             name="computer_type_text",

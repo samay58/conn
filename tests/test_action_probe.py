@@ -12,6 +12,7 @@ from conn.action_probe import (
     _wait_for_truth_effect,
     classify_fixture_probe,
     run_verified_probe,
+    write_eye_verdict,
 )
 
 
@@ -121,3 +122,24 @@ def test_probe_artifact_filename_defaults_to_unclassified(tmp_path) -> None:
 
     payload = _write_verified_probe(tmp_path, "safari", {"target": "safari"})
     assert "unclassified" in Path(payload["artifact"]).name
+
+
+def test_eye_verdict_sidecar_links_receipt_without_rewriting_machine_outcome(tmp_path):
+    probe = tmp_path / "safari-verified.json"
+    probe.write_text(json.dumps({
+        "receipt_id": "receipt-1",
+        "engine_outcome": "dispatch_only",
+    }))
+
+    sidecar = write_eye_verdict(
+        probe, receipt_id="receipt-1", verdict="matched", note="Tab appeared"
+    )
+
+    assert json.loads(probe.read_text())["engine_outcome"] == "dispatch_only"
+    payload = json.loads(sidecar.read_text())
+    assert payload == {
+        "receipt_id": "receipt-1",
+        "verdict": "matched",
+        "note": "Tab appeared",
+        "probe_artifact": str(probe),
+    }

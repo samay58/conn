@@ -57,6 +57,7 @@ class FakeRealtimeAdapter:
         self._play_task: asyncio.Task | None = None
         self._active_response_id: str | None = None
         self._semantic_context: str | None = None
+        self._visual_metadata: dict | None = None
 
     # ---- adapter interface ----
 
@@ -118,8 +119,12 @@ class FakeRealtimeAdapter:
             self._play_task.cancel()
         await self._queue.put(RtResponseCancelled(response_id=self._active_response_id))
 
-    async def send_tool_result(self, call_id: str, output: str) -> None:
-        pass  # the scripted continuation reads nothing from results in v0
+    async def send_tool_result(
+        self, call_id: str, output: str, model_observation=None,
+        visual_observation=None,
+    ) -> None:
+        if visual_observation is not None:
+            self._visual_metadata = dict(visual_observation.metadata)
 
     async def events(self):
         while True:

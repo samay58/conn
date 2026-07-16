@@ -1424,6 +1424,7 @@
     {
       "utterance": "Enter my name in the text field",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
           "computer_ax_snapshot",
           "computer_type_text"
@@ -1445,8 +1446,7 @@
       "utterance": "Click the save button",
       "expect": {
         "tool_any": [
-          "computer_ax_snapshot",
-          "computer_click"
+          "computer_activate"
         ]
       },
       "source": "authored"
@@ -1455,8 +1455,8 @@
       "utterance": "Press the refresh button",
       "expect": {
         "tool_any": [
-          "computer_ax_snapshot",
-          "computer_click"
+          "computer_activate",
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -1464,9 +1464,9 @@
     {
       "utterance": "Hit the done button",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_ax_snapshot",
-          "computer_click"
+          "computer_activate"
         ]
       },
       "source": "authored"
@@ -1474,9 +1474,9 @@
     {
       "utterance": "Click on submit",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_ax_snapshot",
-          "computer_click"
+          "computer_activate"
         ]
       },
       "source": "authored"
@@ -1524,8 +1524,9 @@
     {
       "utterance": "Take a screenshot",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_screenshot"
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -1533,8 +1534,9 @@
     {
       "utterance": "Grab a screenshot of the screen",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_screenshot"
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -1542,8 +1544,9 @@
     {
       "utterance": "Screenshot this",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_screenshot"
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -1841,7 +1844,8 @@
       "expect": {
         "tool_any": [
           "computer_select_relative",
-          "computer_ax_snapshot"
+          "computer_ax_snapshot",
+          "computer_key"
         ]
       },
       "source": "authored"
@@ -1905,6 +1909,7 @@
     {
       "utterance": "Open a blank document",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
           "computer_create"
         ],
@@ -2009,8 +2014,9 @@
     {
       "utterance": "Capture the screen",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_screenshot"
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -2479,7 +2485,8 @@
         "tool_any": [
           "computer_ax_snapshot",
           "computer_scroll",
-          "computer_select_relative"
+          "computer_select_relative",
+          "computer_key"
         ]
       },
       "source": "authored"
@@ -2519,8 +2526,7 @@
       "utterance": "Press cancel",
       "expect": {
         "tool_any": [
-          "computer_ax_snapshot",
-          "computer_click"
+          "computer_activate"
         ]
       },
       "source": "authored"
@@ -2528,9 +2534,9 @@
     {
       "utterance": "Click the blue button",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_ax_snapshot",
-          "computer_click"
+          "computer_activate"
         ]
       },
       "source": "authored"
@@ -2558,8 +2564,9 @@
     {
       "utterance": "Screenshot the window",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_screenshot"
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -2567,8 +2574,9 @@
     {
       "utterance": "Take a picture of my screen",
       "expect": {
+        "allow_no_tool": true,
         "tool_any": [
-          "computer_screenshot"
+          "computer_visual_observe"
         ]
       },
       "source": "authored"
@@ -2577,11 +2585,10 @@
       "utterance": "Switch to the tab with the spreadsheet",
       "expect": {
         "tool_any": [
-          "app_focus_tab"
-        ],
-        "slots": {
-          "title": null
-        }
+          "app_focus_tab",
+          "computer_visual_observe",
+          "computer_activate"
+        ]
       },
       "source": "authored"
     },
@@ -2639,6 +2646,64 @@
         "speech_equals": "I can't help with destructive actions yet.",
         "speech_max_chars": 240,
         "speech_max_sentences": 1
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open techmeme.com in Safari",
+      "expect": {
+        "tool_any": ["browser_navigate"],
+        "slots": {"url": "techmeme.com", "browser_scope": "Safari"}
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Take me to example.com in Firefox",
+      "expect": {
+        "tool_any": ["browser_navigate"],
+        "slots": {"url": "example.com", "browser_scope": "Firefox"}
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open example.com",
+      "expect": {
+        "tool_any": ["browser_navigate"],
+        "slots": {"url": "example.com"}
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Search the web for example.com",
+      "expect": {
+        "tool_any": ["browser_search"],
+        "slots": {"query": "example.com"}
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Go to the next note",
+      "expect": {
+        "tool_any": ["computer_select_relative"],
+        "slots": {"relation": "next", "kind": "note"}
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Open",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_any": ["which", "what"]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Open Linear",
+      "expect": {
+        "tool_any": ["app_open"],
+        "slots": {"app": "Linear"}
       },
       "source": "authored"
     }

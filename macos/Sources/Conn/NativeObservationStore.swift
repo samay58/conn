@@ -13,6 +13,12 @@ protocol NativeSemanticBackend: AnyObject {
         target: NativeResolvedTarget?
     ) -> NativeDispatchResult
 
+    func captureMenuForPreparation(
+        request: NativeActionRequest,
+        query: NativeObservationQuery,
+        matchingTitles: Set<String>
+    ) -> [NativeCapturedObservation]
+
     func beginEvidenceObservation(
         request: NativeActionRequest,
         target: NativeResolvedTarget?
@@ -22,9 +28,17 @@ protocol NativeSemanticBackend: AnyObject {
         request: NativeActionRequest,
         observation: NativeCapturedObservation
     ) -> Bool
+
+    func applicationBindingMatches(_ binding: NativeApplicationBinding) -> Bool
 }
 
 extension NativeSemanticBackend {
+    func captureMenuForPreparation(
+        request: NativeActionRequest,
+        query: NativeObservationQuery,
+        matchingTitles: Set<String>
+    ) -> [NativeCapturedObservation] { [] }
+
     func beginEvidenceObservation(
         request: NativeActionRequest,
         target: NativeResolvedTarget?
@@ -34,12 +48,16 @@ extension NativeSemanticBackend {
         request: NativeActionRequest,
         observation: NativeCapturedObservation
     ) -> Bool { true }
+
+    func applicationBindingMatches(_ binding: NativeApplicationBinding) -> Bool { true }
 }
 
 enum NativeResolutionError: Error, Equatable {
     case staleSnapshot
+    case staleApplication
     case staleProcess
     case staleWindow
+    case secureTransition
     case missingTarget
     case ambiguous
 }
@@ -77,14 +95,78 @@ final class NativeObservationStore {
         snapshots[id]
     }
 
+    func observeMenuForPreparation(
+        request: NativeActionRequest,
+        query: NativeObservationQuery,
+        matchingTitles: Set<String>
+    ) -> [NativeCapturedObservation] {
+        let captured = backend.captureMenuForPreparation(
+            request: request,
+            query: query,
+            matchingTitles: matchingTitles
+        )
+        for snapshot in captured {
+            snapshots[snapshot.snapshotID] = snapshot
+        }
+        return captured
+    }
+
     func resolve(
         target: NativeActionTarget,
         baseline: NativeCapturedObservation,
         current: NativeCapturedObservation
     ) -> Result<NativeResolvedTarget, NativeResolutionError> {
+        resolve(
+            target: target,
+            baseline: baseline,
+            current: current,
+            allowAnonymousWitness: false,
+            mutableCollectionDescription: false
+        )
+    }
+
+    func resolveWitness(
+        target: NativeActionTarget,
+        baseline: NativeCapturedObservation,
+        current: NativeCapturedObservation
+    ) -> Result<NativeResolvedTarget, NativeResolutionError> {
+        resolve(
+            target: target,
+            baseline: baseline,
+            current: current,
+            allowAnonymousWitness: true,
+            mutableCollectionDescription: false
+        )
+    }
+
+    func resolveCollectionWitness(
+        target: NativeActionTarget,
+        baseline: NativeCapturedObservation,
+        current: NativeCapturedObservation
+    ) -> Result<NativeResolvedTarget, NativeResolutionError> {
+        resolve(
+            target: target,
+            baseline: baseline,
+            current: current,
+            allowAnonymousWitness: true,
+            mutableCollectionDescription: true
+        )
+    }
+
+    private func resolve(
+        target: NativeActionTarget,
+        baseline: NativeCapturedObservation,
+        current: NativeCapturedObservation,
+        allowAnonymousWitness: Bool,
+        mutableCollectionDescription: Bool
+    ) -> Result<NativeResolvedTarget, NativeResolutionError> {
         guard baseline.turnID == current.turnID,
               baseline.observationEpoch == current.observationEpoch else {
             return .failure(.staleSnapshot)
+        }
+        if baseline.bundleID != current.bundleID
+            || target.bundleID.map({ $0 != current.bundleID }) == true {
+            return .failure(.staleApplication)
         }
         if baseline.pid != current.pid
             || baseline.processStartIdentity != current.processStartIdentity {
@@ -97,58 +179,54 @@ final class NativeObservationStore {
         guard let original = originalNode(target: target, in: baseline) else {
             return .failure(.missingTarget)
         }
-
-        if let identifier = original.identifier, !identifier.isEmpty {
-            let matches = current.nodes.filter { $0.identifier == identifier }
-            if matches.count > 1 { return .failure(.ambiguous) }
-            if matches.count == 1,
-               semanticContextMatches(
-                   original,
-                   matches[0],
-                   baseline: baseline,
-                   current: current
-               ) {
-                return .success(NativeResolvedTarget(
-                    original: original,
-                    current: matches[0],
-                    resolution: "identifier"
-                ))
-            }
+        let semanticMatches = current.nodes.filter { candidate in
+            candidate.role == original.role
+                && (
+                    mutableCollectionDescription
+                    ? candidate.subrole == original.subrole
+                        && candidate.title == original.title
+                    : candidate.semanticFingerprint == original.semanticFingerprint
+                )
+                && candidate.supportedActions == original.supportedActions
+                && (original.identifier == nil
+                    || candidate.identifier == original.identifier)
+                && (
+                    target.descendantKey == nil
+                        || Self.descendantSemanticKey(
+                            of: candidate, in: current
+                        ) == target.descendantKey
+                )
         }
-
-        let semanticMatches = current.nodes.filter {
-            $0.semanticFingerprint == original.semanticFingerprint
+        guard allowAnonymousWitness
+                || hasSemanticName(original)
+                || target.descendantKey != nil else {
+            return .failure(semanticMatches.count > 1 ? .ambiguous : .missingTarget)
         }
-        if semanticMatches.count > 1 { return .failure(.ambiguous) }
-        if semanticMatches.count == 1,
-           semanticContextMatches(
-               original,
-               semanticMatches[0],
-               baseline: baseline,
-               current: current
-           ) {
+        if semanticMatches.contains(where: { $0.secure }) {
+            return .failure(.secureTransition)
+        }
+        let fullMatches = semanticMatches.filter { candidate in
+            candidate.path == original.path
+                && candidate.siblingSignature == original.siblingSignature
+                && framesWithinDrift(candidate.frame, original.frame)
+                && (
+                    mutableCollectionDescription
+                    ? collectionAncestorSignature(of: original, in: baseline)
+                        == collectionAncestorSignature(
+                            of: candidate, in: current
+                        )
+                    : ancestorSignature(of: original, in: baseline)
+                        == ancestorSignature(of: candidate, in: current)
+                )
+        }
+        if fullMatches.count == 1 {
             return .success(NativeResolvedTarget(
                 original: original,
-                current: semanticMatches[0],
-                resolution: "semantic_fingerprint"
+                current: fullMatches[0],
+                resolution: "full_locator"
             ))
         }
-
-        let pathMatches = current.nodes.filter {
-            $0.path == original.path
-                && $0.siblingSignature == original.siblingSignature
-                && $0.role == original.role
-                && $0.semanticFingerprint == original.semanticFingerprint
-                && framesWithinDrift($0.frame, original.frame)
-        }
-        if pathMatches.count == 1 {
-            return .success(NativeResolvedTarget(
-                original: original,
-                current: pathMatches[0],
-                resolution: "path_sibling_frame"
-            ))
-        }
-        return .failure(pathMatches.isEmpty ? .missingTarget : .ambiguous)
+        return .failure(fullMatches.isEmpty ? .missingTarget : .ambiguous)
     }
 
     private func originalNode(
@@ -176,21 +254,66 @@ final class NativeObservationStore {
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 
+    private func hasSemanticName(_ node: NativeObservationNode) -> Bool {
+        [node.title, node.description, node.identifier].contains { value in
+            !normalize(value).isEmpty
+        }
+    }
+
+    static func descendantSemanticKey(
+        of node: NativeObservationNode,
+        in snapshot: NativeCapturedObservation
+    ) -> String? {
+        let descendants = snapshot.nodes.filter {
+            isDescendant($0, of: node.ref, in: snapshot)
+        }.sorted { lhs, rhs in
+            lhs.path.lexicographicallyPrecedes(rhs.path)
+        }
+        if let text = descendants.first(where: {
+            !$0.secure && $0.role == "AXStaticText" && $0.valueHash != nil
+        }), let valueHash = text.valueHash {
+            return NativeHash.sha256(
+                "\(text.role)\u{1f}\(valueHash)"
+            )
+        }
+        for descendant in descendants where !descendant.secure {
+            let value = [
+                descendant.title,
+                descendant.description,
+                descendant.identifier,
+            ].compactMap {
+                $0?.trimmingCharacters(in: .whitespacesAndNewlines)
+            }.first { !$0.isEmpty }
+            if let value {
+                let normalized = value.folding(
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    locale: .current
+                )
+                return NativeHash.sha256(
+                    "\(descendant.role)\u{1f}\(normalized)"
+                )
+            }
+        }
+        return nil
+    }
+
+    private static func isDescendant(
+        _ node: NativeObservationNode,
+        of ancestorRef: String,
+        in snapshot: NativeCapturedObservation
+    ) -> Bool {
+        var parentRef = node.parentRef
+        var visited = Set<String>()
+        while let ref = parentRef, visited.insert(ref).inserted {
+            if ref == ancestorRef { return true }
+            parentRef = snapshot.nodes.first { $0.ref == ref }?.parentRef
+        }
+        return false
+    }
+
     private func framesWithinDrift(_ lhs: NativeRect?, _ rhs: NativeRect?) -> Bool {
         guard let lhs, let rhs else { return lhs == nil && rhs == nil }
         return lhs.distance(to: rhs) <= 24
-    }
-
-    private func semanticContextMatches(
-        _ original: NativeObservationNode,
-        _ candidate: NativeObservationNode,
-        baseline: NativeCapturedObservation,
-        current: NativeCapturedObservation
-    ) -> Bool {
-        original.path.dropLast() == candidate.path.dropLast()
-            && framesWithinDrift(original.frame, candidate.frame)
-            && ancestorSignature(of: original, in: baseline)
-                == ancestorSignature(of: candidate, in: current)
     }
 
     private func ancestorSignature(
@@ -206,6 +329,24 @@ final class NativeObservationStore {
                 parent.subrole ?? "",
                 parent.title ?? "",
                 parent.description ?? "",
+                parent.identifier ?? "",
+            ].joined(separator: "\u{1f}"))
+            parentRef = parent.parentRef
+        }
+        return result
+    }
+
+    private func collectionAncestorSignature(
+        of node: NativeObservationNode,
+        in snapshot: NativeCapturedObservation
+    ) -> [String] {
+        var result: [String] = []
+        var parentRef = node.parentRef
+        while let ref = parentRef,
+              let parent = snapshot.nodes.first(where: { $0.ref == ref }) {
+            result.append([
+                parent.role,
+                parent.subrole ?? "",
                 parent.identifier ?? "",
             ].joined(separator: "\u{1f}"))
             parentRef = parent.parentRef

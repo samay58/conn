@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import QuartzCore
+import AppKit
 
 enum BridgeAuthentication {
     static let healthContext = "conn-app-health-v1"
@@ -171,22 +172,37 @@ enum PttGesture {
 @MainActor
 final class DaemonClient {
     private static let semanticActionOperations: Set<String> = [
-        "observe", "prepare_action", "execute_action",
+        "observe", "observe_visual", "prepare_action", "execute_action",
     ]
-    private let url = URL(string: "ws://127.0.0.1:8787/ws")!
+    private let url: URL
     private var task: URLSessionWebSocketTask?
     private let state: AppState
     private let bridgeToken: String
     private var handshake: DaemonHandshake
     private var requestReplayGuard = NativeRequestReplayGuard()
-    private let semanticActionEngine = NativeSemanticActionEngine()
+    private let executionInterlock: NativeExecutionInterlock
+    private let semanticActionEngine: NativeSemanticActionEngine
+    private let visualControl: NativeVisualControl
     private var connectionID: UUID?
     private var closed = false
+    private var systemObservers: [NSObjectProtocol] = []
 
-    init(state: AppState, bridgeToken: String = "") {
+    init(
+        state: AppState,
+        bridgeToken: String = "",
+        endpoint: DaemonEndpoint = .current
+    ) {
         self.state = state
         self.bridgeToken = bridgeToken
+        url = endpoint.webSocket
         handshake = DaemonHandshake(bridgeToken: bridgeToken)
+        let executionInterlock = NativeExecutionInterlock()
+        self.executionInterlock = executionInterlock
+        semanticActionEngine = NativeSemanticActionEngine(
+            executionInterlock: executionInterlock
+        )
+        visualControl = NativeVisualControl(executionInterlock: executionInterlock)
+        installSystemObservers()
     }
 
     static func monotonicMs() -> Int {
@@ -208,9 +224,12 @@ final class DaemonClient {
     func connect() {
         closed = false
         invalidateSemanticPlans()
+        revokeVisualCapture()
         task?.cancel(with: .goingAway, reason: nil)
         let connection = handshake.beginConnection()
         connectionID = connection
+        executionInterlock.beginConnection(connection.uuidString)
+        state.clearNavigationState()
         let task = URLSession.shared.webSocketTask(with: url)
         self.task = task
         task.resume()
@@ -220,10 +239,15 @@ final class DaemonClient {
     func close() {
         closed = true
         invalidateSemanticPlans()
+        revokeVisualCapture()
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
+        if let connectionID {
+            executionInterlock.disconnect(connectionID.uuidString)
+        }
         connectionID = nil
         state.connected = false
+        state.clearNavigationState()
     }
 
     private static let timedTypes: Set<String> = ["ptt_down", "ptt_up", "approval", "stop"]
@@ -322,7 +346,8 @@ final class DaemonClient {
             guard requestReplayGuard.accept(msg, connection: connection) else { return }
             guard let requestId = msg["request_id"] as? String else { return }
             let op = msg["op"] as? String ?? ""
-            let params = msg["params"] as? [String: Any] ?? [:]
+            var params = msg["params"] as? [String: Any] ?? [:]
+            params["execution_connection_id"] = connection.uuidString
             if let rejection = Self.rejectedNativeActionData(for: op) {
                 sendAuthenticated(
                     rpcReply(
@@ -338,7 +363,19 @@ final class DaemonClient {
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let data = await semanticActionEngine.perform(op: op, params: params)
+                let data: Any?
+                if op == "observe_visual" {
+                    data = await visualControl.observe(params)
+                } else if op == "prepare_action",
+                          Self.isVisualPreparation(params) {
+                    data = await visualControl.prepareVisual(params)
+                } else if op == "execute_action",
+                          let fingerprint = params["plan_fingerprint"] as? String,
+                          await visualControl.ownsPlan(fingerprint) {
+                    data = await visualControl.executeVisual(params)
+                } else {
+                    data = await semanticActionEngine.perform(op: op, params: params)
+                }
                 self.sendAuthenticated(
                     self.rpcReply(
                         type: "ax_action_result",
@@ -367,6 +404,13 @@ final class DaemonClient {
         ]
     }
 
+    private static func isVisualPreparation(_ params: [String: Any]) -> Bool {
+        guard let request = params["request"] as? [String: Any],
+              request["operation"] as? String == "activate",
+              let payload = request["payload"] as? [String: Any] else { return false }
+        return payload["visual_grounding"] is [String: Any]
+    }
+
     private func receive(on task: URLSessionWebSocketTask, connection: UUID) {
         task.receive { [weak self] result in
             Task { @MainActor [weak self] in
@@ -387,9 +431,12 @@ final class DaemonClient {
                     self.receive(on: task, connection: connection)
                 case .failure:
                     self.state.connected = false
+                    self.state.clearNavigationState()
                     self.invalidateSemanticPlans()
+                    self.revokeVisualCapture()
                     guard !self.closed else { return }
                     self.task = nil
+                    self.executionInterlock.disconnect(connection.uuidString)
                     self.connectionID = nil
                     self.scheduleAuthenticatedReconnect()
                 }
@@ -434,6 +481,7 @@ final class DaemonClient {
             handleAuthenticatedSideband(msg, on: task, connection: connection)
             let oldPhase = state.phase
             state.apply(msg)
+            acceptNavigationState(msg, connection: connection)
             for moment in Self.ackMoments(from: oldPhase, to: state.phase) {
                 sendUiAck(moment: moment)
             }
@@ -447,9 +495,12 @@ final class DaemonClient {
     ) {
         guard self.task === task, connectionID == connection else { return }
         state.connected = false
+        state.clearNavigationState()
         invalidateSemanticPlans()
+        revokeVisualCapture()
         task.cancel(with: .policyViolation, reason: nil)
         self.task = nil
+        executionInterlock.disconnect(connection.uuidString)
         connectionID = nil
         guard !closed else { return }
         scheduleAuthenticatedReconnect()
@@ -468,5 +519,80 @@ final class DaemonClient {
 
     private func invalidateSemanticPlans() {
         Task { await semanticActionEngine.invalidatePlans() }
+    }
+
+    private func revokeVisualCapture() {
+        Task { await visualControl.revoke() }
+    }
+
+    private func acceptNavigationState(_ msg: [String: Any], connection: UUID) {
+        guard let navigation = msg["navigation"] as? [String: Any],
+              let generation = navigation["generation"] as? Int else { return }
+        let suspended = navigation["suspended"] as? Bool ?? true
+        _ = executionInterlock.accept(
+            connectionID: connection.uuidString,
+            generation: generation,
+            suspended: suspended
+        )
+    }
+
+    private func installSystemObservers() {
+        let suspendNames = [
+            NSWorkspace.willSleepNotification,
+            NSWorkspace.sessionDidResignActiveNotification,
+        ]
+        for name in suspendNames {
+            systemObservers.append(
+                NSWorkspace.shared.notificationCenter.addObserver(
+                    forName: name, object: nil, queue: .main
+                ) { [weak self, executionInterlock] _ in
+                    executionInterlock.suspend()
+                    Task { @MainActor [weak self] in self?.systemDidSuspend() }
+                }
+            )
+        }
+        let resumeNames = [
+            NSWorkspace.didWakeNotification,
+            NSWorkspace.sessionDidBecomeActiveNotification,
+        ]
+        for name in resumeNames {
+            systemObservers.append(
+                NSWorkspace.shared.notificationCenter.addObserver(
+                    forName: name, object: nil, queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor [weak self] in self?.systemDidResume() }
+                }
+            )
+        }
+        let distributed = DistributedNotificationCenter.default()
+        systemObservers.append(distributed.addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self, executionInterlock] _ in
+            executionInterlock.suspend()
+            Task { @MainActor [weak self] in self?.systemDidSuspend() }
+        })
+        systemObservers.append(distributed.addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.systemDidResume() }
+        })
+    }
+
+    private func systemDidSuspend() {
+        invalidateSemanticPlans()
+        revokeVisualCapture()
+        send(["type": "navigation_suspend"])
+    }
+
+    private func systemDidResume() {
+        guard state.navigationGranted else { return }
+        send([
+            "type": "navigation_resume",
+            "generation": state.navigationGeneration,
+        ])
     }
 }

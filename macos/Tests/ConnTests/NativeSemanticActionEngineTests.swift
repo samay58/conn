@@ -1,7 +1,105 @@
 import XCTest
 @testable import Conn
 
+final class NativeAXTimeoutTests: XCTestCase {
+    func testBackendSetsProcessWideMessagingTimeout() {
+        var values: [Float] = []
+
+        _ = NativeAXSemanticBackend {
+            values.append($0)
+        }
+
+        XCTAssertEqual(values, [0.25])
+    }
+}
+
 final class NativeSemanticActionEngineTests: XCTestCase {
+    func testDocumentURLUsesOneWebAreaAndIgnoresLinks() {
+        XCTAssertEqual(
+            NativeAXSemanticBackend.uniqueWebAreaDocumentURL([
+                (
+                    role: "AXLink",
+                    values: ["https://wrong.example/"]
+                ),
+                (
+                    role: "AXWebArea",
+                    values: ["http://127.0.0.1:18888/media"]
+                ),
+            ]),
+            "http://127.0.0.1:18888/media"
+        )
+        XCTAssertNil(NativeAXSemanticBackend.uniqueWebAreaDocumentURL([
+            (
+                role: "AXWebArea",
+                values: [
+                    "https://one.example/",
+                    "https://two.example/",
+                ]
+            ),
+        ]))
+        XCTAssertEqual(
+            NativeAXSemanticBackend.urlText(
+                NSURL(string: "http://127.0.0.1:18888/media")
+            ),
+            "http://127.0.0.1:18888/media"
+        )
+    }
+
+    func testPredicatesRecordBaselineCurrentRuleAndMatch() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let fingerprint = try await prepare(
+            engine: engine,
+            operation: "press",
+            target: ["ref": "immediate"],
+            effect: changeEffect
+        )
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+        let evidence = try XCTUnwrap(receipt["evidence"] as? [[String: Any]])
+
+        XCTAssertNotNil(evidence.first?["baseline"])
+        XCTAssertNotNil(evidence.first?["current"])
+        XCTAssertNotNil(evidence.first?["match_rule"])
+        XCTAssertEqual(evidence.first?["matched"] as? Bool, true)
+    }
+
+    func testPredispatchDeadlineExpirySendsNoInput() async throws {
+        let backend = SemanticFixtureBackend()
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "press", target: ["ref": "immediate"],
+            effect: changeEffect, timeoutMs: 20
+        ))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        backend.captureDelay = 0.03
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(backend.dispatchCount, 0)
+        XCTAssertEqual(receipt["dispatch_state"] as? String, "not_dispatched")
+        XCTAssertEqual(receipt["reason_code"] as? String, "native_transaction_timeout")
+    }
+
+    func testPostInputDeadlineExpiryIsFinalAndPossiblyDispatched() async throws {
+        let backend = SemanticFixtureBackend()
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "press", target: ["ref": "immediate"],
+            effect: changeEffect, timeoutMs: 20
+        ))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        backend.dispatchDelay = 0.03
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+        let replay = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["dispatch_state"] as? String, "possibly_dispatched")
+        XCTAssertEqual(receipt["reason_code"] as? String, "native_transaction_timeout")
+        XCTAssertEqual(replay["dispatch_state"] as? String, "not_dispatched")
+        XCTAssertEqual(backend.dispatchCount, 1)
+    }
     func testEmptyTargetTitleFallsThroughToSafeOperationName() async throws {
         let backend = SemanticFixtureBackend()
         let engine = NativeSemanticActionEngine(backend: backend)
@@ -57,6 +155,7 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(receipt["dispatch_state"] as? String, "dispatched")
         XCTAssertEqual(receipt["ok"] as? Bool, false)
         XCTAssertEqual(receipt["retry_safe"] as? Bool, false)
+        XCTAssertEqual(receipt["reason_code"] as? String, "witness_not_matched")
     }
 
     func testObservedEffectProducesVerifiedReceipt() async throws {
@@ -96,6 +195,7 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(plan?["outcome"] as? String, "failed")
         XCTAssertEqual(plan?["error"] as? String, "effect_already_satisfied")
         XCTAssertEqual(plan?["dispatch_state"] as? String, "not_dispatched")
+        XCTAssertEqual(plan?["reason_code"] as? String, "effect_already_satisfied")
         XCTAssertNil(plan?["plan_fingerprint"])
         XCTAssertEqual(backend.dispatchCount, 0)
     }
@@ -451,6 +551,33 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(receipt["ok"] as? Bool, false)
     }
 
+    func testKeyChordRefusesSecureOrUnknownFocusAfterPreparation() async throws {
+        for (protected, expectedError) in [
+            (true, "secure_field"),
+            (nil, "secure_state_unknown"),
+        ] as [(Bool?, String)] {
+            let backend = SemanticFixtureBackend()
+            backend.focusedElementRef = "text"
+            backend.textProtected = false
+            let engine = NativeSemanticActionEngine(backend: backend)
+            let plan = await engine.prepare(makePrepareParams(
+                operation: "key_chord",
+                target: [:],
+                effect: nil,
+                payload: ["keys": ["space"]]
+            ))
+            let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+            backend.textProtected = protected
+
+            let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+            XCTAssertEqual(receipt["outcome"] as? String, "blocked")
+            XCTAssertEqual(receipt["native_error"] as? String, expectedError)
+            XCTAssertEqual(receipt["dispatch_state"] as? String, "not_dispatched")
+            XCTAssertEqual(backend.dispatchCount, 0)
+        }
+    }
+
     func testAppScopedActionsRefuseAfterWindowChanges() async throws {
         for operation in ["invoke_menu", "key_chord"] {
             let backend = SemanticFixtureBackend()
@@ -512,6 +639,186 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(invalidatedCount, 0)
     }
 
+    func testDirectNavigationNormalizesAndBindsExactBrowser() async throws {
+        let backend = SemanticFixtureBackend()
+        let browser = NativeInstalledApplication(
+            name: "Fixture Browser",
+            bundleID: "com.example.browser",
+            teamID: "FIXTURE001",
+            bundleURL: URL(fileURLWithPath: "/Applications/Fixture Browser.app"),
+            identityFingerprint: "fixture-browser-identity",
+            handlesHTTP: true
+        )
+        let resolver = NativeApplicationResolver(applications: { [browser] })
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: resolver
+        )
+
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "navigate",
+            target: [:],
+            effect: nil,
+            payload: [
+                "url": "example.com/watch?v=1",
+                "browser_scope": "Fixture Browser",
+            ]
+        ))
+
+        XCTAssertNotNil(plan?["plan_fingerprint"])
+        XCTAssertEqual(plan?["bundle_id"] as? String, "com.example.browser")
+        XCTAssertEqual(
+            plan?["effect"] as? String,
+            "all(frontmost_bundle_equals:com.example.browser,document_url_equals:https://example.com/watch?v=1)"
+        )
+    }
+
+    func testDirectNavigationRejectsInvalidURLsBeforePlanning() async {
+        let backend = SemanticFixtureBackend()
+        let resolver = fixtureBrowserResolver()
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: resolver
+        )
+        let invalid = [
+            "file:///tmp/report",
+            "https://user:secret@example.com",
+            "https://example.com/\nnext",
+            "https://example.com/" + String(repeating: "x", count: 4096),
+        ]
+
+        for url in invalid {
+            let plan = await engine.prepare(makePrepareParams(
+                operation: "navigate",
+                target: [:],
+                effect: nil,
+                payload: ["url": url, "browser_scope": "Fixture Browser"]
+            ))
+            XCTAssertEqual(plan?["error"] as? String, "invalid_browser_url", url)
+            XCTAssertNil(plan?["plan_fingerprint"], url)
+        }
+    }
+
+    func testDirectNavigationVerifiesOnlyFromNormalizedDocumentURL() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: fixtureBrowserResolver()
+        )
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "navigate",
+            target: [:],
+            effect: nil,
+            payload: [
+                "url": "https://example.com",
+                "browser_scope": "Fixture Browser",
+            ]
+        ))
+
+        let receipt = await execute(
+            engine: engine,
+            fingerprint: try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        )
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedBinding?.bundleID, "com.example.browser")
+    }
+
+    func testDirectNavigationWithoutReadableDocumentURLIsDispatchOnly() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        backend.hidesDocumentURL = true
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: fixtureBrowserResolver()
+        )
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "navigate",
+            target: [:],
+            effect: nil,
+            payload: [
+                "url": "https://example.com",
+                "browser_scope": "Fixture Browser",
+            ]
+        ))
+
+        let receipt = await execute(
+            engine: engine,
+            fingerprint: try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        )
+
+        XCTAssertEqual(receipt["outcome"] as? String, "dispatch_only")
+        XCTAssertEqual(receipt["reason_code"] as? String, "no_trustworthy_witness")
+    }
+
+    func testDirectNavigationDoesNotVerifyAMismatchedDocumentURL() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        backend.forcedDocumentURL = "https://other.example/"
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: fixtureBrowserResolver()
+        )
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "navigate",
+            target: [:],
+            effect: nil,
+            payload: [
+                "url": "https://example.com",
+                "browser_scope": "Fixture Browser",
+            ]
+        ))
+
+        let receipt = await execute(
+            engine: engine,
+            fingerprint: try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        )
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
+        XCTAssertEqual(receipt["reason_code"] as? String, "witness_not_matched")
+    }
+
+    func testDirectNavigationRefusesIdentityDriftBeforeDispatch() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.bindingIdentityMatches = false
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: fixtureBrowserResolver()
+        )
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "navigate",
+            target: [:],
+            effect: nil,
+            payload: [
+                "url": "https://example.com",
+                "browser_scope": "Fixture Browser",
+            ]
+        ))
+
+        let receipt = await execute(
+            engine: engine,
+            fingerprint: try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        )
+
+        XCTAssertEqual(receipt["outcome"] as? String, "blocked")
+        XCTAssertEqual(receipt["reason_code"] as? String, "app_identity_mismatch")
+        XCTAssertEqual(backend.dispatchCount, 0)
+    }
+
+    private func fixtureBrowserResolver() -> NativeApplicationResolver {
+        NativeApplicationResolver(applications: { [
+            NativeInstalledApplication(
+                name: "Fixture Browser",
+                bundleID: "com.example.browser",
+                teamID: "FIXTURE001",
+                bundleURL: URL(fileURLWithPath: "/Applications/Fixture Browser.app"),
+                identityFingerprint: "fixture-browser-identity",
+                handlesHTTP: true
+            ),
+        ] })
+    }
+
     func testDispatchProgressNeverReturnsNotDispatchedAfterMutation() {
         var progress = NativeDispatchProgress()
         XCTAssertEqual(progress.failure("before").state, .notDispatched)
@@ -533,7 +840,7 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(result.nativeError, "AXError(-25206)")
     }
 
-    func testAppNameWithoutExpectedBundleIsRejected() async {
+    func testUnknownInstalledAppNameRefusesWithoutGuessing() async {
         let backend = SemanticFixtureBackend()
         let engine = NativeSemanticActionEngine(backend: backend)
 
@@ -545,28 +852,49 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         ))
 
         XCTAssertEqual(plan?["outcome"] as? String, "failed")
-        XCTAssertEqual(plan?["error"] as? String, "missing_bundle_id")
+        XCTAssertEqual(plan?["error"] as? String, "app_not_found")
         XCTAssertNil(plan?["plan_fingerprint"])
     }
 
-    func testExpectedBundleCannotBeOverriddenByConflictingAppName() async {
+    func testRequestedAppCannotDispatchAConflictingBundle() async {
         let backend = SemanticFixtureBackend()
         backend.bundleID = "com.other.frontmost"
-        let engine = NativeSemanticActionEngine(backend: backend)
+        let firefox = NativeInstalledApplication(
+            name: "Firefox",
+            bundleID: "org.mozilla.firefox",
+            teamID: "MOZILLA001",
+            bundleURL: URL(fileURLWithPath: "/Applications/Firefox.app"),
+            identityFingerprint: "firefox-identity",
+            handlesHTTP: true
+        )
+        let safari = NativeInstalledApplication(
+            name: "Safari",
+            bundleID: "com.apple.Safari",
+            teamID: nil,
+            bundleURL: URL(fileURLWithPath: "/Applications/Safari.app"),
+            identityFingerprint: "safari-identity",
+            handlesHTTP: true
+        )
+        let resolver = NativeApplicationResolver(applications: { [firefox, safari] })
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: resolver
+        )
 
         let plan = await engine.prepare(makePrepareParams(
             operation: "open",
             target: [:],
             effect: nil,
             payload: [
-                "app_name": "Fixture",
-                "bundle_id": "com.conn.fixture",
-                "team_id": "TESTTEAM01",
+                "app_name": "Firefox",
+                "bundle_id": "com.apple.Safari",
             ]
         ))
 
-        XCTAssertEqual(plan?["effect"] as? String,
-                       "all(frontmost_bundle_equals:com.conn.fixture)")
+        XCTAssertEqual(plan?["outcome"] as? String, "blocked")
+        XCTAssertEqual(plan?["error"] as? String, "requested_app_mismatch")
+        XCTAssertNil(plan?["plan_fingerprint"])
+        XCTAssertEqual(backend.dispatchCount, 0)
     }
 
     func testThirdPartyAppRequiresExpectedSigningTeam() async {
@@ -883,16 +1211,25 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         let backend = SemanticFixtureBackend()
         backend.effectOnDispatch = true
         backend.bundleID = "com.other.frontmost"
-        let engine = NativeSemanticActionEngine(backend: backend)
+        let resolver = NativeApplicationResolver(applications: { [
+            NativeInstalledApplication(
+                name: "Fixture",
+                bundleID: "com.conn.fixture",
+                teamID: "TESTTEAM01",
+                bundleURL: URL(fileURLWithPath: "/Applications/Fixture.app"),
+                identityFingerprint: "fixture-identity",
+                handlesHTTP: false
+            ),
+        ] })
+        let engine = NativeSemanticActionEngine(
+            backend: backend,
+            applicationResolver: resolver
+        )
         let plan = await engine.prepare(makePrepareParams(
             operation: "switch",
             target: [:],
             effect: nil,
-            payload: [
-                "app_name": "Fixture",
-                "bundle_id": "com.conn.fixture",
-                "team_id": "TESTTEAM01",
-            ]
+            payload: ["app_name": "Fixture"]
         ))
         let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
 
@@ -1020,7 +1357,8 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         target: [String: Any],
         effect: [String: Any]?,
         payload: [String: Any] = [:],
-        turnID: String = "turn-1"
+        turnID: String = "turn-1",
+        timeoutMs: Int = 10
     ) -> [String: Any] {
         var request: [String: Any] = [
             "operation": operation,
@@ -1028,7 +1366,7 @@ final class NativeSemanticActionEngineTests: XCTestCase {
             "payload": payload,
             "risk": "local_mutation",
             "strategy_ceiling": "semantic_plus_events",
-            "timeout_ms": 10,
+            "timeout_ms": timeoutMs,
         ]
         if let effect { request["desired_effect"] = effect }
         return [
@@ -1062,8 +1400,16 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     var bundleID = "com.conn.fixture"
     var windowID: UInt32 = 1
     var identityMatches = true
+    var bindingIdentityMatches = true
     var textProtected: Bool?
+    var focusedElementRef: String?
     var replaceImmediateAfterDispatch = false
+    var hidesDocumentURL = false
+    var forcedDocumentURL: String?
+    var captureDelay = 0.0
+    var dispatchDelay = 0.0
+    private var documentURL: String?
+    private(set) var lastDispatchedBinding: NativeApplicationBinding?
     private(set) var dispatchCount = 0
     private(set) var wrongTargetCount = 0
     private(set) var menuPreparationCount = 0
@@ -1073,6 +1419,9 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     }
 
     func capture(turnID: String, observationEpoch: Int, query: NativeObservationQuery) -> NativeCapturedObservation {
+        if captureDelay > 0 {
+            Thread.sleep(forTimeInterval: captureDelay)
+        }
         let replacedImmediate = replaceImmediateAfterDispatch && dispatchCount > 0
         var nodes = [
             NativeObservationNode(
@@ -1127,8 +1476,10 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             windowID: windowID
         )
         observation.windowCount = windowCount
+        observation.focusedElementRef = focusedElementRef
         observation.clipboardHash = clipboardHash
         observation.notifications = notifications
+        observation.documentURL = hidesDocumentURL ? nil : documentURL
         if query.deniedBundles.contains(bundleID) {
             observation.denied = true
             observation.nodes = []
@@ -1153,8 +1504,16 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         observation: NativeCapturedObservation
     ) -> Bool { identityMatches }
 
+    func applicationBindingMatches(_ binding: NativeApplicationBinding) -> Bool {
+        bindingIdentityMatches
+    }
+
     func dispatch(strategy: NativeActionStrategy, request: NativeActionRequest, target: NativeResolvedTarget?) -> NativeDispatchResult {
         dispatchCount += 1
+        if dispatchDelay > 0 {
+            Thread.sleep(forTimeInterval: dispatchDelay)
+        }
+        lastDispatchedBinding = request.applicationBinding
         if let target,
            !["fixture.immediate", "fixture.no_effect", "fixture.tab", "fixture.text"]
             .contains(target.current.identifier ?? "") {
@@ -1166,6 +1525,9 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         guard result.state == .dispatched, effectOnDispatch else { return result }
         if strategy == .launchServices, let requestedBundleID = request.payload.bundleID {
             bundleID = requestedBundleID
+            if request.operation == .navigate {
+                documentURL = forcedDocumentURL ?? request.payload.url
+            }
         } else if strategy == .keyChord {
             submitted = true
         } else if strategy == .pasteboard {

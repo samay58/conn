@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Protocol
 
+from ..events import ModelObservation, VisualObservation
+
 
 @dataclass(frozen=True, slots=True)
 class RtSessionReady:
@@ -93,7 +95,13 @@ class RealtimeAdapter(Protocol):
     async def send_text(self, text: str) -> None: ...
     async def upsert_semantic_context(self, text: str) -> None: ...
     async def clear_semantic_context(self) -> None: ...
-    async def send_tool_result(self, call_id: str, output: str) -> None: ...
+    async def send_tool_result(
+        self,
+        call_id: str,
+        output: str,
+        model_observation: ModelObservation | None = None,
+        visual_observation: VisualObservation | None = None,
+    ) -> None: ...
     def events(self) -> AsyncIterator[RtEvent]: ...
     @property
     def connected(self) -> bool: ...

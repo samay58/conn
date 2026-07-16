@@ -5,8 +5,9 @@ import pytest
 
 from conn.config import Config
 from conn.events import Gate
+from conn.navigation import NavigationLease
 from conn.tools.registry import build_registry, export_openai
-from conn.tools.risk import RiskLevel, gate_for
+from conn.tools.risk import RiskLevel, gate_for, gate_for_prepared
 
 
 def gate(harness, name, args):
@@ -60,10 +61,9 @@ class TestGateDecisions:
         reason = harness.block_reason(call)
         assert "Allowed: none" in reason
 
-    def test_app_not_on_allowlist_is_blocked(self, harness):
+    def test_normal_app_outside_alias_hints_reaches_native_resolution(self, harness):
         call = gate(harness, "app_open", {"app": "Disk Utility"})
-        assert call.gate is Gate.BLOCKED
-        assert "app_not_allowlisted" in harness.block_reason(call)
+        assert call.gate is Gate.AUTO
 
     def test_present_only_allowlist_blocks_named_optional_app(self, harness):
         call = gate(harness, "app_focus_tab", {"title": "Inbox", "app": "Disk Utility"})
@@ -174,6 +174,99 @@ class TestOverrides:
         cfg.risk_overrides["browser_search"] = "blocked"
         call = gate(harness, "browser_search", {"query": "x"})
         assert call.gate is Gate.BLOCKED
+
+
+class TestNavigationEffectPolicy:
+    def _plan(self, effect: str, generation: int) -> dict:
+        return {
+            "preview": "Press Play",
+            "effect_class": effect,
+            "navigation_generation": generation,
+            "bundle_id": "com.conn.fixture",
+            "target_role": "AXButton",
+            "secure": False,
+            "denied": False,
+        }
+
+    def test_active_lease_auto_authorizes_only_reversible_navigation(self, cfg):
+        lease = NavigationLease("session-a")
+        lease.bind_connection("app-a")
+        lease.grant("session-a", "app-a")
+
+        for index in range(10):
+            gate_value, reason, _preview = gate_for_prepared(
+                "computer_click",
+                RiskLevel.ACT_CONFIRM,
+                {"snapshot_id": "s", "ref": f"r-{index}"},
+                self._plan("reversible_navigation", lease.generation),
+                cfg,
+                lease,
+            )
+
+            assert gate_value is Gate.AUTO
+            assert reason is None
+
+    def test_revoked_or_stale_lease_does_not_auto_authorize(self, cfg):
+        lease = NavigationLease("session-a")
+        lease.bind_connection("app-a")
+        lease.grant("session-a", "app-a")
+        plan = self._plan("reversible_navigation", lease.generation)
+        lease.revoke("session-a", "app-a")
+
+        gate_value, reason, _preview = gate_for_prepared(
+            "computer_click",
+            RiskLevel.ACT_CONFIRM,
+            {"snapshot_id": "s", "ref": "r"},
+            plan,
+            cfg,
+            lease,
+        )
+
+        assert gate_value is Gate.BLOCKED
+        assert reason == "navigation_lease_stale"
+
+    @pytest.mark.parametrize(
+        "effect,expected",
+        [
+            ("consequential", Gate.CONFIRM),
+            ("destructive", Gate.BLOCKED),
+            ("secure_or_denied", Gate.BLOCKED),
+            ("unknown", Gate.BLOCKED),
+            ("model_invented", Gate.BLOCKED),
+        ],
+    )
+    def test_excluded_effect_matrix(self, cfg, effect, expected):
+        lease = NavigationLease("session-a")
+        lease.bind_connection("app-a")
+        lease.grant("session-a", "app-a")
+
+        gate_value, _reason, _preview = gate_for_prepared(
+            "computer_click",
+            RiskLevel.ACT_CONFIRM,
+            {"snapshot_id": "s", "ref": "r"},
+            self._plan(effect, lease.generation),
+            cfg,
+            lease,
+        )
+
+        assert gate_value is expected
+
+    def test_config_auto_cannot_downgrade_consequential(self, cfg):
+        cfg.risk_overrides["computer_click"] = "auto"
+        lease = NavigationLease("session-a")
+        lease.bind_connection("app-a")
+        lease.grant("session-a", "app-a")
+
+        gate_value, _reason, _preview = gate_for_prepared(
+            "computer_click",
+            RiskLevel.ACT_CONFIRM,
+            {"snapshot_id": "s", "ref": "send"},
+            self._plan("consequential", lease.generation),
+            cfg,
+            lease,
+        )
+
+        assert gate_value is Gate.CONFIRM
 
 
 class TestRunFailClosed:
