@@ -1,6 +1,7 @@
 # Next session: capability breadth through Conn Lab
 
-Updated 2026-07-16. Read `docs/STATE-OF-PLAY.md`,
+Updated 2026-07-20. Read `docs/STATE-OF-PLAY.md`,
+`docs/NORTH-STAR.md`,
 `docs/2026-07-16-conn-lab-spec.md`, and
 `docs/2026-07-16-conn-lab-implementation-plan.md` first.
 
@@ -35,9 +36,14 @@ The release evidence retains one honest native uncertainty:
 `kAXErrorCannotComplete`, Conn marked the action possibly dispatched, and no
 retry occurred.
 
+The earlier twenty-clone result predates the final breadth candidate. It proves
+the lab loop, not the north-star release candidate. Run twenty fresh clones
+again after breadth code and review fixes stop changing.
+
 ## Next engineering delivery
 
-Build the capability-expansion flywheel in this order:
+Close the frozen v1 breadth gate. Do not expand the north-star scope. Work in
+this order:
 
 - split the current full-stack scenario driver into capsule-owned setup and
   oracle seams
@@ -52,6 +58,11 @@ Build the capability-expansion flywheel in this order:
 - implement only generic primitives demanded by red atlas scenarios
 - require each new primitive to succeed in three structurally different apps
   and refuse one adversarial case
+
+After the required matrix is green, stop implementation. Run the exact
+candidate through the twenty-clone release suite, physical confidence drill,
+and thirty-command product gate. New ideas do not enter v1 unless
+`docs/NORTH-STAR.md` says they are required.
 
 Keep one mutation per transaction. Re-observe between steps. Stop on
 ambiguity, possible dispatch, stale state, app change, secure state, grant

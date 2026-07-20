@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Push-to-talk voice command surface for the Mac on the OpenAI Realtime API (gpt-realtime-2). Hold Control+Option, speak, release; the daemon takes the smallest safe action, risky actions wait behind a pointer-only approval chip, and every state-changing computer action runs as a verified transaction through the signed Conn.app. Every session leaves a trace and a cost receipt.
 
-**Reload order for project context**: `docs/STATE-OF-PLAY.md` first (where we are and the measured bars), then `docs/2026-07-07-roadmap.md` (what runs next and the judgment calls already made), then `docs/NEXT-SESSION.md` (the next execution block) and the specs in `docs/`; the approved action spec is `docs/2026-07-09-verified-action-engine-spec.md`. `docs/idea-ledger.md` records what is deliberately not being built and the triggers that would change that; check it before proposing new capability.
+**Reload order for project context**: `docs/STATE-OF-PLAY.md` first (where we are and the measured bars), then `docs/NORTH-STAR.md` (the v1 promise, finish line, and stop rule), `docs/2026-07-07-roadmap.md` (what runs next and the judgment calls already made), `docs/NEXT-SESSION.md` (the next execution block), and the specs in `docs/`; the approved action spec is `docs/2026-07-09-verified-action-engine-spec.md`. `docs/idea-ledger.md` records what is deliberately not being built and the triggers that would change that; check it before proposing new capability.
 
 A git-excluded local `AGENTS.md` mirror of this file (header aside) may exist at the repo root for Codex; when it does, apply any edit made here to it too.
 

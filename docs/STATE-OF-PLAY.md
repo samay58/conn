@@ -1,7 +1,8 @@
 # Conn: state of play
 
-Updated 2026-07-16. Read this first. Use `docs/2026-07-07-roadmap.md`
+Updated 2026-07-20. Read this first. Use `docs/2026-07-07-roadmap.md`
 for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
+`docs/NORTH-STAR.md` defines the v1 product promise, finish line, and stop rule.
 
 ## Current verdict
 
@@ -11,6 +12,10 @@ dependency warnings, three lifecycle tests, 14 harness evals, and 232 Swift
 tests. The 86 focused lab tests exercise the public command surface, typed
 scenario catalog, bounded private guest execution, receipt-to-oracle records,
 and artifact metadata.
+
+Conn v1 is not done. Mechanical gates are strong; cross-app breadth, physical
+Mac checks, and the thirty-command daily-use gate remain open. The project now
+has one explicit stop condition in `docs/NORTH-STAR.md`.
 
 The authoritative live intent corpus passed 225 of 226 items, or 99.56
 percent, in
@@ -384,9 +389,13 @@ uncertainty, not a false verified result.
 
 ## Open gates
 
-Engineering acceptance in the VM is complete after the L9 release suite. Human
-product acceptance remains:
+Conn Lab implementation acceptance is complete after the L9 release suite.
+V1 still needs the frozen breadth matrix and an exact-candidate twenty-clone
+run before human product acceptance:
 
+- freeze and run the cross-app capability matrix
+- close generic north-star blockers exposed by that matrix
+- run twenty fresh clones against the exact reviewed candidate
 - relaunch the installed candidate if an older Conn process is running
 - run the physical microphone acoustic barge-in check
 - run `docs/MANUAL-TESTING.md`
@@ -408,6 +417,7 @@ Do not call the semantic engine accepted for daily use until those gates pass.
 
 | File | Purpose |
 |---|---|
+| `docs/NORTH-STAR.md` | Canonical v1 promise, finish line, scope boundary, and stop rule |
 | `docs/2026-07-12-voice-first-reliability-spec.md` | Current reliability diagnosis, architecture, packets, and daily-driver bars |
 | `docs/2026-07-13-dogfood-failure-analysis.md` | Aggregated post-release evidence and root causes |
 | `docs/2026-07-13-capable-navigation-spec.md` | Approved product contract for one-grant reversible navigation |

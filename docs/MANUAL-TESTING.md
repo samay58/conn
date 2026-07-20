@@ -1,6 +1,7 @@
 # Conn manual test range
 
-Updated 2026-07-16. Fifteen-minute confidence drill. Not product acceptance.
+Updated 2026-07-20. Fifteen-minute confidence drill. Not product acceptance.
+This drill is one required gate in `docs/NORTH-STAR.md`.
 
 Conn Lab now covers the repeatable transaction, app, recovery, and stale-state
 checks in disposable guests. This drill is the physical-Mac layer. Run it
@@ -117,4 +118,5 @@ Confidence drill passes when:
 - Stop prevents later mutation
 
 Then continue engineering acceptance. Do not start the 30-command product gate
-until the wire, voice-turn, intent, real fixture, and live app gates pass.
+until the wire, voice-turn, intent, frozen capability matrix, real fixture, and
+live app gates pass.

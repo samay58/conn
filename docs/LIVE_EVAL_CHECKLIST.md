@@ -1,7 +1,9 @@
 # Verified semantic engine live checklist
 
-Updated 2026-07-16. The capable-navigation candidate and Conn Lab release
+Updated 2026-07-20. The capable-navigation candidate and Conn Lab release
 matrix are mechanically green.
+This checklist is the human evidence layer for `docs/NORTH-STAR.md`; the north
+star owns the complete v1 finish line and stop rule.
 Run this only after the signed voice checks and the confidence drill in
 `docs/MANUAL-TESTING.md` pass. Native probes and scripted evals are supporting
 evidence, not product acceptance.
@@ -26,6 +28,10 @@ not satisfy this gate.
 Conn Lab results may replace repeated engineering setup and regression probes.
 They cannot count toward the 30 ordinary commands or the faster-than-hands
 judgment.
+
+Classify each planned command as supported or outside v1 before speaking it,
+using the frozen capability matrix. A failed attempt stays in the supported
+denominator. Do not reclassify it after seeing the receipt.
 
 ## Before each session
 
