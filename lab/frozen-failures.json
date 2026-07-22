@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "incidents": [
+    {
+      "id": "july13-menu-target",
+      "source_session": "session_a7613a568b",
+      "source_event": "call_8U3gFDXpcScX5P2L",
+      "fixture": "tests/fixtures/live_failures/river_duplicate.json",
+      "review_status": "frozen",
+      "expected_behavior": "Resolve the unique structural menu locator after recapture or refuse before dispatch.",
+      "required_capabilities": [
+        "menus_overlays",
+        "stable_locator"
+      ]
+    },
+    {
+      "id": "opaque-play",
+      "source_session": "session_86cb484325",
+      "source_event": "call_92t8ioFKpKCsVW4g",
+      "fixture": "tests/fixtures/live_failures/firefox_anonymous_video.json",
+      "review_status": "frozen",
+      "expected_behavior": "Use one bounded current-window visual fallback under a valid navigation grant, then report only the proof Conn has.",
+      "required_capabilities": [
+        "visual_fallback"
+      ]
+    },
+    {
+      "id": "repeated-zero-candidate",
+      "source_session": "session_86cb484325",
+      "source_event": "call_w9et9NHYknhBLpkQ",
+      "fixture": "tests/fixtures/live_failures/python_replays.json",
+      "review_status": "frozen",
+      "expected_behavior": "Replace the zero-match observation and stop repeated equivalent Accessibility searches.",
+      "required_capabilities": [
+        "context_replacement",
+        "visual_fallback"
+      ]
+    },
+    {
+      "id": "wrong-browser",
+      "source_session": "session_a7613a568b",
+      "source_event": "call_fuZFcnJ03O1OAp20",
+      "fixture": "tests/fixtures/live_failures/python_replays.json",
+      "review_status": "frozen",
+      "expected_behavior": "Preserve the requested browser bundle and literal URL or refuse before dispatch.",
+      "required_capabilities": [
+        "app_window_selection",
+        "requested_app_binding"
+      ]
+    }
+  ]
+}

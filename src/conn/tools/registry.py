@@ -257,6 +257,26 @@ def build_registry() -> dict[str, ToolSpec]:
             ),
         ),
         ToolSpec(
+            name="computer_select",
+            description=(
+                "Select one uniquely named item in a live list, table, "
+                "outline, tab group, or collection."
+            ),
+            parameters=_obj({
+                "name": {"type": "string", "minLength": 1, "maxLength": 160},
+                "kind": {"type": "string", "enum": ["tab", "document", "note", "item"]},
+                "app": {"type": "string"},
+            }, ["name"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: f"Select {a.get('name', 'item')}",
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="semantic_intent",
+            good_examples=(
+                '{"name": "computer_select", "arguments": {"name": "Projects", "kind": "item"}}',
+            ),
+        ),
+        ToolSpec(
             name="computer_select_relative",
             description=(
                 "Select the item next to the current selection: the next or "
@@ -371,7 +391,7 @@ def build_registry() -> dict[str, ToolSpec]:
             parameters=_obj({
                 "key": {"type": "string", "enum": [
                     "space", "escape", "tab", "left", "right", "up", "down",
-                    "pageup", "pagedown", "home", "end",
+                    "pageup", "pagedown", "home", "end", "find",
                 ]},
             }, ["key"]),
             risk=RiskLevel.ACT_LOW,

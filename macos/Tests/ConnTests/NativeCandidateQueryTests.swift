@@ -2,6 +2,26 @@ import XCTest
 @testable import Conn
 
 final class NativeCandidateQueryTests: XCTestCase {
+    func testTargetedQueryUsesTheFullBoundedCaptureBudget() {
+        let defaultQuery = NativeObservationQuery.parse(nil)
+        let targeted = NativeObservationQuery.parse([
+            "search_terms": ["Search"],
+            "expected_roles": ["AXTextField"],
+        ])
+        let explicit = NativeObservationQuery.parse([
+            "search_terms": ["Search"],
+            "max_nodes": 80,
+            "max_depth": 6,
+        ])
+
+        XCTAssertEqual(defaultQuery.maxNodes, 300)
+        XCTAssertEqual(defaultQuery.maxDepth, 12)
+        XCTAssertEqual(targeted.maxNodes, 500)
+        XCTAssertEqual(targeted.maxDepth, 16)
+        XCTAssertEqual(explicit.maxNodes, 80)
+        XCTAssertEqual(explicit.maxDepth, 6)
+    }
+
     func testQueryParserCarriesEveryBoundedField() {
         let query = NativeObservationQuery.parse([
             "bundle_id": "org.mozilla.firefox",
@@ -62,6 +82,154 @@ final class NativeCandidateQueryTests: XCTestCase {
         XCTAssertFalse((candidates[0]["score_reasons"] as? [String] ?? []).isEmpty)
         let descriptor = try XCTUnwrap(candidates[0]["descriptor"] as? [String: Any])
         XCTAssertEqual(descriptor["display"] as? String, "Pause video in Video")
+    }
+
+    func testFocusedFieldUsesItsNearestNativeAncestorLabel() throws {
+        var observation = candidateObservation(nodes: [
+            NativeObservationNode(
+                ref: "window", path: [0], role: "AXWindow", title: "Searching This Mac"
+            ),
+            NativeObservationNode(
+                ref: "label", parentRef: "window", path: [0, 0],
+                role: "AXGroup", title: "Search"
+            ),
+            NativeObservationNode(
+                ref: "field", parentRef: "label", path: [0, 0, 0],
+                role: "AXTextField"
+            ),
+        ])
+        observation.focusedElementRef = "field"
+        let index = NativeObservationIndex()
+
+        let result = index.candidates(
+            in: observation,
+            query: NativeObservationQuery.parse([
+                "search_terms": ["Search"],
+                "expected_roles": ["AXTextField"],
+                "result_limit": 1,
+            ])
+        )
+        let unrelated = index.candidates(
+            in: observation,
+            query: NativeObservationQuery.parse([
+                "search_terms": ["Password"],
+                "expected_roles": ["AXTextField"],
+                "result_limit": 1,
+            ])
+        )
+
+        XCTAssertEqual(result.candidates.count, 1)
+        XCTAssertEqual(result.candidates.first?.ref, "field")
+        XCTAssertEqual(result.candidates.first?.label, "Search")
+        XCTAssertTrue(unrelated.candidates.isEmpty)
+    }
+
+    func testFocusedFieldUsesMatchingAncestorPastUnrelatedContainerLabel() throws {
+        var observation = candidateObservation(nodes: [
+            NativeObservationNode(
+                ref: "window", path: [0], role: "AXWindow", title: "Finder"
+            ),
+            NativeObservationNode(
+                ref: "search", parentRef: "window", path: [0, 0],
+                role: "AXGroup", title: "Search"
+            ),
+            NativeObservationNode(
+                ref: "controls", parentRef: "search", path: [0, 0, 0],
+                role: "AXGroup", title: "Scope controls"
+            ),
+            NativeObservationNode(
+                ref: "field", parentRef: "controls", path: [0, 0, 0, 0],
+                role: "AXTextField"
+            ),
+        ])
+        observation.focusedElementRef = "field"
+
+        let result = NativeObservationIndex().candidates(
+            in: observation,
+            query: NativeObservationQuery.parse([
+                "search_terms": ["Search"],
+                "expected_roles": ["AXTextField"],
+                "result_limit": 1,
+            ])
+        )
+
+        XCTAssertEqual(result.candidates.map(\.ref), ["field"])
+        XCTAssertEqual(result.candidates.first?.label, "Search")
+    }
+
+    func testFocusedFieldSearchesTheFullBoundedAncestorChain() throws {
+        var nodes = [NativeObservationNode(
+            ref: "search", path: [0], role: "AXGroup", title: "Search"
+        )]
+        var parentRef = "search"
+        for depth in 1...10 {
+            let ref = "group-\(depth)"
+            nodes.append(NativeObservationNode(
+                ref: ref, parentRef: parentRef,
+                path: Array(repeating: 0, count: depth + 1), role: "AXGroup"
+            ))
+            parentRef = ref
+        }
+        nodes.append(NativeObservationNode(
+            ref: "field", parentRef: parentRef,
+            path: Array(repeating: 0, count: 12), role: "AXTextField"
+        ))
+        var observation = candidateObservation(nodes: nodes)
+        observation.focusedElementRef = "field"
+
+        let result = NativeObservationIndex().candidates(
+            in: observation,
+            query: NativeObservationQuery.parse([
+                "search_terms": ["Search"],
+                "expected_roles": ["AXTextField"],
+            ])
+        )
+
+        XCTAssertEqual(result.candidates.map(\.ref), ["field"])
+    }
+
+    func testFocusedFieldPrefersRelatedMatchingLabelOverInternalIdentifier() throws {
+        var observation = candidateObservation(nodes: [
+            NativeObservationNode(
+                ref: "search", path: [0], role: "AXGroup", title: "Search"
+            ),
+            NativeObservationNode(
+                ref: "field", parentRef: "search", path: [0, 0],
+                role: "AXTextField", identifier: "_NS:42"
+            ),
+        ])
+        observation.focusedElementRef = "field"
+
+        let result = NativeObservationIndex().candidates(
+            in: observation,
+            query: NativeObservationQuery.parse([
+                "search_terms": ["Search"],
+                "expected_roles": ["AXTextField"],
+            ])
+        )
+
+        XCTAssertEqual(result.candidates.map(\.ref), ["field"])
+        XCTAssertEqual(result.candidates.first?.label, "Search")
+    }
+
+    func testTextFieldValueMatchReturnsOnlyTheUserQueryAsItsLabel() throws {
+        let observation = candidateObservation(nodes: [
+            NativeObservationNode(
+                ref: "editor", role: "AXTextArea", identifier: "_NS:42",
+                redactedValue: "conn lab seed private suffix"
+            ),
+        ])
+
+        let result = NativeObservationIndex().candidates(
+            in: observation,
+            query: NativeObservationQuery.parse([
+                "search_terms": ["conn lab seed"],
+                "expected_roles": ["AXTextArea"],
+            ])
+        )
+
+        XCTAssertEqual(result.candidates.map(\.ref), ["editor"])
+        XCTAssertEqual(result.candidates.first?.label, "conn lab seed")
     }
 
     func testRoleActionAndDescendantFiltersCompose() {

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import re
 import socket
 import struct
+import time
 from typing import Callable
 
 
@@ -201,3 +202,20 @@ class VNCClient:
 
     def close(self) -> None:
         self.connection.close()
+
+
+def connect_with_retry(
+    password: str,
+    port: int,
+    *,
+    connector: Callable[[str, int], VNCClient] = VNCClient.connect,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> VNCClient:
+    for attempt in range(3):
+        try:
+            return connector(password, port)
+        except (ConnectionError, OSError):
+            if attempt == 2:
+                raise
+            sleeper(0.1 * (attempt + 1))
+    raise AssertionError("unreachable")

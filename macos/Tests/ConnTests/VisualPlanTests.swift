@@ -4,16 +4,31 @@ import XCTest
 final class VisualPlanTests: XCTestCase {
     func testOnlyActionableAccessibilityHitCanVetoVisualGrounding() {
         XCTAssertNil(ScreenCaptureVisualProvider.actionableLabel(
+            role: "AXWebArea",
             actionNames: [],
             values: ["Conn Action Fixture: opaque_media", nil]
         ))
         XCTAssertEqual(
             ScreenCaptureVisualProvider.actionableLabel(
+                role: "AXButton",
                 actionNames: ["AXPress"],
                 values: ["Send", "Submit control"]
             ),
             "Send"
         )
+    }
+
+    func testWebAreaContextMenuDoesNotVetoPrimaryVisualActivation() {
+        XCTAssertNil(ScreenCaptureVisualProvider.actionableLabel(
+            role: "AXWebArea",
+            actionNames: ["AXShowMenu", "AXScrollToVisible"],
+            values: [nil, "Conn Lab Media", nil]
+        ))
+        XCTAssertEqual(ScreenCaptureVisualProvider.actionableLabel(
+            role: "AXPopUpButton",
+            actionNames: ["AXShowMenu"],
+            values: ["Playback speed", nil]
+        ), "Playback speed")
     }
 
     func testAccessiblePlayCompilesToAXPress() async throws {

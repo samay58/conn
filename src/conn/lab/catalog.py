@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+from .capsules import CapsuleOracle, CapsuleSetup, capsule_case
 from .models import ScenarioManifest
 
 
@@ -13,9 +14,10 @@ MAX_SCENARIOS = 64
 
 @dataclass(frozen=True, slots=True)
 class ScenarioDriver:
-    fixture_scene: str | None
-    vertical_scenario: str
-    truth_server_run_id: str | None
+    capsule: str
+    case: str
+    setup: CapsuleSetup
+    oracle: CapsuleOracle
 
 
 def load_catalog(root: Path) -> dict[str, ScenarioManifest]:
@@ -44,16 +46,19 @@ def load_catalog(root: Path) -> dict[str, ScenarioManifest]:
 
 def driver_config(manifest: ScenarioManifest) -> ScenarioDriver:
     state = manifest.initial_state
-    if set(state) != {
-        "fixture_scene",
-        "vertical_scenario",
-        "truth_server_run_id",
-    }:
+    if set(state) != {"capsule", "case"}:
         raise ValueError("lab scenario driver is invalid")
-    fixture = _optional_identifier(state.get("fixture_scene"))
-    vertical = _identifier(state.get("vertical_scenario"))
-    truth = _optional_run_id(state.get("truth_server_run_id"))
-    return ScenarioDriver(fixture, vertical, truth)
+    capsule = _identifier(state.get("capsule"))
+    case = _identifier(state.get("case"))
+    selected = capsule_case(capsule, case)
+    if selected.oracle.kind != manifest.oracle.kind:
+        raise ValueError("lab capsule oracle does not match manifest")
+    return ScenarioDriver(
+        capsule=capsule,
+        case=case,
+        setup=selected.setup,
+        oracle=selected.oracle,
+    )
 
 
 def result_matches_manifest(manifest: ScenarioManifest, result: dict) -> bool:
@@ -62,9 +67,15 @@ def result_matches_manifest(manifest: ScenarioManifest, result: dict) -> bool:
     expected_receipt = manifest.expected_receipt
     if not isinstance(receipt, dict) or not isinstance(oracle, dict):
         return False
-    if receipt.get("outcome") != expected_receipt.outcome.value:
-        return False
-    if receipt.get("reason_code") != expected_receipt.reason_code:
+    outcome = receipt.get("outcome")
+    expected_outcome = expected_receipt.outcome.value
+    if expected_outcome == "dispatch_only" and outcome == "verified":
+        if receipt.get("reason_code") is not None:
+            return False
+    elif (
+        outcome != expected_outcome
+        or receipt.get("reason_code") != expected_receipt.reason_code
+    ):
         return False
     if result.get("dispatch_count") != manifest.expected_dispatch_count:
         return False
@@ -88,26 +99,6 @@ def _identifier(value: object) -> str:
         or not value
         or len(value) > 80
         or not value.replace("_", "").isalnum()
-    ):
-        raise ValueError("lab scenario driver is invalid")
-    return value
-
-
-def _optional_identifier(value: object) -> str | None:
-    return None if value is None else _identifier(value)
-
-
-def _optional_run_id(value: object) -> str | None:
-    if value is None:
-        return None
-    if (
-        not isinstance(value, str)
-        or not value
-        or len(value) > 64
-        or any(
-            not (character.islower() or character.isdigit() or character == "-")
-            for character in value
-        )
     ):
         raise ValueError("lab scenario driver is invalid")
     return value

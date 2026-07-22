@@ -37,6 +37,7 @@ PYTHONPATH=src .venv/bin/python -m conn --action-probe fixture    # installed-ap
 PYTHONPATH=src .venv/bin/python -m conn.lab doctor
 PYTHONPATH=src .venv/bin/python -m conn.lab run safari-tab --mode scripted --fresh
 PYTHONPATH=src .venv/bin/python -m conn.lab suite smoke
+PYTHONPATH=src .venv/bin/python -m conn.lab suite breadth
 PYTHONPATH=src .venv/bin/python -m conn.lab suite release
 PYTHONPATH=src .venv/bin/python -m conn.lab report RUN_ID
 

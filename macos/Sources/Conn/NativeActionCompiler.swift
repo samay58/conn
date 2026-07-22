@@ -20,7 +20,7 @@ struct NativeActionCompiler {
     private static let reversibleControlWords: Set<String> = [
         "play", "pause", "mute", "unmute", "seek", "back", "forward",
         "next", "previous", "cancel", "tab", "link", "open", "scroll",
-        "context", "double", "click",
+        "today", "context", "double", "click",
     ]
 
     func bindApplication(
@@ -198,7 +198,7 @@ struct NativeActionCompiler {
         let keys = rawKeys.map { $0.lowercased() }
         let singleKeys: Set<String> = [
             "space", "escape", "tab", "left", "right", "up", "down",
-            "pageup", "pagedown", "home", "end",
+            "pageup", "pagedown", "home", "end", "find",
         ]
         if keys.count == 1 { return singleKeys.contains(keys[0]) }
         return Set(keys) == Set(["cmd", "l"]) || Set(keys) == Set(["cmd", "t"])

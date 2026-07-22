@@ -85,7 +85,12 @@ final class NativeEffectEvaluator {
                 ? "absent" : "present"
         case "element_attribute_equals", "element_attribute_changes",
              "element_attribute_increases", "element_attribute_decreases":
-            return findNode(ref: predicate.ref, baseline: baseline, in: snapshot)?
+            return findNode(
+                ref: predicate.ref,
+                baseline: baseline,
+                in: snapshot,
+                allowFrameMovement: predicate.attribute == "visible"
+            )?
                 .attribute(predicate.attribute ?? "value") ?? "unavailable"
         case "element_child_count_increases":
             guard let collection = findNode(
@@ -117,6 +122,14 @@ final class NativeEffectEvaluator {
             ) else { return "absent" }
             return node.ref == snapshot.focusedElementRef || node.focused == true
                 ? "focused" : "not_focused"
+        case "unique_focused_find_field_appears":
+            return String(focusedFindFields(in: snapshot).count)
+        case "unique_page_status_changes":
+            return uniquePageStatusValue(in: snapshot) ?? "unavailable"
+        case "collection_selected_peer_index_changes_by_one":
+            return collectionSelectedPeerIndex(
+                predicate, baseline: baseline, in: snapshot
+            ).map(String.init) ?? "unavailable"
         case "text_contains", "text_hash_equals":
             return findNode(ref: predicate.ref, baseline: baseline, in: snapshot)?
                 .valueHash ?? "unavailable"
@@ -150,7 +163,12 @@ final class NativeEffectEvaluator {
         case "element_disappears":
             return findNode(ref: predicate.ref, baseline: before, in: after) == nil
         case "element_attribute_equals":
-            return findNode(ref: predicate.ref, baseline: before, in: after)?
+            return findNode(
+                ref: predicate.ref,
+                baseline: before,
+                in: after,
+                allowFrameMovement: predicate.attribute == "visible"
+            )?
                 .attribute(predicate.attribute ?? "value") == predicate.expected
         case "element_attribute_changes":
             guard let baseline = predicate.baseline,
@@ -197,6 +215,33 @@ final class NativeEffectEvaluator {
                 return false
             }
             return node.ref == after.focusedElementRef || node.focused == true
+        case "unique_focused_find_field_appears":
+            return predicate.baseline == "0"
+                && focusedFindFields(in: after).count == 1
+        case "unique_page_status_changes":
+            guard let baseline = predicate.baseline,
+                  let afterValue = uniquePageStatusValue(in: after),
+                  let beforePage = NativePageStatus.pageAndTotal(baseline),
+                  let afterPage = NativePageStatus.pageAndTotal(afterValue),
+                  beforePage.total == afterPage.total else { return false }
+            if predicate.expected == "next" {
+                return afterPage.page == beforePage.page + 1
+            }
+            if predicate.expected == "previous" {
+                return afterPage.page == beforePage.page - 1
+            }
+            return false
+        case "collection_selected_peer_index_changes_by_one":
+            guard let baseline = predicate.baseline.flatMap(Int.init),
+                  let current = collectionSelectedPeerIndex(
+                      predicate, baseline: before, in: after
+                  ) else {
+                return false
+            }
+            if predicate.expected == "next" {
+                return current == baseline + 1
+            }
+            return current == baseline - 1
         case "text_contains":
             guard let expected = predicate.expected else { return false }
             return findNode(ref: predicate.ref, baseline: before, in: after)?
@@ -245,6 +290,17 @@ final class NativeEffectEvaluator {
                         itemRoles: itemRoles,
                         in: snapshot))
                 }
+            }
+            if predicate.kind == "unique_focused_find_field_appears" {
+                bound.baseline = String(focusedFindFields(in: snapshot).count)
+            }
+            if predicate.kind == "unique_page_status_changes" {
+                bound.baseline = uniquePageStatusValue(in: snapshot)
+            }
+            if predicate.kind == "collection_selected_peer_index_changes_by_one" {
+                bound.baseline = collectionSelectedPeerIndex(
+                    predicate, baseline: snapshot, in: snapshot
+                ).map(String.init)
             }
             return bound
         }
@@ -296,8 +352,148 @@ final class NativeEffectEvaluator {
                     return false
                 }
             }
+            if predicate.kind == "collection_selected_peer_index_changes_by_one" {
+                guard let ref = predicate.ref,
+                      predicate.attribute != nil,
+                      ["next", "previous"].contains(predicate.expected),
+                      snapshot.nodes.filter({ $0.ref == ref }).count == 1 else {
+                    return false
+                }
+                guard collectionSelectedPeerIndex(
+                    predicate, baseline: snapshot, in: snapshot
+                ) != nil else {
+                    return false
+                }
+            }
         }
         return true
+    }
+
+    func selectionBindingsRemainCurrent(
+        _ group: NativeEffectGroup,
+        baseline: NativeCapturedObservation,
+        current: NativeCapturedObservation
+    ) -> Bool {
+        for predicate in group.predicates
+        where predicate.kind == "collection_selected_peer_index_changes_by_one" {
+            guard let bound = predicate.baseline,
+                  predicateMeasurement(
+                      predicate,
+                      snapshot: current,
+                      baseline: baseline
+                  ) == bound else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func uniquePageStatusValue(
+        in snapshot: NativeCapturedObservation
+    ) -> String? {
+        let matches = snapshot.nodes.compactMap(NativePageStatus.recognizedValue)
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    private func collectionSelectedPeerIndex(
+        _ predicate: NativeEffectPredicate,
+        baseline: NativeCapturedObservation,
+        in snapshot: NativeCapturedObservation
+    ) -> Int? {
+        guard let ref = predicate.ref,
+              let role = predicate.attribute,
+              let baselineCollection = baseline.nodes.first(where: {
+                  $0.ref == ref
+              }) else { return nil }
+        let baselineSelectedRows = collectionRows(
+            ref: ref, role: role, in: baseline
+        ).filter { $0.selected == true }
+        guard baselineSelectedRows.count == 1,
+              let baselineSelected = baselineSelectedRows.first else { return nil }
+        let baselinePeerCount = NativeObservationStore.selectionPeers(
+            matching: baselineSelected,
+            collectionRef: ref,
+            in: baseline
+        ).count
+        let collections = snapshot.nodes.filter { collection in
+            collection.role == baselineCollection.role
+                && collection.subrole == baselineCollection.subrole
+                && collection.title == baselineCollection.title
+                && (baselineCollection.identifier == nil
+                    || collection.identifier == baselineCollection.identifier)
+                && NativeObservationStore.selectionPeers(
+                    matching: baselineSelected,
+                    collectionRef: collection.ref,
+                    in: snapshot
+                ).count == baselinePeerCount
+        }
+        let indices = collections.compactMap { collection -> Int? in
+            let peers = NativeObservationStore.selectionPeers(
+                matching: baselineSelected,
+                collectionRef: collection.ref,
+                in: snapshot
+            )
+            let selected = peers.indices.filter {
+                peers[$0].selected == true
+            }
+            return selected.count == 1 ? selected[0] : nil
+        }
+        return indices.count == 1 ? indices[0] : nil
+    }
+
+    private func collectionRows(
+        ref: String,
+        role: String,
+        in snapshot: NativeCapturedObservation
+    ) -> [NativeObservationNode] {
+        snapshot.nodes.filter {
+            $0.parentRef == ref && $0.role == role
+        }
+    }
+
+    private func focusedFindFields(
+        in snapshot: NativeCapturedObservation
+    ) -> [NativeObservationNode] {
+        return snapshot.nodes.filter { node in
+            guard !node.secure,
+                  node.ref == snapshot.focusedElementRef || node.focused == true else {
+                return false
+            }
+            if node.role == "AXSearchField" { return true }
+            guard ["AXTextField", "AXComboBox"].contains(node.role) else {
+                return false
+            }
+            return relatedFindLabel(for: node, in: snapshot)
+        }
+    }
+
+    private func relatedFindLabel(
+        for node: NativeObservationNode,
+        in snapshot: NativeCapturedObservation
+    ) -> Bool {
+        if hasFindLabel(node) { return true }
+        var parentRef = node.parentRef
+        var visited: Set<String> = []
+        while let ref = parentRef, visited.insert(ref).inserted,
+              let parent = snapshot.nodes.first(where: { $0.ref == ref }) {
+            if hasFindLabel(parent) { return true }
+            parentRef = parent.parentRef
+        }
+        return snapshot.nodes.contains { candidate in
+            hasFindLabel(candidate)
+                && isDescendant(candidate, of: node.ref, in: snapshot)
+        }
+    }
+
+    private func hasFindLabel(_ node: NativeObservationNode) -> Bool {
+        let words = [node.title, node.description, node.identifier]
+            .compactMap { $0 }
+            .flatMap { value in
+                value.lowercased().split {
+                    !$0.isLetter && !$0.isNumber
+                }.map(String.init)
+            }
+        return words.contains("search") || words.contains("find")
     }
 
     func roleSet(_ value: String) -> Set<String> {
@@ -411,10 +607,23 @@ final class NativeEffectEvaluator {
     func findNode(
         ref: String?,
         baseline: NativeCapturedObservation,
-        in snapshot: NativeCapturedObservation
+        in snapshot: NativeCapturedObservation,
+        allowFrameMovement: Bool = false
     ) -> NativeObservationNode? {
         guard let ref else { return nil }
-        let resolution = store.resolveWitness(
+        let resolution = allowFrameMovement
+            ? store.resolveMovingWitness(
+                target: NativeActionTarget(
+                    snapshotID: baseline.snapshotID,
+                    ref: ref,
+                    identifier: nil,
+                    title: nil,
+                    bundleID: baseline.bundleID
+                ),
+                baseline: baseline,
+                current: snapshot
+            )
+            : store.resolveWitness(
             target: NativeActionTarget(
                 snapshotID: baseline.snapshotID,
                 ref: ref,
@@ -604,6 +813,24 @@ struct NativeTransactionExecutor {
                 started: started
             )
         }
+        if !evaluator.selectionBindingsRemainCurrent(
+            plan.effect,
+            baseline: plan.baseline,
+            current: current
+        ) {
+            return receipt(
+                outcome: .failed,
+                dispatch: .notDispatched,
+                plan: plan,
+                strategy: nil,
+                evidence: [evidence(
+                    "selection_binding", false, "changed_before_dispatch"
+                )],
+                nativeError: "stale_plan",
+                started: started,
+                after: current
+            )
+        }
         let preDispatchEffect = evaluator.evaluate(
             plan.effect,
             before: plan.baseline,
@@ -624,18 +851,25 @@ struct NativeTransactionExecutor {
 
         let resolved: NativeResolvedTarget?
         if executionNeedsTarget(plan.request.operation), let original = plan.target {
-            let resolution = store.resolve(
-                target: NativeActionTarget(
-                    snapshotID: plan.baseline.snapshotID,
-                    ref: original.ref,
-                    identifier: original.identifier,
-                    title: original.title,
-                    bundleID: plan.baseline.bundleID,
-                    descendantKey: plan.request.target.descendantKey
-                ),
-                baseline: plan.baseline,
-                current: current
+            let actionTarget = NativeActionTarget(
+                snapshotID: plan.baseline.snapshotID,
+                ref: original.ref,
+                identifier: original.identifier,
+                title: original.title,
+                bundleID: plan.baseline.bundleID,
+                descendantKey: plan.request.target.descendantKey
             )
+            let resolution = plan.strategies == [.semanticRowKeySelect]
+                ? store.resolveWitness(
+                    target: actionTarget,
+                    baseline: plan.baseline,
+                    current: current
+                )
+                : store.resolve(
+                    target: actionTarget,
+                    baseline: plan.baseline,
+                    current: current
+                )
             switch resolution {
             case .success(let target):
                 if target.current.secure {

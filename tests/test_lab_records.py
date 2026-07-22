@@ -4,6 +4,7 @@ from pathlib import Path
 from conn.lab.catalog import load_catalog
 from conn.lab.models import RunStatus
 from conn.lab.records import BuildIdentity, write_run_records
+from conn.lab import records
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,3 +52,31 @@ def test_run_records_bind_manifest_receipt_oracle_and_build(tmp_path: Path) -> N
     assert oracle["actual"]["effect"] == "control_changed"
     assert artifact["scenario_digest"] == manifest.digest
     assert artifact["binary_sha256"] == "c" * 64
+
+
+def test_build_identity_reuses_immutable_host_checks_within_one_process(
+    monkeypatch,
+) -> None:
+    calls = []
+
+    def run_text(argv, **_kwargs):
+        calls.append(tuple(argv))
+        if argv[-1] == "--version":
+            return records.PINNED_TART_VERSION
+        if "rev-parse" in argv:
+            return "commit"
+        return "Authority=Conn Dev Signing"
+
+    monkeypatch.setattr(records.shutil, "which", lambda _name: "/usr/bin/tart")
+    monkeypatch.setattr(records, "_run_text", run_text)
+    monkeypatch.setattr(records, "_file_sha256", lambda _path: "a" * 64)
+    monkeypatch.setattr(records, "dirty_tree_digest", lambda _root: "b" * 64)
+
+    first = records.collect_build_identity(ROOT, guest_os_build="25A1")
+    second = records.collect_build_identity(ROOT, guest_os_build="25A1")
+
+    assert first == second
+    assert sum(
+        any(item.endswith("/codesign") for item in call)
+        for call in calls
+    ) == 1

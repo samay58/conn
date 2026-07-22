@@ -23,32 +23,78 @@ from conn.tools.registry import build_registry, export_openai
 LAB_COMMAND = "lab create fixture window"
 MAX_SCRIPTED_AUDIO_BYTES = 64_000
 VERTICAL_SCENARIOS = (
+    "calendar_next",
+    "calendar_open",
+    "calendar_today",
     "control",
+    "finder_open",
+    "finder_search",
+    "finder_select",
     "menu",
     "visual",
     "firefox_open",
+    "fixture_composed",
+    "fixture_scroll",
+    "fixture_select",
+    "fixture_select_named",
+    "fixture_type",
     "safari_local",
+    "safari_focus",
+    "safari_history",
+    "safari_scroll",
     "safari_tab",
+    "safari_visual",
+    "terminal_window",
     "firefox_local",
     "firefox_visual",
     "firefox_space",
+    "firefox_scroll",
     "notes_create",
     "notes_type",
     "notes_select",
     "notes_observe",
+    "preview_open",
+    "preview_next_page",
+    "preview_scroll",
 )
 _VERTICAL_COMMANDS = {
+    "calendar_next": "Show the next month in Calendar",
+    "calendar_open": "Open Calendar",
+    "calendar_today": "Go to today in Calendar",
     "control": LAB_COMMAND,
+    "finder_open": "Open Finder",
+    "finder_search": "Search for conn lab query in Finder",
+    "finder_select": "Select the folder named Projects",
     "firefox_open": "Open Firefox",
+    "fixture_composed": "Open the fixture and select the next row",
+    "fixture_scroll": "Scroll until Appendix is visible",
+    "fixture_select": "Select the next row",
+    "fixture_select_named": "Select Archive",
+    "fixture_type": "Type conn lab query in Search",
     "safari_local": "Open the Conn Lab page in Safari",
+    "safari_focus": "Focus the tab named Example Domain",
+    "safari_history": "Go back one page in Safari",
+    "safari_scroll": "Scroll until Appendix is visible in Safari",
     "safari_tab": "Open a new tab in Safari",
+    "safari_visual": "Play the video in Safari",
     "firefox_local": "Open the Conn Lab page in Firefox",
     "firefox_visual": "Play the video in Firefox",
     "firefox_space": "Press Space in Firefox",
+    "firefox_scroll": "Scroll until Appendix is visible in Firefox",
     "notes_create": "Create a new note in Notes",
     "notes_type": "Replace the seed note with scratch text",
     "notes_select": "Select the next note in Notes",
     "notes_observe": "Observe the Notes window",
+    "preview_open": "Open Preview",
+    "preview_next_page": "Go to the next page",
+    "preview_scroll": "Scroll until the Appendix heading is visible",
+    "terminal_window": "Open a new Terminal window",
+}
+_APP_OPEN_NAMES = {
+    "calendar_open": "Calendar",
+    "finder_open": "Finder",
+    "firefox_open": "Firefox",
+    "preview_open": "Preview",
 }
 LAB_SCENARIO = {
     "id": "lab-create-fixture-window",
@@ -189,26 +235,26 @@ VISUAL_SCENARIO = {
         },
     ],
 }
-FIREFOX_OPEN_SCENARIO = {
-    "id": "lab-open-firefox",
-    "default": True,
-    "match": ["open firefox"],
-    "spoken": "Open Firefox",
-    "segments": [
-        {
-            "say": "Opening Firefox.",
-            "tools": [{
-                "name": "app_open",
-                "arguments": {"app": "Firefox"},
-            }],
-            "usage": LAB_SCENARIO["segments"][0]["usage"],
-        },
-        {
-            "say": "Firefox is open.",
-            "usage": LAB_SCENARIO["segments"][2]["usage"],
-        },
-    ],
-}
+def app_open_scenario(scenario: str) -> dict:
+    app = _APP_OPEN_NAMES[scenario]
+    command = _VERTICAL_COMMANDS[scenario]
+    return {
+        "id": f"lab-open-{app.lower()}",
+        "default": True,
+        "match": [command.lower()],
+        "spoken": command,
+        "segments": [
+            {
+                "say": f"Opening {app}.",
+                "tools": [{"name": "app_open", "arguments": {"app": app}}],
+                "usage": LAB_SCENARIO["segments"][0]["usage"],
+            },
+            {
+                "say": f"{app} is open.",
+                "usage": LAB_SCENARIO["segments"][2]["usage"],
+            },
+        ],
+    }
 SAFARI_LOCAL_SCENARIO = {
     "id": "lab-safari-local-page",
     "default": True,
@@ -232,6 +278,129 @@ SAFARI_LOCAL_SCENARIO = {
         },
     ],
 }
+FINDER_SELECT_SCENARIO = {
+    "id": "lab-finder-select",
+    "default": True,
+    "match": ["select the folder named projects"],
+    "spoken": "Select the folder named Projects",
+    "segments": [
+        {
+            "say": "Reading the live Finder row.",
+            "tools": [{
+                "name": "computer_ax_snapshot",
+                "arguments": {"query": "Projects", "result_limit": 10},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Selecting Projects.",
+            "tools": [{
+                "name": "computer_select",
+                "arguments": {
+                    "name": "Projects",
+                    "kind": "item",
+                    "app": "Finder",
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "Projects is selected.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+FINDER_SEARCH_SCENARIO = {
+    "id": "lab-finder-search",
+    "default": True,
+    "match": ["search for conn lab query in finder"],
+    "spoken": "Search for conn lab query in Finder",
+    "segments": [
+        {
+            "say": "Opening Find.",
+            "tools": [{
+                "name": "computer_key",
+                "arguments": {"key": "find"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Grounding the live search field.",
+            "tools": [{
+                "name": "computer_ax_snapshot",
+                "arguments": {
+                    "query": "Search",
+                    "expected_roles": ["AXSearchField", "AXTextField"],
+                    "result_limit": 1,
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "Typing the query.",
+            "tools": [{
+                "name": "computer_type_text",
+                "arguments": {
+                    "snapshot_id": "__LAB_SNAPSHOT_ID__",
+                    "ref": "__LAB_REF__",
+                    "text": "conn lab query",
+                    "submit": False,
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "The Finder search is ready.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+
+
+def calendar_control_scenario(scenario: str) -> dict:
+    values = {
+        "calendar_today": ("Today", "Go to today"),
+        "calendar_next": ("Next", "Show the next month"),
+    }
+    query, goal = values[scenario]
+    command = _VERTICAL_COMMANDS[scenario]
+    return {
+        "id": f"lab-{scenario.replace('_', '-')}",
+        "default": True,
+        "match": [command.lower()],
+        "spoken": command,
+        "segments": [
+            {
+                "say": f"Grounding {query} in Calendar.",
+                "tools": [{
+                    "name": "computer_ax_snapshot",
+                    "arguments": {
+                        "query": query,
+                        "expected_roles": ["AXButton"],
+                        "expected_actions": ["AXPress"],
+                        "result_limit": 1,
+                    },
+                }],
+                "usage": LAB_SCENARIO["segments"][0]["usage"],
+            },
+            {
+                "say": f"Activating {query}.",
+                "tools": [{
+                    "name": "computer_activate",
+                    "arguments": {
+                        "goal": goal,
+                        "snapshot_id": "__LAB_SNAPSHOT_ID__",
+                        "ref": "__LAB_REF__",
+                    },
+                }],
+                "usage": LAB_SCENARIO["segments"][1]["usage"],
+            },
+            {
+                "say": "Calendar changed.",
+                "usage": LAB_SCENARIO["segments"][2]["usage"],
+            },
+        ],
+    }
 SAFARI_TAB_SCENARIO = {
     "id": "lab-safari-new-tab",
     "default": True,
@@ -248,6 +417,63 @@ SAFARI_TAB_SCENARIO = {
         },
         {
             "say": "The Safari tab was requested.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+SAFARI_FOCUS_SCENARIO = {
+    "id": "lab-safari-focus",
+    "default": True,
+    "match": ["focus the tab named example domain"],
+    "spoken": "Focus the tab named Example Domain",
+    "segments": [
+        {
+            "say": "Focusing Example Domain.",
+            "tools": [{
+                "name": "app_focus_tab",
+                "arguments": {"title": "Example Domain", "app": "Safari"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Example Domain is selected.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+SAFARI_HISTORY_SCENARIO = {
+    "id": "lab-safari-history",
+    "default": True,
+    "match": ["go back one page in safari"],
+    "spoken": "Go back one page in Safari",
+    "segments": [
+        {
+            "say": "Grounding the current Back button.",
+            "tools": [{
+                "name": "computer_ax_snapshot",
+                "arguments": {
+                    "query": "Back",
+                    "expected_roles": ["AXButton"],
+                    "expected_actions": ["AXPress"],
+                    "result_limit": 1,
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Going back one page.",
+            "tools": [{
+                "name": "computer_activate",
+                "arguments": {
+                    "goal": "Go back one page",
+                    "snapshot_id": "__LAB_SNAPSHOT_ID__",
+                    "ref": "__LAB_REF__",
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "The Back button was activated.",
             "usage": LAB_SCENARIO["segments"][2]["usage"],
         },
     ],
@@ -295,6 +521,66 @@ FIREFOX_SPACE_SCENARIO = {
         },
     ],
 }
+FIREFOX_SCROLL_SCENARIO = {
+    "id": "lab-firefox-scroll",
+    "default": True,
+    "match": ["scroll until appendix is visible in firefox"],
+    "spoken": "Scroll until Appendix is visible in Firefox",
+    "segments": [
+        {
+            "say": "Scrolling one page toward Appendix.",
+            "tools": [{
+                "name": "computer_key",
+                "arguments": {"key": "pagedown"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "The page was scrolled.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+
+
+def browser_scroll_scenario(browser: str) -> dict:
+    command = f"Scroll until Appendix is visible in {browser}"
+    return {
+        "id": f"lab-{browser.lower()}-scroll",
+        "default": True,
+        "match": [command.lower()],
+        "spoken": command,
+        "segments": [
+            {
+                "say": "Grounding Appendix.",
+                "tools": [{
+                    "name": "computer_ax_snapshot",
+                    "arguments": {
+                        "query": "Appendix",
+                        "expected_actions": ["AXScrollToVisible"],
+                        "result_limit": 1,
+                    },
+                }],
+                "usage": LAB_SCENARIO["segments"][0]["usage"],
+            },
+            {
+                "say": "Scrolling to Appendix.",
+                "tools": [{
+                    "name": "computer_scroll",
+                    "arguments": {
+                        "snapshot_id": "__LAB_SNAPSHOT_ID__",
+                        "ref": "__LAB_REF__",
+                    },
+                }],
+                "usage": LAB_SCENARIO["segments"][1]["usage"],
+            },
+            {
+                "say": "Appendix is visible.",
+                "usage": LAB_SCENARIO["segments"][2]["usage"],
+            },
+        ],
+    }
+
 NOTES_CREATE_SCENARIO = {
     "id": "lab-notes-create",
     "default": True,
@@ -396,6 +682,214 @@ NOTES_OBSERVE_SCENARIO = {
         },
     ],
 }
+TERMINAL_WINDOW_SCENARIO = {
+    "id": "lab-terminal-window",
+    "default": True,
+    "match": ["open a new terminal window"],
+    "spoken": "Open a new Terminal window",
+    "segments": [
+        {
+            "say": "Creating one Terminal window.",
+            "tools": [{
+                "name": "computer_create",
+                "arguments": {"kind": "window", "app": "Terminal"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "The Terminal window was requested.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+PREVIEW_NEXT_PAGE_SCENARIO = {
+    "id": "lab-preview-next-page",
+    "default": True,
+    "match": ["go to the next page"],
+    "spoken": "Go to the next page",
+    "segments": [
+        {
+            "say": "Moving forward one page.",
+            "tools": [{
+                "name": "computer_key",
+                "arguments": {"key": "pagedown"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "The next page was requested.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+PREVIEW_SCROLL_SCENARIO = {
+    "id": "lab-preview-scroll",
+    "default": True,
+    "match": ["scroll until the appendix heading is visible"],
+    "spoken": "Scroll until the Appendix heading is visible",
+    "segments": [
+        {
+            "say": "Moving forward one page.",
+            "tools": [{
+                "name": "computer_key",
+                "arguments": {"key": "pagedown"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Moving forward one more page.",
+            "tools": [{
+                "name": "computer_key",
+                "arguments": {"key": "right"},
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "Appendix is visible.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+FIXTURE_COMPOSED_SCENARIO = {
+    "id": "lab-fixture-composed",
+    "default": True,
+    "match": ["open the fixture and select the next row"],
+    "spoken": "Open the fixture and select the next row",
+    "segments": [
+        {
+            "say": "Opening the fixture.",
+            "tools": [{
+                "name": "computer_create",
+                "arguments": {"kind": "window"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Selecting the next row.",
+            "tools": [{
+                "name": "computer_select_relative",
+                "arguments": {"relation": "next", "kind": "item"},
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "The next row is selected.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+FIXTURE_SELECT_SCENARIO = {
+    "id": "lab-fixture-select",
+    "default": True,
+    "match": ["select the next row"],
+    "spoken": "Select the next row",
+    "segments": [
+        {
+            "say": "Selecting the next row.",
+            "tools": [{
+                "name": "computer_select_relative",
+                "arguments": {"relation": "next", "kind": "item"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "The next row was selected.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+FIXTURE_SELECT_NAMED_SCENARIO = {
+    "id": "lab-fixture-select-named",
+    "default": True,
+    "match": ["select archive"],
+    "spoken": "Select Archive",
+    "segments": [
+        {
+            "say": "Selecting Archive.",
+            "tools": [{
+                "name": "computer_select",
+                "arguments": {"name": "Archive", "kind": "item"},
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Archive is selected.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+FIXTURE_TYPE_SCENARIO = {
+    "id": "lab-fixture-type",
+    "default": True,
+    "match": ["type conn lab query in search"],
+    "spoken": "Type conn lab query in Search",
+    "segments": [
+        {
+            "say": "Grounding Search.",
+            "tools": [{
+                "name": "computer_ax_snapshot",
+                "arguments": {
+                    "query": "Search",
+                    "expected_roles": ["AXTextField"],
+                    "result_limit": 1,
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Typing the query.",
+            "tools": [{
+                "name": "computer_type_text",
+                "arguments": {
+                    "snapshot_id": "__LAB_SNAPSHOT_ID__",
+                    "ref": "__LAB_REF__",
+                    "text": "conn lab query",
+                    "submit": False,
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "The query was entered.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
+FIXTURE_SCROLL_SCENARIO = {
+    "id": "lab-fixture-scroll",
+    "default": True,
+    "match": ["scroll until appendix is visible"],
+    "spoken": "Scroll until Appendix is visible",
+    "segments": [
+        {
+            "say": "Grounding Appendix.",
+            "tools": [{
+                "name": "computer_ax_snapshot",
+                "arguments": {
+                    "query": "Appendix",
+                    "expected_actions": ["AXScrollToVisible"],
+                    "result_limit": 1,
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][0]["usage"],
+        },
+        {
+            "say": "Scrolling to Appendix.",
+            "tools": [{
+                "name": "computer_scroll",
+                "arguments": {
+                    "snapshot_id": "__LAB_SNAPSHOT_ID__",
+                    "ref": "__LAB_REF__",
+                },
+            }],
+            "usage": LAB_SCENARIO["segments"][1]["usage"],
+        },
+        {
+            "say": "Appendix is visible.",
+            "usage": LAB_SCENARIO["segments"][2]["usage"],
+        },
+    ],
+}
 
 
 def read_scripted_audio(path: Path) -> bytes:
@@ -483,6 +977,46 @@ class GroundedLabAdapter(FakeRealtimeAdapter):
         await super().create_response()
 
 
+class VerifiedSequenceLabAdapter(FakeRealtimeAdapter):
+    def __init__(self, scenario: dict):
+        super().__init__([copy.deepcopy(scenario)], pace_s=0)
+        self._stop_sequence = False
+
+    async def send_tool_result(
+        self,
+        call_id: str,
+        output: str,
+        model_observation=None,
+        visual_observation=None,
+    ) -> None:
+        await super().send_tool_result(
+            call_id,
+            output,
+            model_observation=model_observation,
+            visual_observation=visual_observation,
+        )
+        if len(output) > 64_000:
+            self._stop_sequence = True
+            return
+        try:
+            payload = json.loads(output)
+        except ValueError:
+            self._stop_sequence = True
+            return
+        outcome = payload.get("outcome") if isinstance(payload, dict) else None
+        if isinstance(outcome, str) and outcome != "verified":
+            self._stop_sequence = True
+
+    async def create_response(self) -> None:
+        if (
+            self._pending_input is None
+            and self._stop_sequence
+            and self._active is not None
+        ):
+            self._cursor = len(self._active["segments"])
+        await super().create_response()
+
+
 class VisualLabAdapter(FakeRealtimeAdapter):
     def __init__(self, scenario: dict | None = None):
         super().__init__([copy.deepcopy(scenario or VISUAL_SCENARIO)], pace_s=0)
@@ -549,23 +1083,40 @@ def build_vertical_app(
         )
     elif scenario == "control":
         adapter = GroundedLabAdapter()
+    elif scenario in {"calendar_today", "calendar_next"}:
+        adapter = GroundedLabAdapter(calendar_control_scenario(scenario))
     elif scenario == "menu":
         adapter = FakeRealtimeAdapter([copy.deepcopy(MENU_SCENARIO)], pace_s=0)
     elif scenario == "visual":
         adapter = VisualLabAdapter()
-    elif scenario == "firefox_visual":
+    elif scenario in {"firefox_visual", "safari_visual"}:
+        browser = "Firefox" if scenario == "firefox_visual" else "Safari"
         visual_scenario = copy.deepcopy(VISUAL_SCENARIO)
         visual_scenario.update({
-            "id": "lab-firefox-visual",
-            "match": ["play the video in firefox"],
-            "spoken": "Play the video in Firefox",
+            "id": f"lab-{browser.lower()}-visual",
+            "match": [f"play the video in {browser.lower()}"],
+            "spoken": f"Play the video in {browser}",
         })
         adapter = VisualLabAdapter(visual_scenario)
-    elif scenario == "firefox_open":
+    elif scenario in _APP_OPEN_NAMES:
         adapter = FakeRealtimeAdapter(
-            [copy.deepcopy(FIREFOX_OPEN_SCENARIO)],
+            [app_open_scenario(scenario)],
             pace_s=0,
         )
+    elif scenario == "preview_next_page":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(PREVIEW_NEXT_PAGE_SCENARIO)], pace_s=0
+        )
+    elif scenario == "preview_scroll":
+        adapter = VerifiedSequenceLabAdapter(PREVIEW_SCROLL_SCENARIO)
+    elif scenario == "finder_select":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(FINDER_SELECT_SCENARIO)], pace_s=0
+        )
+    elif scenario == "finder_search":
+        adapter = GroundedLabAdapter(FINDER_SEARCH_SCENARIO)
+    elif scenario == "fixture_composed":
+        adapter = VerifiedSequenceLabAdapter(FIXTURE_COMPOSED_SCENARIO)
     elif scenario == "safari_local":
         adapter = FakeRealtimeAdapter(
             [copy.deepcopy(SAFARI_LOCAL_SCENARIO)],
@@ -576,6 +1127,12 @@ def build_vertical_app(
             [copy.deepcopy(SAFARI_TAB_SCENARIO)],
             pace_s=0,
         )
+    elif scenario == "safari_focus":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(SAFARI_FOCUS_SCENARIO)], pace_s=0
+        )
+    elif scenario == "safari_history":
+        adapter = GroundedLabAdapter(SAFARI_HISTORY_SCENARIO)
     elif scenario == "firefox_local":
         adapter = FakeRealtimeAdapter(
             [copy.deepcopy(FIREFOX_LOCAL_SCENARIO)],
@@ -586,6 +1143,12 @@ def build_vertical_app(
             [copy.deepcopy(FIREFOX_SPACE_SCENARIO)],
             pace_s=0,
         )
+    elif scenario == "firefox_scroll":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(FIREFOX_SCROLL_SCENARIO)], pace_s=0
+        )
+    elif scenario == "safari_scroll":
+        adapter = GroundedLabAdapter(browser_scroll_scenario("Safari"))
     elif scenario == "notes_create":
         adapter = FakeRealtimeAdapter(
             [copy.deepcopy(NOTES_CREATE_SCENARIO)],
@@ -600,6 +1163,23 @@ def build_vertical_app(
         )
     elif scenario == "notes_observe":
         adapter = VisualLabAdapter(NOTES_OBSERVE_SCENARIO)
+    elif scenario == "terminal_window":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(TERMINAL_WINDOW_SCENARIO)],
+            pace_s=0,
+        )
+    elif scenario == "fixture_select":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(FIXTURE_SELECT_SCENARIO)], pace_s=0
+        )
+    elif scenario == "fixture_select_named":
+        adapter = FakeRealtimeAdapter(
+            [copy.deepcopy(FIXTURE_SELECT_NAMED_SCENARIO)], pace_s=0
+        )
+    elif scenario == "fixture_type":
+        adapter = GroundedLabAdapter(FIXTURE_TYPE_SCENARIO)
+    elif scenario == "fixture_scroll":
+        adapter = GroundedLabAdapter(FIXTURE_SCROLL_SCENARIO)
     return ConnApp(cfg, adapter, harness)
 
 
@@ -610,8 +1190,9 @@ def vertical_command(scenario: str, *, model_mode: str) -> str:
         raise ValueError("lab model mode is invalid")
     if scenario == "control" and model_mode == "live":
         return "Click Continue in the current window"
-    if scenario == "firefox_visual" and model_mode == "live":
-        return "Click the visible Play button in Firefox"
+    if scenario in {"firefox_visual", "safari_visual"} and model_mode == "live":
+        browser = "Firefox" if scenario == "firefox_visual" else "Safari"
+        return f"Click the visible Play button in {browser}"
     return _VERTICAL_COMMANDS.get(scenario, LAB_COMMAND)
 
 
@@ -622,12 +1203,18 @@ def summarize_vertical(
     tool_outputs: list[dict],
     expected_effect: str = "control_changed",
     expected_value: str | None = "on",
+    expected_transactions: int = 1,
 ) -> dict:
     transactions = [
         event for event in trace_events
         if event.get("kind") == "action_transaction"
     ]
-    receipt = tool_outputs[-1] if tool_outputs else {}
+    receipts = [
+        output for output in tool_outputs
+        if isinstance(output.get("outcome"), str)
+        and isinstance(output.get("dispatch_state"), str)
+    ]
+    receipt = receipts[-1] if receipts else _predispatch_refusal(trace_events)
     effect_events = [
         event for event in truth_events
         if event.get("effect") == expected_effect
@@ -661,14 +1248,16 @@ def summarize_vertical(
         "passed": (
             outcome == "verified"
             and oracle["verdict"] == "matched"
-            and len(transactions) == 1
-            and dispatch_count == 1
+            and len(transactions) == expected_transactions
+            and dispatch_count == expected_transactions
         ),
     }
 
 
 def action_result_recorded(events: list[dict]) -> bool:
     if any(event.get("kind") == "action_transaction" for event in events):
+        return True
+    if _predispatch_refusal(events):
         return True
     for event in events:
         if event.get("kind") != "tool_result":
@@ -687,6 +1276,36 @@ def action_result_recorded(events: list[dict]) -> bool:
         ):
             return True
     return False
+
+
+def vertical_result_recorded(events: list[dict], scenario: str) -> bool:
+    if scenario not in {"finder_search", "fixture_composed", "preview_scroll"}:
+        return action_result_recorded(events)
+    transactions = [
+        event for event in events
+        if event.get("kind") == "action_transaction"
+    ]
+    if not transactions:
+        return bool(_predispatch_refusal(events))
+    if any(event.get("outcome") != "verified" for event in transactions):
+        return True
+    return len(transactions) >= 2
+
+
+def _predispatch_refusal(events: list[dict]) -> dict:
+    for event in reversed(events):
+        if (
+            event.get("kind") == "tool_proposed"
+            and event.get("gate") == "blocked"
+            and event.get("block_reason") == "no_live_affordance"
+        ):
+            return {
+                "outcome": "failed",
+                "dispatch_state": "not_dispatched",
+                "reason_code": "no_live_affordance",
+                "source": "proposal_gate",
+            }
+    return {}
 
 
 async def _wait_until(
@@ -808,7 +1427,7 @@ async def run_vertical(
                     isinstance(app.adapter, VisualLabAdapter)
                     and app.adapter.observation is not None
                     if scenario == "notes_observe"
-                    else action_result_recorded(app.trace.read())
+                    else vertical_result_recorded(app.trace.read(), scenario)
                 )
             ),
             timeout_s=timeout_s,
@@ -816,7 +1435,9 @@ async def run_vertical(
         )
         events = app.trace.read()
         if (
-            scenario in {"visual", "firefox_visual", "notes_observe"}
+            scenario in {
+                "visual", "firefox_visual", "safari_visual", "notes_observe"
+            }
             and isinstance(app.adapter, VisualLabAdapter)
             and app.adapter.observation is not None
         ):
@@ -832,16 +1453,35 @@ async def run_vertical(
             expected_effect=(
                 "window_created"
                 if scenario == "menu"
+                else "row_selected"
+                if scenario in {
+                    "fixture_composed", "fixture_select", "fixture_select_named",
+                }
+                else "text_changed"
+                if scenario == "fixture_type"
+                else "scroll_target_visible"
+                if scenario == "fixture_scroll"
                 else "playback_changed"
-                if scenario in {"visual", "firefox_visual"}
+                if scenario in {"visual", "firefox_visual", "safari_visual"}
                 else "control_changed"
             ),
             expected_value=(
                 None
                 if scenario == "menu"
+                else "Archive"
+                if scenario in {
+                    "fixture_composed", "fixture_select", "fixture_select_named",
+                }
+                else "conn lab query"
+                if scenario == "fixture_type"
+                else "Appendix"
+                if scenario == "fixture_scroll"
                 else "pause"
-                if scenario in {"visual", "firefox_visual"}
+                if scenario in {"visual", "firefox_visual", "safari_visual"}
                 else "on"
+            ),
+            expected_transactions=(
+                2 if scenario in {"fixture_composed", "preview_scroll"} else 1
             ),
         )
         summary.update({

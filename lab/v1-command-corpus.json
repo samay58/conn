@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "frozen": true,
+  "commands": [
+    {"id": "finder-open", "surface": "finder", "job": "app_window_selection", "utterance": "Open Finder"},
+    {"id": "finder-select-folder", "surface": "finder", "job": "collection_selection", "utterance": "Select the folder named Projects"},
+    {"id": "finder-search", "surface": "finder", "job": "field_text_entry", "utterance": "Search this Finder window for conn lab"},
+    {"id": "calendar-open", "surface": "calendar", "job": "app_window_selection", "utterance": "Open Calendar"},
+    {"id": "calendar-today", "surface": "calendar", "job": "control_activation", "utterance": "Go to today in Calendar"},
+    {"id": "calendar-next", "surface": "calendar", "job": "document_history", "utterance": "Show the next month in Calendar"},
+    {"id": "preview-open", "surface": "preview", "job": "app_window_selection", "utterance": "Switch to Preview"},
+    {"id": "preview-next-page", "surface": "preview", "job": "document_history", "utterance": "Go to the next page"},
+    {"id": "preview-scroll-heading", "surface": "preview", "job": "named_scroll", "utterance": "Scroll until the Appendix heading is visible"},
+    {"id": "safari-url", "surface": "safari", "job": "app_window_selection", "utterance": "Open example.com in Safari"},
+    {"id": "safari-new-tab", "surface": "safari", "job": "menus_overlays", "utterance": "Open a new tab in Safari"},
+    {"id": "safari-focus-tab", "surface": "safari", "job": "collection_selection", "utterance": "Focus the tab named Example Domain"},
+    {"id": "firefox-url", "surface": "firefox", "job": "app_window_selection", "utterance": "Open example.com in Firefox"},
+    {"id": "firefox-play", "surface": "firefox", "job": "visual_fallback", "utterance": "Play the video in Firefox"},
+    {"id": "firefox-space", "surface": "firefox", "job": "control_activation", "utterance": "Press Space in Firefox"},
+    {"id": "notes-create", "surface": "notes", "job": "menus_overlays", "utterance": "Create a new note in Notes"},
+    {"id": "notes-select-next", "surface": "notes", "job": "collection_selection", "utterance": "Select the next note"},
+    {"id": "notes-type", "surface": "notes", "job": "field_text_entry", "utterance": "Type conn lab scratch in this note"},
+    {"id": "terminal-menu", "surface": "terminal", "job": "menus_overlays", "utterance": "Open a new window from the Terminal menu"},
+    {"id": "fixture-composed", "surface": "fixture", "job": "multi_step", "utterance": "Open the fixture and select the next row"}
+  ]
+}

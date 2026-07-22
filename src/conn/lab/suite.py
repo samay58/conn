@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import date
+from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import re
+import time
 from typing import Callable
 
 from conn.actions import ActionOutcome, uncertain_failure_receipt
@@ -37,6 +40,406 @@ _TIMING_KEYS = (
     "cleanup_ms",
     "total_ms",
 )
+_V1_JOBS = (
+    "app_window_selection",
+    "collection_selection",
+    "control_activation",
+    "document_history",
+    "field_text_entry",
+    "menus_overlays",
+    "multi_step",
+    "named_scroll",
+    "visual_fallback",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class BreadthCase:
+    command_id: str
+    scenario_id: str | None
+    expected_effect: str
+    surface: str | None = None
+    job: str | None = None
+
+
+_BREADTH_CASES = {
+    "finder-open": ("finder-open", "frontmost_bundle"),
+    "finder-select-folder": ("finder-select", "row_selected"),
+    "finder-search": ("finder-search", "finder_search_value"),
+    "calendar-open": ("calendar-open", "frontmost_bundle"),
+    "calendar-today": ("calendar-today", "current_month_visible"),
+    "calendar-next": ("calendar-next", "next_month_visible"),
+    "preview-open": ("preview-open", "frontmost_bundle"),
+    "preview-next-page": ("preview-next-page", "page_2_visible"),
+    "preview-scroll-heading": ("preview-scroll", "appendix_visible"),
+    "safari-url": ("safari-local", "page_loaded"),
+    "safari-new-tab": ("safari-tab", "page_hidden"),
+    "safari-focus-tab": ("safari-focus", "page_hidden"),
+    "firefox-url": ("firefox-local", "page_loaded"),
+    "firefox-play": ("firefox-visual", "pointer_play"),
+    "firefox-space": ("firefox-space", "space_play"),
+    "notes-create": ("notes-create", "notes_store_count_delta"),
+    "notes-select-next": ("notes-select", "notes_selected_object_changed"),
+    "notes-type": ("notes-type", "notes_store_title_replaced"),
+    "terminal-menu": ("terminal-window", "window_count_delta"),
+    "fixture-composed": ("fixture-composed", "row_selected"),
+}
+
+
+def breadth_cases(repo_root: Path) -> tuple[BreadthCase, ...]:
+    path = repo_root.resolve(strict=True) / "lab" / "v1-command-corpus.json"
+    try:
+        payload = json.loads(path.read_text())
+        commands = payload["commands"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError("breadth_corpus_invalid") from error
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("frozen") is not True
+        or not isinstance(commands, list)
+        or len(commands) != 20
+    ):
+        raise RuntimeError("breadth_corpus_invalid")
+    ids = [item.get("id") for item in commands if isinstance(item, dict)]
+    if len(ids) != 20 or len(set(ids)) != 20 or set(ids) != set(_BREADTH_CASES):
+        raise RuntimeError("breadth_corpus_invalid")
+    cases = []
+    for item in commands:
+        command_id = item["id"]
+        surface = item.get("surface")
+        job = item.get("job")
+        if (
+            not isinstance(surface, str)
+            or not isinstance(job, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{0,79}", surface)
+            or not re.fullmatch(r"[a-z][a-z0-9_]{0,79}", job)
+        ):
+            raise RuntimeError("breadth_corpus_invalid")
+        cases.append(BreadthCase(
+            command_id,
+            *_BREADTH_CASES[command_id],
+            surface=surface,
+            job=job,
+        ))
+    return tuple(cases)
+
+
+def _supporting_manifest(repo_root: Path) -> dict:
+    path = repo_root.resolve(strict=True) / "lab" / "v1-supporting-coverage.json"
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise RuntimeError("supporting_coverage_invalid") from error
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != 1
+        or payload.get("frozen") is not True
+        or not isinstance(payload.get("successes"), list)
+        or len(payload["successes"]) != 9
+        or not isinstance(payload.get("refusals"), list)
+        or len(payload["refusals"]) != len(_V1_JOBS)
+    ):
+        raise RuntimeError("supporting_coverage_invalid")
+    return payload
+
+
+def supporting_cases(repo_root: Path) -> tuple[BreadthCase, ...]:
+    repo_root = repo_root.resolve(strict=True)
+    payload = _supporting_manifest(repo_root)
+    from .catalog import load_catalog
+
+    catalog = load_catalog(repo_root)
+    cases = []
+    ids: set[str] = set()
+    for item in payload["successes"]:
+        if not isinstance(item, dict):
+            raise RuntimeError("supporting_coverage_invalid")
+        values = tuple(item.get(key) for key in (
+            "id", "scenario", "effect", "surface", "job",
+        ))
+        if any(
+            not isinstance(value, str)
+            or not re.fullmatch(r"[a-z][a-z0-9_-]{0,79}", value)
+            for value in values
+        ):
+            raise RuntimeError("supporting_coverage_invalid")
+        case_id, scenario, effect, surface, job = values
+        if case_id in ids or scenario not in catalog or job not in _V1_JOBS:
+            raise RuntimeError("supporting_coverage_invalid")
+        ids.add(case_id)
+        cases.append(BreadthCase(
+            case_id,
+            scenario,
+            effect,
+            surface=surface,
+            job=job,
+        ))
+    return tuple(cases)
+
+
+def supporting_refusals(repo_root: Path) -> tuple[dict, ...]:
+    repo_root = repo_root.resolve(strict=True)
+    payload = _supporting_manifest(repo_root)
+    refusals = []
+    jobs: set[str] = set()
+    for item in payload["refusals"]:
+        if not isinstance(item, dict):
+            raise RuntimeError("supporting_coverage_invalid")
+        job = item.get("job")
+        test_id = item.get("test_id")
+        source = item.get("source")
+        if (
+            job not in _V1_JOBS
+            or job in jobs
+            or not isinstance(test_id, str)
+            or not re.fullmatch(r"(?:python|swift):[A-Za-z0-9_]{1,120}", test_id)
+            or not isinstance(source, str)
+            or not re.fullmatch(r"(?:tests|macos/Tests)/[A-Za-z0-9_./-]{1,180}", source)
+        ):
+            raise RuntimeError("supporting_coverage_invalid")
+        source_path = (repo_root / source).resolve(strict=True)
+        if not source_path.is_relative_to(repo_root):
+            raise RuntimeError("supporting_coverage_invalid")
+        test_name = test_id.split(":", 1)[1]
+        source_validated = test_name in source_path.read_text()
+        if not source_validated:
+            raise RuntimeError("supporting_coverage_invalid")
+        jobs.add(job)
+        refusals.append({
+            "job": job,
+            "test_id": test_id,
+            "source": source,
+            "source_validated": True,
+        })
+    if jobs != set(_V1_JOBS):
+        raise RuntimeError("supporting_coverage_invalid")
+    return tuple(refusals)
+
+
+def run_breadth_suite(
+    repo_root: Path,
+    *,
+    cases: tuple[BreadthCase, ...] | None = None,
+    scenario_runner: Callable | None = None,
+    host_probe: Callable[[], dict] | None = None,
+    host_pause: Callable[[float], None] | None = None,
+    run_prefix: str = "v1-breadth",
+    required_jobs: tuple[str, ...] | None = None,
+) -> dict:
+    repo_root = repo_root.resolve(strict=True)
+    production_cases = cases is None
+    selected = cases or breadth_cases(repo_root)
+    if required_jobs is None and production_cases:
+        required_jobs = tuple(sorted({case.job for case in selected if case.job}))
+    if not selected or len(selected) > 20:
+        raise ValueError("breadth cases must be in [1, 20]")
+    if scenario_runner is None:
+        from .cli import run_scenario
+        scenario_runner = run_scenario
+    production_host_probe = host_probe is None
+    if production_host_probe:
+        from .host import capture_host_snapshot
+        host_probe = capture_host_snapshot
+    pause = host_pause or (time.sleep if production_host_probe else lambda _: None)
+    before = _wait_for_quiet_host(host_probe, pause)
+    rows = []
+    for index, case in enumerate(selected, start=1):
+        if case.scenario_id is None:
+            rows.append({
+                "command_id": case.command_id,
+                "scenario_id": None,
+                "completed": False,
+                "reason": "scenario_missing",
+                "surface": case.surface,
+                "job": case.job,
+            })
+            continue
+        run_id = f"{run_prefix}-{index:02d}"
+        try:
+            result = scenario_runner(
+                repo_root,
+                scenario=case.scenario_id,
+                mode="scripted",
+                run_id=run_id,
+            )
+        except (RuntimeError, OSError) as error:
+            message = str(error)
+            safe_error = (
+                message
+                if re.fullmatch(r"[a-z0-9_.:-]{1,160}", message)
+                else type(error).__name__
+            )
+            rows.append({
+                "command_id": case.command_id,
+                "scenario_id": case.scenario_id,
+                "run_id": run_id,
+                "completed": False,
+                "reason": "scenario_error",
+                "error": safe_error,
+                "surface": case.surface,
+                "job": case.job,
+            })
+            continue
+        receipt = result.get("machine_receipt") or {}
+        oracle = result.get("independent_oracle") or {}
+        reason = None
+        if result.get("passed") is not True or result.get("contract_passed") is not True:
+            reason = "scenario_contract_failed"
+        elif receipt.get("outcome") not in {"verified", "dispatch_only"}:
+            reason = "receipt_not_completed"
+        elif oracle.get("verdict") != "matched":
+            reason = "oracle_not_matched"
+        elif oracle.get("effect") != case.expected_effect:
+            reason = "oracle_effect_mismatch"
+        elif (
+            not isinstance(result.get("dispatch_count"), int)
+            or result["dispatch_count"] < 1
+        ):
+            reason = "dispatch_missing"
+        rows.append({
+            "command_id": case.command_id,
+            "scenario_id": case.scenario_id,
+            "run_id": run_id,
+            "completed": reason is None,
+            "reason": reason,
+            "receipt_outcome": receipt.get("outcome"),
+            "oracle_verdict": oracle.get("verdict"),
+            "oracle_effect": oracle.get("effect"),
+            "dispatch_count": result.get("dispatch_count"),
+            "surface": case.surface,
+            "job": case.job,
+        })
+    after = host_probe()
+    completed = sum(row["completed"] for row in rows)
+    rate = completed / len(selected)
+    safe_replans_attempted = 0
+    after_safe_replan_rate = rate
+    host_changes = compare_host_snapshots(before, after)
+    coverage = {
+        job: sorted({
+            row["surface"]
+            for row in rows
+            if row.get("completed") is True
+            and row.get("job") == job
+            and isinstance(row.get("surface"), str)
+        })
+        for job in (required_jobs or ())
+    }
+    coverage_passed = all(len(surfaces) >= 3 for surfaces in coverage.values())
+    summary = {
+        "commands": len(selected),
+        "completed": completed,
+        "first_try_rate": rate,
+        "safe_replans_attempted": safe_replans_attempted,
+        "after_safe_replan_rate": after_safe_replan_rate,
+        "primitive_coverage": coverage,
+        "coverage_passed": coverage_passed,
+        "passed": (
+            rate >= 0.95
+            and after_safe_replan_rate >= 0.99
+            and coverage_passed
+            and not host_changes
+        ),
+        "host_changes": host_changes,
+        "host_snapshot_stable": not host_changes,
+        "rows": rows,
+    }
+    output_dir = repo_root / "data" / "lab-runs" / date.today().isoformat()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / f"{run_prefix}-summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    )
+    return summary
+
+
+def run_v1_breadth_gate(
+    repo_root: Path,
+    *,
+    core_cases: tuple[BreadthCase, ...] | None = None,
+    support_cases: tuple[BreadthCase, ...] | None = None,
+    refusal_evidence: tuple[dict, ...] | None = None,
+    required_jobs: tuple[str, ...] = _V1_JOBS,
+    scenario_runner: Callable | None = None,
+    host_probe: Callable[[], dict] | None = None,
+    run_prefix: str = "v1-breadth",
+) -> dict:
+    repo_root = repo_root.resolve(strict=True)
+    core = breadth_cases(repo_root) if core_cases is None else core_cases
+    support = (
+        supporting_cases(repo_root) if support_cases is None else support_cases
+    )
+    refusals = (
+        supporting_refusals(repo_root)
+        if refusal_evidence is None
+        else refusal_evidence
+    )
+    core_summary = run_breadth_suite(
+        repo_root,
+        cases=core,
+        scenario_runner=scenario_runner,
+        host_probe=host_probe,
+        run_prefix=f"{run_prefix}-core",
+        required_jobs=(),
+    )
+    support_summary = run_breadth_suite(
+        repo_root,
+        cases=support,
+        scenario_runner=scenario_runner,
+        host_probe=host_probe,
+        run_prefix=f"{run_prefix}-support",
+        required_jobs=(),
+    )
+    rows = [*core_summary["rows"], *support_summary["rows"]]
+    coverage = {
+        job: sorted({
+            row["surface"]
+            for row in rows
+            if row.get("completed") is True
+            and row.get("job") == job
+            and isinstance(row.get("surface"), str)
+        })
+        for job in required_jobs
+    }
+    coverage_passed = all(len(surfaces) >= 3 for surfaces in coverage.values())
+    refusal_jobs = {
+        item.get("job")
+        for item in refusals
+        if item.get("source_validated") is True
+    }
+    adversarial_coverage_passed = refusal_jobs == set(required_jobs)
+    completed = sum(row["completed"] for row in rows)
+    commands = len(rows)
+    host_changes = sorted(set(
+        core_summary["host_changes"] + support_summary["host_changes"]
+    ))
+    summary = {
+        "commands": commands,
+        "completed": completed,
+        "first_try_rate": completed / commands,
+        "after_safe_replan_rate": completed / commands,
+        "safe_replans_attempted": 0,
+        "primitive_coverage": coverage,
+        "coverage_passed": coverage_passed,
+        "adversarial_coverage": list(refusals),
+        "adversarial_coverage_passed": adversarial_coverage_passed,
+        "host_changes": host_changes,
+        "host_snapshot_stable": not host_changes,
+        "core": core_summary,
+        "supporting": support_summary,
+        "passed": (
+            core_summary["passed"]
+            and support_summary["passed"]
+            and coverage_passed
+            and adversarial_coverage_passed
+            and not host_changes
+        ),
+    }
+    output_dir = repo_root / "data" / "lab-runs" / date.today().isoformat()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / f"{run_prefix}-summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    )
+    return summary
 
 
 def compare_host_snapshots(before: dict, after: dict) -> list[str]:
@@ -46,6 +449,25 @@ def compare_host_snapshots(before: dict, after: dict) -> list[str]:
     )
 
 
+def _wait_for_quiet_host(
+    host_probe: Callable[[], dict],
+    pause: Callable[[float], None],
+) -> dict:
+    current = host_probe()
+    unchanged = 1
+    for _ in range(30):
+        pause(0.5)
+        candidate = host_probe()
+        if compare_host_snapshots(current, candidate):
+            unchanged = 1
+        else:
+            unchanged += 1
+            if unchanged == 3:
+                return candidate
+        current = candidate
+    raise RuntimeError("host_not_quiet")
+
+
 def run_smoke_suite(
     repo_root: Path,
     *,
@@ -53,6 +475,7 @@ def run_smoke_suite(
     run_prefix: str = "l7-smoke",
     scenario_runner: Callable | None = None,
     host_probe: Callable[[], dict] | None = None,
+    host_pause: Callable[[float], None] | None = None,
 ) -> dict:
     if not 1 <= runs <= 20:
         raise ValueError("smoke runs must be in [1, 20]")
@@ -69,11 +492,13 @@ def run_smoke_suite(
     if scenario_runner is None:
         from .scenario import run_l3
         scenario_runner = run_l3
-    if host_probe is None:
+    production_host_probe = host_probe is None
+    if production_host_probe:
         from .host import capture_host_snapshot
         host_probe = capture_host_snapshot
+    pause = host_pause or (time.sleep if production_host_probe else lambda _: None)
 
-    before = host_probe()
+    before = _wait_for_quiet_host(host_probe, pause)
     results = []
     timing_rows = []
     failure = None
@@ -115,6 +540,7 @@ def run_smoke_suite(
         "passed": (
             failure is None
             and len(results) == runs
+            and not host_changes
         ),
         "failed_run": failure,
         "host_before": before,
@@ -130,7 +556,7 @@ def run_smoke_suite(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"
     )
     if not summary["passed"]:
-        reason = failure or "incomplete"
+        reason = failure or ("host_changed" if host_changes else "incomplete")
         raise RuntimeError(f"smoke_run_failed:{reason}")
     return summary
 

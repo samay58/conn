@@ -18,9 +18,13 @@ enum NativeKeyChord {
         "6": 0x16, "7": 0x1A, "8": 0x1C, "9": 0x19,
         "return": 0x24, "tab": 0x30, "space": 0x31, "escape": 0x35,
         "delete": 0x33, "up": 0x7E, "down": 0x7D, "left": 0x7B, "right": 0x7C,
+        "home": 0x73, "pageup": 0x74, "end": 0x77, "pagedown": 0x79,
     ]
 
     static func parse(_ keys: [String]) -> (CGKeyCode, CGEventFlags)? {
+        if keys == ["find"] {
+            return (keyCodes["f"]!, .maskCommand)
+        }
         var flags: CGEventFlags = []
         var primary: CGKeyCode?
         for key in keys {

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "frozen": true,
+  "surfaces": [
+    "calendar",
+    "finder",
+    "firefox",
+    "fixture",
+    "notes",
+    "preview",
+    "safari",
+    "terminal"
+  ],
+  "jobs": [
+    "app_window_selection",
+    "collection_selection",
+    "control_activation",
+    "document_history",
+    "field_text_entry",
+    "menus_overlays",
+    "multi_step",
+    "named_scroll",
+    "visual_fallback"
+  ]
+}

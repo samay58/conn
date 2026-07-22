@@ -1,7 +1,10 @@
 import struct
 
+import pytest
+
 from conn.lab.vnc import (
     VNCClient,
+    connect_with_retry,
     logical_to_framebuffer,
     parse_tart_vnc,
     vnc_key,
@@ -75,6 +78,45 @@ def test_client_authenticates_and_sends_physical_pointer_click() -> None:
             for mask in (0, 1, 0)
         )
     )
+
+
+def test_connect_retries_two_preinput_platform_failures() -> None:
+    attempts = []
+    expected = object()
+
+    def connector(password: str, port: int):
+        attempts.append((password, port))
+        if len(attempts) < 3:
+            raise PermissionError(1, "Operation not permitted")
+        return expected
+
+    result = connect_with_retry(
+        "secret",
+        57622,
+        connector=connector,
+        sleeper=lambda _delay: None,
+    )
+
+    assert result is expected
+    assert attempts == [("secret", 57622)] * 3
+
+
+def test_connect_stops_after_three_preinput_failures() -> None:
+    attempts = []
+
+    def connector(password: str, port: int):
+        attempts.append((password, port))
+        raise PermissionError(1, "Operation not permitted")
+
+    with pytest.raises(PermissionError):
+        connect_with_retry(
+            "secret",
+            57622,
+            connector=connector,
+            sleeper=lambda _delay: None,
+        )
+
+    assert attempts == [("secret", 57622)] * 3
 
 
 def test_client_types_bounded_ascii_as_native_key_events() -> None:

@@ -184,6 +184,14 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         return nil
     }
 
+    static func semanticRowSelectionKey(_ relation: String?) -> String? {
+        switch relation {
+        case "next": return "down"
+        case "previous": return "up"
+        default: return nil
+        }
+    }
+
     private func webAreaDocumentURL(
         in nodes: [NativeObservationNode],
         deadlineMs: Int?
@@ -233,6 +241,8 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             return setAttribute(kAXSelectedAttribute, value: true, target: target)
         case .axSetSelectedRows:
             return setSelectedRows(target: target)
+        case .semanticRowKeySelect:
+            return semanticRowKeySelect(request: request, target: target)
         case .axSetValue:
             return setValue(request: request, target: target)
         case .axScrollToVisible:
@@ -423,12 +433,13 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 latestElements.removeValue(forKey: ref)
                 break
             }
-            var settable: [String] = []
-            for attribute in [
+            let attributes = [
                 kAXFocusedAttribute,
                 kAXSelectedAttribute,
                 kAXValueAttribute,
-            ] {
+            ]
+            var settable: [String] = []
+            for attribute in attributes {
                 if deadlineMs.map({ NativeClock.ms() >= $0 }) == true { break }
                 if attributeIsSettable(pending.element, attribute) {
                     settable.append(attribute)
@@ -637,6 +648,43 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         return Self.classifyDispatchError(
             AXUIElementSetAttributeValue(element, attribute as CFString, value as CFTypeRef)
         )
+    }
+
+    private func semanticRowKeySelect(
+        request: NativeActionRequest,
+        target: NativeResolvedTarget?
+    ) -> NativeDispatchResult {
+        guard let target,
+              let parentRef = target.current.parentRef,
+              let parent = latestElements[parentRef],
+              let key = Self.semanticRowSelectionKey(
+                  request.payload.intentRelation
+              ),
+              targetApplicationIsFrontmost(),
+              attributeIsSettable(parent, kAXFocusedAttribute) else {
+            return NativeDispatchResult(
+                state: .notDispatched,
+                nativeError: "semantic_row_focus_unavailable"
+            )
+        }
+        var progress = NativeDispatchProgress()
+        let focus = Self.classifyDispatchError(AXUIElementSetAttributeValue(
+            parent,
+            kAXFocusedAttribute as CFString,
+            true as CFTypeRef
+        ))
+        guard focus.state == .dispatched else { return focus }
+        progress.markDispatched()
+        guard boolAttribute(parent, kAXFocusedAttribute) == true else {
+            return progress.failure("semantic_row_focus_unconfirmed")
+        }
+        let keyResult = postKeyChord([key])
+        if keyResult.state == .notDispatched {
+            return progress.failure(
+                keyResult.nativeError ?? "semantic_row_key_failed"
+            )
+        }
+        return keyResult
     }
 
     private func setValue(

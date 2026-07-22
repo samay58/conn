@@ -33,6 +33,10 @@ final class ActionFixtureTests: XCTestCase {
             "reordered_siblings",
             "changed_window_app",
             "uncertain_dispatch",
+            "composed",
+            "selectable_list",
+            "text_field",
+            "scroll_target",
         ])
         let digests = FixtureScene.allCases.map(\.initialStateDigest)
 
@@ -126,6 +130,28 @@ final class ActionFixtureTests: XCTestCase {
         let opaqueIDs = identifiers(in: opaque.buildContent())
         XCTAssertTrue(opaqueIDs.contains("fixture.opaque_media"))
         XCTAssertFalse(opaqueIDs.contains("fixture.secure"))
+
+        let selectable = FixtureController(scene: .selectableList, truth: truth)
+        let selectableViews = descendants(of: selectable.buildContent())
+        let table = selectableViews.compactMap { $0 as? NSTableView }.first
+        XCTAssertEqual(table?.numberOfRows, 2)
+        XCTAssertEqual(table?.selectedRow, 0)
+
+        let composed = FixtureController(scene: .composed, truth: truth)
+        let composedTable = descendants(of: composed.buildContent())
+            .compactMap { $0 as? NSTableView }.first
+        XCTAssertEqual(composedTable?.numberOfRows, 2)
+        XCTAssertEqual(composedTable?.selectedRow, 0)
+
+        let field = FixtureController(scene: .textField, truth: truth)
+        XCTAssertTrue(identifiers(in: field.buildContent()).contains(
+            "fixture.text.search"
+        ))
+
+        let scroll = FixtureController(scene: .scrollTarget, truth: truth)
+        XCTAssertTrue(identifiers(in: scroll.buildContent()).contains(
+            "fixture.scroll.appendix"
+        ))
     }
 
     @MainActor

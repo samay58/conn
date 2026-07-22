@@ -1,27 +1,30 @@
 # Conn: state of play
 
-Updated 2026-07-20. Read this first. Use `docs/2026-07-07-roadmap.md`
+Updated 2026-07-21. Read this first. Use `docs/2026-07-07-roadmap.md`
 for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 `docs/NORTH-STAR.md` defines the v1 product promise, finish line, and stop rule.
 
 ## Current verdict
 
-The capable-navigation recovery and Conn Lab are implemented. The final L9
-boundary passed 741 Python tests with three intentional deselections and two
-dependency warnings, three lifecycle tests, 14 harness evals, and 232 Swift
-tests. The 86 focused lab tests exercise the public command surface, typed
-scenario catalog, bounded private guest execution, receipt-to-oracle records,
-and artifact metadata.
+The capable-navigation recovery, Conn Lab, and frozen capability-breadth
+implementation are built. The latest ordinary boundary passed 815 Python
+tests with three intentional deselections and two dependency warnings. The
+full Swift boundary passed 273 XCTest cases and 5 Swift Testing cases. The
+exact-candidate breadth and 20-clone release suites passed. Physical product
+acceptance remains open.
 
-Conn v1 is not done. Mechanical gates are strong; cross-app breadth, physical
-Mac checks, and the thirty-command daily-use gate remain open. The project now
-has one explicit stop condition in `docs/NORTH-STAR.md`.
+The breadth gate passed 29 of 29 scenarios. Its 20 core commands and 9
+supporting cases cover every required primitive on at least three structurally
+different surfaces, with one source-validated adversarial refusal per
+primitive. All 29 independent oracles matched. Conn v1 is not done because the
+physical daily-use gates remain open. The project has one explicit stop
+condition in `docs/NORTH-STAR.md`.
 
-The authoritative live intent corpus passed 225 of 226 items, or 99.56
-percent, in
-`data/intent-evals/2026-07-16/results-1784228271.json`. It cost $1.392171.
-The sole miss asked to press Refresh; the model proposed unsupported key `r`
-instead of grounding the visible button. The failure remains in the grader.
+The stabilized live intent corpus passed 224 of 226 items, or 99.1 percent,
+in `data/intent-evals/2026-07-20/results-1784547543.json`. It cost $1.6300.
+The two retained misses are `Select the following note`, which proposed no
+tool, and `Open Linear`, which proposed browser navigation instead of an app
+launch. Both failures remain in the grader.
 
 The safety kernel is unchanged and still pinned: mutations serialize, raw
 native success cannot produce `Done.`, `possibly_dispatched` never retries,
@@ -247,9 +250,9 @@ plans, and legacy native mutation RPC refuse before dispatch. Production has
 no Python Accessibility, screenshot, or input fallback. OCR, macros, app
 command catalogs, and a second computer-use model remain out of scope.
 
-## Measured evidence
+## Reliability baseline before Conn Lab
 
-Latest recorded evidence before the final L9 gate:
+Recorded evidence before the capability-breadth program:
 
 | Gate | Result |
 |---|---|
@@ -262,13 +265,13 @@ Latest recorded evidence before the final L9 gate:
 | Swift | 232 passed |
 | Release build | signed with `Conn Dev Signing` |
 | Live intent sample | 25 of 25; `results-1784226540.json`; $0.266418 |
-| Live intent full corpus | 225 of 226 (99.56 percent); `results-1784228271.json`; $1.392171 |
+| Live intent full corpus | 224 of 226 (99.1 percent); `results-1784547543.json`; $1.6300 |
 | Fresh-clone release transactions | 20 of 20; p50 31.014s, p95 31.434s |
 | Scripted adversarial matrix | 100 of 100 |
 | Live-model VM transactions | control verified; Safari tab verified; Firefox Play dispatch-only with matching oracle |
 | Automatic latency report | command passed; newest harness trace had no PTT turns, so live spans were N/A |
 
-The 97 percent intent bar is met. The one residual miss is not waived.
+The 97 percent intent bar is met. The two residual misses are not waived.
 
 Reconnect recovery now retries for five minutes with exponential spacing
 capped at 30 seconds. Concurrent disconnect paths share one reconnect task.
@@ -340,9 +343,9 @@ default Tart NAT, no host clipboard or audio sharing, a read-only source
 mount, one read-write artifact mount, and guest port 18787. Softnet remains an
 optional explicit mode and is not a release gate.
 
-The final ordinary Python run left the real `data/` tree unchanged at 3,813
-files and 34,117,511 bytes, with manifest digest
-`106ba2217f93c3a960037bb8915f6c7b237041669781484c47c37e64d0516d03`.
+The latest ordinary Python run left the real `data/` tree unchanged at 13,217
+files and 161,294,146 bytes, with manifest digest
+`a6a92476ec851e517b90891b6c1885ed94ed0ddcf51ab9a41958ce2b92e70409`.
 Fixed navigation keys now refuse when the focused element is a secure field or
 an unclassified text entry, including a fresh recheck immediately before
 native dispatch.
@@ -355,7 +358,7 @@ Live receipts and separate oracles:
 | Open Safari tab | `verified`; tab count 2 to 3 | original page hidden once |
 | Create Notes note | `verified`; row count 2 to 3 | disposable database count 1 to 2 |
 | Type Notes scratch text | `verified` | exact title changed to `conn lab scratch` |
-| Select previous Notes note | `verified` | selected Notes object changed |
+| Select next Notes note in the frozen two-note state | `verified`; structural peer index 0 to 1 | disposable database exact selected-object match |
 | Click Firefox Play | `dispatch_only`; `no_trustworthy_witness` | `pointer_play` once |
 
 Firefox is an honest capability ceiling. The action completed according to the
@@ -363,23 +366,64 @@ local page, but Conn did not claim verified because visual motion is not a
 trusted semantic witness.
 
 The final public smoke artifact is
-`data/lab-runs/2026-07-16/lab-smoke-170232-summary.json`: one verified receipt,
-one matching oracle, 100 of 100 scripted adversarial iterations, no observed
-host change, $0.0022 recorded cost, and 31.979 seconds total. The direct VNC
+`data/lab-runs/2026-07-21/lab-smoke-165734-summary.json`: one verified receipt,
+one matching oracle, 100 of 100 scripted adversarial iterations, no protected
+host change, and 34.404 seconds total. The direct VNC
 boot is headless. Cleanup left no Tart, disposable guest, or Screen Sharing
 process.
 
-Two structural follow-ons remain for the capability-breadth delivery. Split
-the full-stack scenario driver into capsule-owned setup and oracle seams, and
-put semantic and visual native plan routing behind one explicit action
-facade. Neither changes the current transaction contract.
+The capability driver now uses capsule-owned setup and oracle seams. Semantic
+and visual native ownership meets at one explicit action facade. Sanitized
+failure promotion, the 72-row atlas, and the twenty-command corpus are pinned
+without changing the production transaction contract.
+
+The stable atlas artifact is
+`data/lab-runs/2026-07-20/atlas-20260720-051006`: 47 exposed rows and 25
+unresolved rows. Finder selection and search, Calendar navigation, Preview
+page movement, Terminal nested-menu creation, Firefox visual Play, and the
+two-step fixture goal have live receipt-to-oracle evidence.
+
+The accepted frozen breadth artifact is
+`data/lab-runs/2026-07-21/v1-breadth-174932-summary.json`, SHA-256
+`2a6ea748c4e0c7f838f9e3bd3dc8e41b7637f43ee613c7a84296ba9511d13f60`.
+It completed 20 of 20 core commands and 9 of 9 supporting cases on the first
+attempt. The run produced 34 receipts from 34 dispatches: 19 `verified` and 10
+honest `dispatch_only`. All 29 independent oracles matched, total model cost
+was $0.0587, and host changes were empty.
+
+The same report enforces each scenario contract, at least three successful
+surfaces for all nine primitives, and one source-validated adversarial refusal
+per primitive. Clone timing was p50 34.146 seconds and p95 39.647 seconds.
+
+The exact candidate passed 20 of 20 fresh-clone reliability
+transactions with verified receipts and matching independent oracles. Total
+time was p50 31.471 seconds and p95 32.932 seconds. The host snapshot stayed
+unchanged and every clone was deleted. Artifact:
+`data/lab-runs/2026-07-21/lab-release-232513-suite.json`, SHA-256
+`55da053dbbf68c325746581a3a4f9bd4343c2c0eb2d2d9b9a05cc39cc1d6f5e9`.
+
+The exact candidate is installed at `/Applications/Conn.app`. No Conn process
+was running during installation. Strict codesign verification passed under
+`Conn Dev Signing`; the identifier is `com.samay.conn`, CDHash is
+`57cdc5f871be4c7dd2ef963e874219e6aceb8031`, and the installed executable
+SHA-256 is
+`a854ae3d6c542cf7f65720ec56847bedc4b02b078a864d8c918a1b55951a7868`.
+
+Notes next selection now uses the generic structural-peer lane. The compiler
+binds the current selected row to matching peers, re-resolves the collection
+and peer set, dispatches one fixed key, and verifies an exact peer-index move
+from 0 to 1. Stale selection, ambiguity, reordering, duplicate collections,
+and multi-peer jumps refuse or cannot verify. The live receipt was `verified`,
+and the disposable Notes database independently matched the exact selected
+object.
 
 `data/lab-runs/2026-07-16/lab-release-161704-summary.json` contains 20 of 20
 verified fresh-clone transactions and 20 matching oracles. Its command exited
 red only because the old host snapshot gate treated Samay's pointer and
-clipboard activity as lab activity. That gate now reports raw host activity
-without failing the transaction suite. Mounts, ports, audio, clipboard
-sharing, VM names, and cleanup remain enforced boundaries.
+clipboard activity as lab activity. The current gate waits for a quiet
+baseline, then fails the suite if focus, pointer, clipboard, Applications
+metadata, or watched personal-data metadata changes. Mounts, ports, audio,
+clipboard sharing, VM names, and cleanup remain enforced boundaries.
 
 One earlier release run returned `kAXErrorCannotComplete` after the fixture
 changed exactly once. Conn recorded failed and possibly dispatched, did not
@@ -389,13 +433,9 @@ uncertainty, not a false verified result.
 
 ## Open gates
 
-Conn Lab implementation acceptance is complete after the L9 release suite.
-V1 still needs the frozen breadth matrix and an exact-candidate twenty-clone
-run before human product acceptance:
+Conn Lab implementation, capability breadth, and the exact-candidate release
+suite are complete. V1 still needs physical product acceptance:
 
-- freeze and run the cross-app capability matrix
-- close generic north-star blockers exposed by that matrix
-- run twenty fresh clones against the exact reviewed candidate
 - relaunch the installed candidate if an older Conn process is running
 - run the physical microphone acoustic barge-in check
 - run `docs/MANUAL-TESTING.md`
@@ -425,6 +465,8 @@ Do not call the semantic engine accepted for daily use until those gates pass.
 | `docs/2026-07-16-conn-lab-spec.md` | Disposable macOS lab contract, interfaces, truth, and acceptance |
 | `docs/2026-07-16-conn-lab-implementation-plan.md` | L0 through L9 execution record and evidence |
 | `docs/2026-07-16-conn-lab-platform-proof.md` | Pinned VM and native capability proof |
+| `docs/2026-07-20-v1-capability-breadth-spec.md` | Frozen matrix, corpus, truth, and breadth acceptance contract |
+| `docs/2026-07-20-v1-capability-breadth-implementation-plan.md` | Capability packets, accepted breadth evidence, and remaining release gates |
 | `docs/agent-wargames/2026-07-12-voice-first-reliability-wargame.md` | Adversarial decision record for the capability-compiled control loop |
 | `docs/2026-07-09-verified-action-engine-spec.md` | Approved architecture and acceptance bars |
 | `docs/agent-wargames/2026-07-09-verified-action-engine-wargame.md` | July 9 adversarial decision record |

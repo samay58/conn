@@ -11,6 +11,17 @@ final class NativeAXTimeoutTests: XCTestCase {
 
         XCTAssertEqual(values, [0.25])
     }
+
+    func testRelativeRowSelectionMapsOnlyToArrowKeys() {
+        XCTAssertEqual(
+            NativeAXSemanticBackend.semanticRowSelectionKey("next"), "down"
+        )
+        XCTAssertEqual(
+            NativeAXSemanticBackend.semanticRowSelectionKey("previous"), "up"
+        )
+        XCTAssertNil(NativeAXSemanticBackend.semanticRowSelectionKey("first"))
+    }
+
 }
 
 final class NativeSemanticActionEngineTests: XCTestCase {
@@ -551,6 +562,73 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(receipt["ok"] as? Bool, false)
     }
 
+    func testPageDownUsesOneUniquePageStatusAsItsWitness() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.pageStatus = "Page 1 of 3"
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "key_chord",
+            target: [:],
+            effect: nil,
+            payload: ["keys": ["pagedown"]]
+        ))
+        XCTAssertEqual(
+            plan?["effect"] as? String,
+            "all(unique_page_status_changes:next)"
+        )
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
+    func testRightArrowUsesOneUniquePageStatusAsItsWitness() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.pageStatus = "Page 2 of 3"
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "key_chord",
+            target: [:],
+            effect: nil,
+            payload: ["keys": ["right"]]
+        ))
+        XCTAssertEqual(
+            plan?["effect"] as? String,
+            "all(unique_page_status_changes:next)"
+        )
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
+    func testPageDownRefusesToInventAWitnessForTwoPageStatuses() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.pageStatus = "Page 1 of 3"
+        backend.duplicatePageStatus = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "key_chord",
+            target: [:],
+            effect: nil,
+            payload: ["keys": ["pagedown"]]
+        ))
+        XCTAssertEqual(plan?["effect"] as? String, "all()")
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "dispatch_only")
+    }
+
     func testKeyChordRefusesSecureOrUnknownFocusAfterPreparation() async throws {
         for (protected, expectedError) in [
             (true, "secure_field"),
@@ -1042,6 +1120,56 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         XCTAssertEqual(backend.dispatchCount, 0)
     }
 
+    func testPressOnlyNamedTabVerifiesFromTheWindowTitle() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        backend.pressOnlyTabChangesWindowTitle = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "focus_tab",
+            target: ["title": "Example Domain"],
+            effect: nil
+        ))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
+    func testPressOnlyNamedTabDoesNotVerifyWithoutATitleChange() async throws {
+        let backend = SemanticFixtureBackend()
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "focus_tab",
+            target: ["title": "Example Domain"],
+            effect: nil
+        ))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
+    }
+
+    func testFindKeyUsesACompilerOwnedFocusedTextWitness() async throws {
+        let backend = SemanticFixtureBackend()
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "key_chord",
+            target: [:],
+            effect: nil,
+            payload: ["keys": ["find"]]
+        ))
+
+        XCTAssertNotNil(plan?["plan_fingerprint"] as? String)
+        XCTAssertEqual(
+            plan?["effect"] as? String,
+            "all(unique_focused_find_field_appears)"
+        )
+    }
+
     func testScrollToVisibleUsesViewportEvidenceWithoutValueFallback() async throws {
         let backend = SemanticFixtureBackend()
         backend.effectOnDispatch = true
@@ -1066,6 +1194,43 @@ final class NativeSemanticActionEngineTests: XCTestCase {
         let receipt = await execute(engine: engine, fingerprint: fingerprint)
 
         XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
+    func testScrollWitnessAllowsTheSameNamedTargetToMoveIntoView() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        backend.scrollMovesAfterDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "scroll",
+            target: ["ref": "scroll"],
+            effect: nil,
+            payload: [:]
+        ))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+    }
+
+    func testScrollWitnessRefusesAChangedTargetPath() async throws {
+        let backend = SemanticFixtureBackend()
+        backend.effectOnDispatch = true
+        backend.scrollMovesAfterDispatch = true
+        backend.scrollPathChangesAfterDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(makePrepareParams(
+            operation: "scroll",
+            target: ["ref": "scroll"],
+            effect: nil,
+            payload: [:]
+        ))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await execute(engine: engine, fingerprint: fingerprint)
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
     }
 
     func testDirectionalScrollMayUseValueFallbackOnlyWithDirectionAndAmount() async {
@@ -1266,7 +1431,8 @@ final class NativeSemanticActionEngineTests: XCTestCase {
                 operation: "press",
                 target: target,
                 effect: changeEffect(ref: index >= 980 ? "no-effect" : "immediate"),
-                turnID: "turn-\(index)"
+                turnID: "turn-\(index)",
+                timeoutMs: 100
             )
             guard let plan = await engine.prepare(params) else {
                 XCTFail("plan missing at \(index)")
@@ -1396,6 +1562,9 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     private var clipboardHash: String?
     var notifications: [String] = []
     var effectOnDispatch = false
+    var scrollMovesAfterDispatch = false
+    var scrollPathChangesAfterDispatch = false
+    var pressOnlyTabChangesWindowTitle = false
     var dispatchResults: [NativeDispatchResult] = []
     var bundleID = "com.conn.fixture"
     var windowID: UInt32 = 1
@@ -1405,6 +1574,8 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     var focusedElementRef: String?
     var replaceImmediateAfterDispatch = false
     var hidesDocumentURL = false
+    var pageStatus: String?
+    var duplicatePageStatus = false
     var forcedDocumentURL: String?
     var captureDelay = 0.0
     var dispatchDelay = 0.0
@@ -1442,6 +1613,13 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             NativeObservationNode(ref: "empty-title", role: "AXButton", title: "", identifier: "fixture.empty_title", supportedActions: ["AXPress"]),
             NativeObservationNode(ref: "status", role: "AXStaticText", title: "Status", identifier: "fixture.status", redactedValue: status, valueType: "string"),
             NativeObservationNode(ref: "tab", role: "AXRadioButton", title: "Second tab", identifier: "fixture.tab", selected: tabSelected, supportedActions: ["AXPress"], settableAttributes: ["AXSelected"]),
+            NativeObservationNode(
+                ref: "press-only-tab",
+                role: "AXButton",
+                title: "Example Domain",
+                identifier: "fixture.press_only_tab",
+                supportedActions: ["AXPress"]
+            ),
             NativeObservationNode(ref: "checkbox", role: "AXCheckBox", title: "Check", identifier: "fixture.checkbox", redactedValue: "false", valueType: "boolean", supportedActions: ["AXPress"]),
             NativeObservationNode(ref: "protected-text", role: "AXTextField", title: "Protected", identifier: "fixture.protected", focused: true, settableAttributes: ["AXValue"], protectedContent: true),
             NativeObservationNode(ref: "submitted", role: "AXStaticText", title: "Submitted", identifier: "fixture.submitted", redactedValue: String(submitted), valueType: "boolean"),
@@ -1451,7 +1629,26 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             NativeObservationNode(ref: "menu-bar", role: "AXMenuBar"),
             NativeObservationNode(ref: "actions-menu", parentRef: "menu-bar", role: "AXMenuBarItem", title: "Actions", identifier: "fixture.menu.actions", supportedActions: ["AXPress"]),
             NativeObservationNode(ref: "lazy-menu-item", parentRef: "actions-menu", role: "AXMenuItem", title: "Lazy New Window", identifier: "fixture.menu.new_window", enabled: true, supportedActions: ["AXPress"], menuShortcut: ["cmd", "n"]),
-            NativeObservationNode(ref: "scroll", role: "AXScrollBar", title: "Scroll", identifier: "fixture.scroll", redactedValue: String(scrollValue), valueType: "number", visible: scrollVisible, supportedActions: ["AXScrollToVisible"], settableAttributes: ["AXValue"]),
+            NativeObservationNode(
+                ref: scrollMovesAfterDispatch && dispatchCount > 0
+                    ? "scroll-after" : "scroll",
+                path: scrollPathChangesAfterDispatch && dispatchCount > 0
+                    ? [9] : [3],
+                role: "AXScrollBar",
+                title: "Scroll",
+                identifier: "fixture.scroll",
+                redactedValue: String(scrollValue),
+                valueType: "number",
+                visible: scrollVisible,
+                frame: NativeRect(
+                    x: 10,
+                    y: scrollMovesAfterDispatch && dispatchCount > 0 ? 20 : 900,
+                    width: 100,
+                    height: 20
+                ),
+                supportedActions: ["AXScrollToVisible"],
+                settableAttributes: ["AXValue"]
+            ),
             NativeObservationNode(ref: "duplicate-tab-1", role: "AXRadioButton", title: "Duplicate tab", identifier: "fixture.tab.duplicate.1", selected: false, supportedActions: ["AXPress"]),
             NativeObservationNode(ref: "duplicate-tab-2", role: "AXRadioButton", title: "Duplicate tab", identifier: "fixture.tab.duplicate.2", selected: false, supportedActions: ["AXPress"]),
         ]
@@ -1468,6 +1665,18 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
                 protectedContent: textProtected
             ))
         }
+        if let pageStatus {
+            nodes.append(NativeObservationNode(
+                ref: "page-status", role: "AXStaticText",
+                redactedValue: pageStatus, valueType: "string"
+            ))
+            if duplicatePageStatus {
+                nodes.append(NativeObservationNode(
+                    ref: "page-status-copy", role: "AXStaticText",
+                    redactedValue: pageStatus, valueType: "string"
+                ))
+            }
+        }
         var observation = NativeCapturedObservation.fixture(
             turnID: turnID,
             observationEpoch: observationEpoch,
@@ -1476,6 +1685,8 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             windowID: windowID
         )
         observation.windowCount = windowCount
+        observation.windowTitle = pressOnlyTabChangesWindowTitle && dispatchCount > 0
+            ? "Example Domain" : "Other Tab"
         observation.focusedElementRef = focusedElementRef
         observation.clipboardHash = clipboardHash
         observation.notifications = notifications
@@ -1530,6 +1741,12 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             }
         } else if strategy == .keyChord {
             submitted = true
+            if request.payload.keys == ["pagedown"] {
+                pageStatus = "Page 2 of 3"
+            }
+            if request.payload.keys == ["right"] {
+                pageStatus = "Page 3 of 3"
+            }
         } else if strategy == .pasteboard {
             clipboardHash = request.payload.text.map(NativeHash.sha256)
         } else if request.operation == .scroll {
@@ -1545,6 +1762,8 @@ final class SemanticFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             immediateValue = "changed-\(dispatchCount)"
         } else if target?.current.identifier == "fixture.tab" {
             tabSelected = true
+        } else if target?.current.identifier == "fixture.press_only_tab" {
+            pressOnlyTabChangesWindowTitle = true
         } else if target?.current.identifier == "fixture.text" {
             text = request.payload.text ?? ""
         }

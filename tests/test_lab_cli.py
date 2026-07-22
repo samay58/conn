@@ -13,6 +13,7 @@ from conn.lab.cli import (
     build_parser,
     doctor,
     load_run_report,
+    main,
     softnet_is_privileged,
 )
 
@@ -22,6 +23,7 @@ def test_lab_parser_exposes_only_the_approved_commands() -> None:
 
     assert parser.parse_args(["doctor"]).command == "doctor"
     assert parser.parse_args(["bootstrap"]).command == "bootstrap"
+    assert parser.parse_args(["atlas"]).command == "atlas"
     run = parser.parse_args([
         "run",
         "safari-tab",
@@ -34,7 +36,31 @@ def test_lab_parser_exposes_only_the_approved_commands() -> None:
     assert run.fresh is True
     assert parser.parse_args(["suite", "smoke"]).suite == "smoke"
     assert parser.parse_args(["suite", "release"]).suite == "release"
+    assert parser.parse_args(["suite", "breadth"]).suite == "breadth"
     assert parser.parse_args(["report", "run-123"]).run_id == "run-123"
+    promotion = parser.parse_args([
+        "promote",
+        "data/reports/sanitized.json",
+        "--incident-id",
+        "opaque-play",
+    ])
+    assert promotion.source == "data/reports/sanitized.json"
+    assert promotion.incident_id == "opaque-play"
+
+
+def test_run_command_fails_when_the_scenario_contract_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("conn.lab.cli._build_candidate", lambda root: None)
+    monkeypatch.setattr(
+        "conn.lab.cli.run_scenario",
+        lambda root, scenario, mode: {
+            "passed": False,
+            "contract_passed": False,
+        },
+    )
+
+    assert main(["run", "terminal-window", "--fresh"]) == 1
 
 
 def test_report_loads_one_bounded_run_without_private_payloads(

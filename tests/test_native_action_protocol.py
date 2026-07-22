@@ -97,13 +97,60 @@ def test_activate_and_semantic_key_compile_without_raw_coordinates(cfg):
         "confidence": 0.94,
     }
     assert visual["visual_enabled"] is False
+    assert semantic["timeout_ms"] == cfg.actions.semantic_verify_ms
+    assert visual["timeout_ms"] == cfg.actions.visual_verify_ms
     assert key["operation"] == "key_chord"
     assert key["payload"] == {"keys": ["space"]}
     assert "coordinate" not in json.dumps(visual)
 
 
+def test_find_key_compiles_as_one_semantic_key(cfg):
+    registry = build_registry()
+
+    request = compile_action_request(
+        registry["computer_key"], {"key": "find"}, cfg
+    )
+
+    assert request["operation"] == "key_chord"
+    assert request["payload"] == {"keys": ["find"]}
+    assert "find" in registry["computer_key"].parameters["properties"]["key"]["enum"]
+
+
 def test_candidate_config_enables_gated_visual_lane():
-    assert load_config(PROJECT_ROOT / "config.toml").actions.visual_enabled is True
+    actions = load_config(PROJECT_ROOT / "config.toml").actions
+
+    assert actions.visual_enabled is True
+    assert actions.visual_verify_ms == 2500
+
+
+def test_focused_element_is_not_an_authorized_semantic_strategy():
+    plan = {
+        "plan_fingerprint": "selected-children",
+        "preview": "Select Projects",
+        "target": "Projects",
+        "effect": "selected true",
+        "authorized_strategies": ["ax_set_focused"],
+        "effect_class": "reversible_navigation",
+        "navigation_generation": 1,
+        "lane": "semantic",
+        "snapshot_id": "snapshot",
+        "turn_id": "turn",
+        "response_epoch": 1,
+        "observation_epoch": 1,
+        "payload_hash": "hash",
+        "before_digest": "digest",
+        "timeout_ms": 1000,
+        "bundle_id": "com.apple.finder",
+        "window_id": 1,
+        "target_role": "AXGroup",
+        "secure": False,
+        "denied": False,
+        "read_set": ["item"],
+    }
+
+    assert validate_plan(plan, require_navigation=True) == (
+        "native_plan_invalid: unauthorized strategy"
+    )
 
 
 def test_visual_activation_schema_requires_bounded_current_capture_grounding():

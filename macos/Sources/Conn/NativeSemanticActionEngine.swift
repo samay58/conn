@@ -340,13 +340,18 @@ actor NativeSemanticActionEngine {
         }
         let strategies = compileStrategies(request: request, target: targetNode)
         guard !strategies.isEmpty else {
-            return failurePlan("unsupported_operation")
+            return failurePlan(
+                request.payload.intentFamily == "select_named"
+                    ? "no_live_affordance" : "unsupported_operation"
+            )
         }
         let safeTarget = [
             targetNode?.title,
             targetNode?.description,
+            semanticIntentTarget(request.payload),
             request.payload.menuPath.last,
             request.payload.appName,
+            request.payload.intentName,
             request.payload.bundleID,
             request.payload.url,
             request.operation.rawValue,
@@ -509,6 +514,8 @@ actor NativeSemanticActionEngine {
             return lowerCreate(request: request, baseline: baseline)
         case "select_relative":
             return lowerSelectRelative(request: request, baseline: baseline)
+        case "select_named":
+            return lowerSelectNamed(request: request, baseline: baseline)
         default:
             return .failure(IntentLoweringFailure(plan: failurePlan("unsupported_intent")))
         }
@@ -523,31 +530,61 @@ actor NativeSemanticActionEngine {
             return .failure(IntentLoweringFailure(plan: failurePlan("unsupported_intent")))
         }
         let wanted = synonyms.map { "new \($0)" }
-        let leaves = baseline.nodes.filter { node in
+        let matches = baseline.nodes.filter { node in
             node.role == "AXMenuItem"
                 && node.enabled != false
                 && wanted.contains(normalize(node.title))
         }
-        guard let leaf = leaves.first else {
+        guard !matches.isEmpty else {
             return .failure(IntentLoweringFailure(plan: failurePlan("no_live_affordance")))
         }
-        let paths = Set(leaves.map { menuPathTitles(to: $0, in: baseline) })
+        var resolved: [(intent: NativeObservationNode, dispatch: NativeObservationNode)] = []
+        for match in matches {
+            let descendants = baseline.nodes.filter { node in
+                node.role == "AXMenuItem"
+                    && node.enabled != false
+                    && NativeObservationStore.isDescendant(
+                        node, of: match.ref, in: baseline
+                    )
+            }
+            if match.menuShortcut != nil || descendants.isEmpty {
+                resolved.append((match, match))
+                continue
+            }
+            let defaults = descendants.filter { $0.menuShortcut != nil }
+            guard defaults.count <= 1 else {
+                return .failure(IntentLoweringFailure(plan: failurePlan(
+                    "ambiguous_intent", outcome: .ambiguous
+                )))
+            }
+            guard let defaultLeaf = defaults.first else {
+                return .failure(IntentLoweringFailure(
+                    plan: failurePlan("no_live_affordance")
+                ))
+            }
+            resolved.append((match, defaultLeaf))
+        }
+        let paths = Set(resolved.map {
+            menuPathTitles(to: $0.dispatch, in: baseline)
+        })
         guard paths.count == 1 else {
             return .failure(IntentLoweringFailure(plan: failurePlan("ambiguous_intent", outcome: .ambiguous)))
         }
         var lowered = request
         lowered.operation = .menu
-        lowered.payload.menuPath = menuPathTitles(to: leaf, in: baseline)
+        lowered.payload.menuPath = menuPathTitles(
+            to: resolved[0].dispatch, in: baseline
+        )
             .split(separator: "\u{1e}").map(String.init)
-        let candidates: [[String: Any]] = leaves.map { node in
-            let path = menuPathTitles(to: node, in: baseline)
+        let candidates: [[String: Any]] = resolved.map { nodes in
+            let path = menuPathTitles(to: nodes.dispatch, in: baseline)
                 .split(separator: "\u{1e}").map(String.init)
             var candidate: [String: Any] = [
-                "title": node.title ?? "", "role": node.role,
+                "title": nodes.intent.title ?? "", "role": nodes.dispatch.role,
                 "strategy_class": "menu",
                 "menu_path": path,
             ]
-            candidate.put("shortcut", node.menuShortcut)
+            candidate.put("shortcut", nodes.dispatch.menuShortcut)
             return candidate
         }
         return .success(LoweredIntent(
@@ -615,6 +652,14 @@ actor NativeSemanticActionEngine {
         return titles.joined(separator: "\u{1e}")
     }
 
+    private func semanticIntentTarget(_ payload: NativeActionPayload) -> String? {
+        guard payload.intentFamily == "create",
+              let kind = payload.intentKind?.trimmingCharacters(
+                  in: .whitespacesAndNewlines
+              ), !kind.isEmpty else { return nil }
+        return "New \(kind.prefix(1).capitalized)\(kind.dropFirst())"
+    }
+
     private func lowerSelectRelative(
         request: NativeActionRequest,
         baseline: NativeCapturedObservation
@@ -652,9 +697,16 @@ actor NativeSemanticActionEngine {
         guard let current = selected.first else {
             return .failure(IntentLoweringFailure(plan: failurePlan("no_current_selection")))
         }
-        let siblings = baseline.nodes.filter {
-            $0.parentRef == current.parentRef && $0.role == current.role
+        guard let collectionRef = current.parentRef else {
+            return .failure(IntentLoweringFailure(
+                plan: failurePlan("no_current_selection")
+            ))
         }
+        let siblings = NativeObservationStore.selectionPeers(
+            matching: current,
+            collectionRef: collectionRef,
+            in: baseline
+        )
         guard let index = siblings.firstIndex(where: { $0.ref == current.ref }) else {
             return .failure(IntentLoweringFailure(plan: failurePlan("no_current_selection")))
         }
@@ -669,11 +721,13 @@ actor NativeSemanticActionEngine {
                     in: .whitespacesAndNewlines
                 ).isEmpty
             }
-        let descendantKey = siblingNamed ? nil
+        let structuralPeerTarget = sibling.frame != nil
+            && siblings.allSatisfy { $0.frame != nil }
+        let descendantKey = siblingNamed || structuralPeerTarget ? nil
             : NativeObservationStore.descendantSemanticKey(
                 of: sibling, in: baseline
             )
-        if !siblingNamed {
+        if !siblingNamed && !structuralPeerTarget {
             guard let descendantKey else {
                 return .failure(IntentLoweringFailure(
                     plan: failurePlan("no_stable_target")
@@ -708,6 +762,108 @@ actor NativeSemanticActionEngine {
             "strategy_class": "semantic_selection",
         ]]
         return .success(LoweredIntent(request: lowered, candidates: candidates))
+    }
+
+    private func lowerSelectNamed(
+        request: NativeActionRequest,
+        baseline: NativeCapturedObservation
+    ) -> Result<LoweredIntent, IntentLoweringFailure> {
+        guard let rawName = request.payload.intentName else {
+            return .failure(IntentLoweringFailure(
+                plan: failurePlan("unsupported_intent")
+            ))
+        }
+        let name = normalize(rawName)
+        guard !name.isEmpty else {
+            return .failure(IntentLoweringFailure(
+                plan: failurePlan("unsupported_intent")
+            ))
+        }
+        let roles: Set<String>
+        if let kind = request.payload.intentKind {
+            guard let kindRoles = Self.selectionParentRoles[kind] else {
+                return .failure(IntentLoweringFailure(
+                    plan: failurePlan("unsupported_intent")
+                ))
+            }
+            roles = kindRoles
+        } else {
+            roles = Set(Self.selectionParentRoles.values.flatMap { $0 })
+        }
+        let collectionRefs = Set(
+            baseline.nodes.filter { roles.contains($0.role) }.map(\.ref)
+        )
+        let selectableRoles: Set<String> = [
+            "AXCell", "AXGroup", "AXRadioButton", "AXRow", "AXTab",
+        ]
+        let candidates = baseline.nodes.filter { node in
+            guard selectableRoles.contains(node.role),
+                  node.parentRef.map(collectionRefs.contains) == true else {
+                return false
+            }
+            if [node.title, node.description, node.identifier]
+                .contains(where: { normalize($0) == name }) {
+                return true
+            }
+            return baseline.nodes.contains { descendant in
+                NativeObservationStore.isDescendant(
+                    descendant, of: node.ref, in: baseline
+                ) && !descendant.secure
+                    && [
+                        descendant.title,
+                        descendant.description,
+                        descendant.redactedValue,
+                    ]
+                        .contains(where: { normalize($0) == name })
+            }
+        }
+        guard candidates.count == 1, let candidate = candidates.first else {
+            return .failure(IntentLoweringFailure(plan: failurePlan(
+                candidates.isEmpty ? "no_live_affordance" : "ambiguous_intent",
+                outcome: candidates.isEmpty ? .failed : .ambiguous
+            )))
+        }
+        let target: NativeObservationNode
+        let witness: NativeEffectGroup?
+        if candidate.role == "AXGroup" {
+            let focusable = baseline.nodes.filter {
+                NativeObservationStore.isDescendant(
+                    $0, of: candidate.ref, in: baseline
+                ) && !$0.secure
+                    && $0.settableAttributes.contains("AXFocused")
+            }
+            guard focusable.count == 1, let child = focusable.first else {
+                return .failure(IntentLoweringFailure(
+                    plan: failurePlan("no_live_affordance")
+                ))
+            }
+            target = child
+            witness = NativeEffectGroup(mode: "all", predicates: [])
+        } else {
+            target = candidate
+            witness = nil
+        }
+        var lowered = request
+        lowered.operation = .focusTab
+        lowered.target = NativeActionTarget(
+            snapshotID: nil,
+            ref: target.ref,
+            identifier: target.identifier,
+            title: nil,
+            bundleID: request.target.bundleID,
+            descendantKey: NativeObservationStore.descendantSemanticKey(
+                of: target, in: baseline
+            )
+        )
+        return .success(LoweredIntent(
+            request: lowered,
+            candidates: [[
+                "title": rawName,
+                "role": target.role,
+                "strategy_class": "semantic_selection",
+            ]],
+            witness: witness
+        ))
     }
 
     private func menuCandidates(
@@ -759,9 +915,39 @@ actor NativeSemanticActionEngine {
                 NativeEffectPredicate(kind: "clipboard_hash_equals", expected: NativeHash.sha256($0))
             }
         case .focusTab:
-            predicate = target.map {
-                NativeEffectPredicate(kind: "element_attribute_equals", ref: $0.ref,
-                                      attribute: "selected", expected: "true")
+            predicate = target.flatMap { target in
+                if request.payload.intentFamily == "select_relative",
+                   let parentRef = target.parentRef {
+                    let siblings = baseline.nodes.filter {
+                        $0.parentRef == parentRef && $0.role == target.role
+                    }
+                    guard siblings.contains(where: {
+                        $0.ref == target.ref
+                    }) else { return nil }
+                    return NativeEffectPredicate(
+                        kind: "collection_selected_peer_index_changes_by_one",
+                        ref: parentRef,
+                        attribute: target.role,
+                        expected: request.payload.intentRelation
+                    )
+                }
+                if target.selected != nil
+                    || target.settableAttributes.contains("AXSelected")
+                    || target.role == "AXRow" {
+                    return NativeEffectPredicate(
+                        kind: "element_attribute_equals",
+                        ref: target.ref,
+                        attribute: "selected",
+                        expected: "true"
+                    )
+                }
+                let title = (target.title ?? "").trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                return title.isEmpty ? nil : NativeEffectPredicate(
+                    kind: "window_title_equals",
+                    expected: title
+                )
             }
         case .scroll:
             predicate = target.map { target in
@@ -801,10 +987,34 @@ actor NativeSemanticActionEngine {
             } else {
                 predicate = nil
             }
+        case .keyChord where ["pageup", "pagedown", "left", "right"].contains(
+            request.payload.keys.first ?? ""
+        ) && request.payload.keys.count == 1:
+            predicate = uniquePageStatusNode(in: baseline).map { _ in
+                let key = request.payload.keys[0]
+                return NativeEffectPredicate(
+                    kind: "unique_page_status_changes",
+                    expected: ["pagedown", "right"].contains(key)
+                        ? "next" : "previous"
+                )
+            }
+        case .keyChord where request.payload.keys == ["find"]:
+            predicate = NativeEffectPredicate(
+                kind: "unique_focused_find_field_appears"
+            )
         case .menu, .keyChord, .semanticIntent:
             predicate = nil
         }
         return NativeEffectGroup(mode: "all", predicates: predicate.map { [$0] } ?? [])
+    }
+
+    private func uniquePageStatusNode(
+        in baseline: NativeCapturedObservation
+    ) -> NativeObservationNode? {
+        let matches = baseline.nodes.filter {
+            NativePageStatus.recognizedValue($0) != nil
+        }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     private func compileStrategies(
@@ -816,11 +1026,15 @@ actor NativeSemanticActionEngine {
         case .clipboardWrite: return [.pasteboard]
         case .focusTab:
             var strategies: [NativeActionStrategy] = []
-            if target?.role == "AXRow" {
-                strategies.append(.axSetSelectedRows)
+            if request.payload.intentFamily == "select_relative",
+               target?.role == "AXRow" {
+                return [.semanticRowKeySelect]
             }
             if target?.settableAttributes.contains("AXSelected") == true {
                 strategies.append(.axSetSelected)
+            }
+            if target?.role == "AXRow" {
+                strategies.append(.axSetSelectedRows)
             }
             if target?.supportedActions.contains("AXPress") == true {
                 strategies.append(.axPress)
@@ -898,7 +1112,9 @@ actor NativeSemanticActionEngine {
         case .openURL: return "Open the requested location"
         case .navigate: return "Open the requested location"
         case .clipboardWrite: return "Copy \(request.payload.text?.count ?? 0) characters"
-        case .focusTab: return "Focus \(target)"
+        case .focusTab:
+            return request.payload.intentFamily == "select_named"
+                ? "Select \(target)" : "Focus \(target)"
         case .scroll: return "Scroll \(target)"
         case .setText: return "Enter text in \(target)"
         case .press: return "Press \(target)"

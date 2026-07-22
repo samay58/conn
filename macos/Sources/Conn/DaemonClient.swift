@@ -181,8 +181,7 @@ final class DaemonClient {
     private var handshake: DaemonHandshake
     private var requestReplayGuard = NativeRequestReplayGuard()
     private let executionInterlock: NativeExecutionInterlock
-    private let semanticActionEngine: NativeSemanticActionEngine
-    private let visualControl: NativeVisualControl
+    private let actionFacade: NativeActionFacade
     private var connectionID: UUID?
     private var closed = false
     private var systemObservers: [NSObjectProtocol] = []
@@ -198,10 +197,12 @@ final class DaemonClient {
         handshake = DaemonHandshake(bridgeToken: bridgeToken)
         let executionInterlock = NativeExecutionInterlock()
         self.executionInterlock = executionInterlock
-        semanticActionEngine = NativeSemanticActionEngine(
-            executionInterlock: executionInterlock
+        actionFacade = NativeActionFacade(
+            semantic: NativeSemanticActionEngine(
+                executionInterlock: executionInterlock
+            ),
+            visual: NativeVisualControl(executionInterlock: executionInterlock)
         )
-        visualControl = NativeVisualControl(executionInterlock: executionInterlock)
         installSystemObservers()
     }
 
@@ -223,8 +224,7 @@ final class DaemonClient {
 
     func connect() {
         closed = false
-        invalidateSemanticPlans()
-        revokeVisualCapture()
+        invalidateNativeActions()
         task?.cancel(with: .goingAway, reason: nil)
         let connection = handshake.beginConnection()
         connectionID = connection
@@ -238,8 +238,7 @@ final class DaemonClient {
 
     func close() {
         closed = true
-        invalidateSemanticPlans()
-        revokeVisualCapture()
+        invalidateNativeActions()
         task?.cancel(with: .normalClosure, reason: nil)
         task = nil
         if let connectionID {
@@ -363,19 +362,7 @@ final class DaemonClient {
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let data: Any?
-                if op == "observe_visual" {
-                    data = await visualControl.observe(params)
-                } else if op == "prepare_action",
-                          Self.isVisualPreparation(params) {
-                    data = await visualControl.prepareVisual(params)
-                } else if op == "execute_action",
-                          let fingerprint = params["plan_fingerprint"] as? String,
-                          await visualControl.ownsPlan(fingerprint) {
-                    data = await visualControl.executeVisual(params)
-                } else {
-                    data = await semanticActionEngine.perform(op: op, params: params)
-                }
+                let data = await actionFacade.perform(op: op, params: params)
                 self.sendAuthenticated(
                     self.rpcReply(
                         type: "ax_action_result",
@@ -404,13 +391,6 @@ final class DaemonClient {
         ]
     }
 
-    private static func isVisualPreparation(_ params: [String: Any]) -> Bool {
-        guard let request = params["request"] as? [String: Any],
-              request["operation"] as? String == "activate",
-              let payload = request["payload"] as? [String: Any] else { return false }
-        return payload["visual_grounding"] is [String: Any]
-    }
-
     private func receive(on task: URLSessionWebSocketTask, connection: UUID) {
         task.receive { [weak self] result in
             Task { @MainActor [weak self] in
@@ -432,8 +412,7 @@ final class DaemonClient {
                 case .failure:
                     self.state.connected = false
                     self.state.clearNavigationState()
-                    self.invalidateSemanticPlans()
-                    self.revokeVisualCapture()
+                    self.invalidateNativeActions()
                     guard !self.closed else { return }
                     self.task = nil
                     self.executionInterlock.disconnect(connection.uuidString)
@@ -496,8 +475,7 @@ final class DaemonClient {
         guard self.task === task, connectionID == connection else { return }
         state.connected = false
         state.clearNavigationState()
-        invalidateSemanticPlans()
-        revokeVisualCapture()
+        invalidateNativeActions()
         task.cancel(with: .policyViolation, reason: nil)
         self.task = nil
         executionInterlock.disconnect(connection.uuidString)
@@ -517,12 +495,8 @@ final class DaemonClient {
         }
     }
 
-    private func invalidateSemanticPlans() {
-        Task { await semanticActionEngine.invalidatePlans() }
-    }
-
-    private func revokeVisualCapture() {
-        Task { await visualControl.revoke() }
+    private func invalidateNativeActions() {
+        Task { await actionFacade.invalidate() }
     }
 
     private func acceptNavigationState(_ msg: [String: Any], connection: UUID) {
@@ -583,8 +557,7 @@ final class DaemonClient {
     }
 
     private func systemDidSuspend() {
-        invalidateSemanticPlans()
-        revokeVisualCapture()
+        invalidateNativeActions()
         send(["type": "navigation_suspend"])
     }
 

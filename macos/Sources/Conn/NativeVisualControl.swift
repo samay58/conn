@@ -476,6 +476,11 @@ final class ScreenCaptureVisualProvider: NativeVisualCaptureProvider, @unchecked
         guard AXUIElementCopyElementAtPosition(
             appElement, Float(point.x), Float(point.y), &hit
         ) == .success, let hit else { return nil }
+        var rawRole: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(
+            hit, kAXRoleAttribute as CFString, &rawRole
+        )
+        let role = rawRole as? String ?? ""
         var rawActions: CFArray?
         guard AXUIElementCopyActionNames(hit, &rawActions) == .success else {
             return nil
@@ -492,17 +497,25 @@ final class ScreenCaptureVisualProvider: NativeVisualCaptureProvider, @unchecked
                 values.append(nil)
             }
         }
-        return Self.actionableLabel(actionNames: actionNames, values: values)
+        return Self.actionableLabel(
+            role: role,
+            actionNames: actionNames,
+            values: values
+        )
     }
 
     static func actionableLabel(
+        role: String,
         actionNames: [String],
         values: [String?]
     ) -> String? {
-        let activationActions = Set([
-            "AXPress", "AXShowMenu", "AXConfirm", "AXPick",
+        let activationActions = Set(["AXPress", "AXConfirm", "AXPick"])
+        let menuRoles = Set([
+            "AXButton", "AXMenuButton", "AXMenuItem", "AXPopUpButton",
         ])
-        guard !activationActions.isDisjoint(with: actionNames) else {
+        let actionable = !activationActions.isDisjoint(with: actionNames)
+            || (actionNames.contains("AXShowMenu") && menuRoles.contains(role))
+        guard actionable else {
             return nil
         }
         return values.compactMap { value in

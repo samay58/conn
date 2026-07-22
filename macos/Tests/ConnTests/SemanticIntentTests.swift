@@ -273,6 +273,29 @@ final class SemanticIntentTests: XCTestCase {
         XCTAssertEqual(backend.lastMenuPath, ["Actions", "New Window"])
     }
 
+    func testCreateWindowUsesOneShortcutLeafBelowAMatchingMenuParent() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useNestedNewWindowMenu()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "window"]))
+
+        let candidates = try XCTUnwrap(plan?["candidates"] as? [[String: Any]])
+        XCTAssertEqual(candidates.first?["menu_path"] as? [String],
+                       ["Shell", "New Window", "Basic"])
+        XCTAssertEqual(plan?["target"] as? String, "New Window")
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastMenuPath, ["Shell", "New Window", "Basic"])
+    }
+
     func testCreateWindowRefusesAmbiguousLazyMenuPaths() async {
         let backend = IntentFixtureBackend()
         backend.useAmbiguousLazyNewWindowMenus()
@@ -322,8 +345,11 @@ final class SemanticIntentTests: XCTestCase {
             slots: ["relation": "next", "kind": "document"]))
         let predicates = try XCTUnwrap(plan?["predicates"] as? [[String: Any]])
         XCTAssertEqual(predicates.count, 1)
-        XCTAssertEqual(predicates[0]["kind"] as? String, "element_attribute_equals")
-        XCTAssertEqual(predicates[0]["attribute"] as? String, "selected")
+        XCTAssertEqual(
+            predicates[0]["kind"] as? String,
+            "collection_selected_peer_index_changes_by_one"
+        )
+        XCTAssertEqual(predicates[0]["attribute"] as? String, "AXRow")
         let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
 
         let receipt = await engine.execute([
@@ -348,6 +374,75 @@ final class SemanticIntentTests: XCTestCase {
         XCTAssertEqual(plan?["outcome"] as? String, "failed")
         XCTAssertEqual(plan?["error"] as? String, "no_relative_item")
         XCTAssertEqual(backend.dispatchCount, 0)
+    }
+
+    func testSelectNamedResolvesOneLiveRowAndVerifiesSelection() async throws {
+        let backend = IntentFixtureBackend()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_named",
+            slots: ["target_name": "Ideas", "kind": "item"]))
+        XCTAssertEqual(plan?["target"] as? String, "Ideas")
+        XCTAssertEqual(plan?["preview"] as? String, "Select Ideas")
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedIdentifier, "notes.row.2")
+    }
+
+    func testSelectNamedRefusesDuplicateLiveRows() async {
+        let backend = IntentFixtureBackend()
+        backend.includeDuplicateIdeasRow = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_named",
+            slots: ["target_name": "Ideas", "kind": "item"]))
+
+        XCTAssertEqual(plan?["outcome"] as? String, "ambiguous")
+        XCTAssertEqual(plan?["error"] as? String, "ambiguous_intent")
+        XCTAssertEqual(backend.dispatchCount, 0)
+    }
+
+    func testSelectNamedMatchesARedactedTextDescendant() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useValueOnlyNoteRows()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_named",
+            slots: ["target_name": "Ideas", "kind": "item"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedRef, "row-2")
+    }
+
+    func testSelectNamedRefusesAnIconWhoseFocusDoesNotSelectIt() async {
+        let backend = IntentFixtureBackend()
+        backend.includeFinderIconItem = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_named",
+            slots: ["target_name": "Projects", "kind": "item"]))
+        XCTAssertEqual(plan?["outcome"] as? String, "failed")
+        XCTAssertEqual(plan?["error"] as? String, "no_live_affordance")
+        XCTAssertEqual(plan?["dispatch_state"] as? String, "not_dispatched")
+        XCTAssertNil(backend.lastDispatchedIdentifier)
     }
 
     func testSelectRelativePreviousResolvesBackwards() async throws {
@@ -382,7 +477,7 @@ final class SemanticIntentTests: XCTestCase {
             slots: ["relation": "previous", "kind": "note"]))
         XCTAssertEqual(
             plan?["authorized_strategies"] as? [String],
-            ["ax_set_selected_rows", "ax_set_selected"]
+            ["semantic_row_key_select"]
         )
         let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
         let receipt = await engine.execute([
@@ -392,6 +487,173 @@ final class SemanticIntentTests: XCTestCase {
 
         XCTAssertEqual(receipt["outcome"] as? String, "verified")
         XCTAssertEqual(backend.lastDispatchedIdentifier, "notes.row.1")
+    }
+
+    func testSelectRelativeUsesBoundedRowKeyBeforeIgnoredSelectionSetters() async throws {
+        let backend = IntentFixtureBackend()
+        backend.selectLastRow()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+        XCTAssertEqual(
+            plan?["authorized_strategies"] as? [String],
+            ["semantic_row_key_select"]
+        )
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1,
+            "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(receipt["strategy"] as? String, "semantic_row_key_select")
+        XCTAssertEqual(backend.lastDispatchedIdentifier, "notes.row.1")
+    }
+
+    func testRelativeSelectionWitnessFollowsAVirtualizedAnonymousRow() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useValueOnlyNoteRows()
+        backend.selectLastRow()
+        backend.virtualizeNoteListAfterDispatch = true
+        backend.virtualizeNoteRowsAfterDispatch = true
+        backend.moveNoteListAfterDispatch = true
+        backend.insertNoteAccessoryAfterDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+        let predicates = try XCTUnwrap(plan?["predicates"] as? [[String: Any]])
+        XCTAssertEqual(predicates.count, 1)
+        XCTAssertEqual(
+            predicates[0]["kind"] as? String,
+            "collection_selected_peer_index_changes_by_one"
+        )
+        XCTAssertEqual(predicates[0]["attribute"] as? String, "AXRow")
+        XCTAssertEqual(predicates[0]["expected"] as? String, "previous")
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1,
+            "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedRef, "row-1")
+    }
+
+    func testRelativeSelectionWitnessRefusesRowsReorderedAfterDispatch() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useValueOnlyNoteRows()
+        backend.selectLastRow()
+        backend.reorderNoteRowsAfterDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
+        XCTAssertEqual(backend.dispatchCount, 1)
+    }
+
+    func testRelativeSelectionWitnessRefusesTwoReplacementCollections() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useValueOnlyNoteRows()
+        backend.selectLastRow()
+        backend.virtualizeNoteListAfterDispatch = true
+        backend.moveNoteListAfterDispatch = true
+        backend.duplicateSelectedNoteListAfterDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "previous", "kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
+        XCTAssertEqual(backend.dispatchCount, 1)
+    }
+
+    func testRelativeSelectionWitnessRefusesAMultiPeerJump() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useThreeNoteRows()
+        backend.useValueOnlyNoteRows()
+        backend.jumpToLastNoteAfterDispatch = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "next", "kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1,
+            "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "no_effect")
+        XCTAssertEqual(backend.dispatchCount, 1)
+    }
+
+    func testRelativeSelectionRefusesWhenSelectionChangesBeforeDispatch() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useThreeNoteRows()
+        backend.useValueOnlyNoteRows()
+        backend.selectLastNoteBeforeExecution = true
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "next", "kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1,
+            "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "failed")
+        XCTAssertEqual(receipt["reason_code"] as? String, "stale_plan")
+        XCTAssertEqual(backend.dispatchCount, 0)
+    }
+
+    func testRelativeSelectionUsesUniqueStructuralPeersWhenLabelsRepeat() async throws {
+        let backend = IntentFixtureBackend()
+        backend.useFramedRowsWithDuplicateValues()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+
+        let plan = await engine.prepare(intentParams(
+            family: "select_relative",
+            slots: ["relation": "next", "kind": "note"]))
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1,
+            "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(backend.lastDispatchedRef, "row-2")
     }
 
     func testSelectRelativeNoteRefusesTwoSelectedMultiRowNoteLists() async {
@@ -507,7 +769,16 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     var includeNewNoteMenu = false
     var includeFolderOutline = false
     var includeSecondNoteList = false
+    var includeDuplicateIdeasRow = false
+    var includeFinderIconItem = false
     var virtualizeNoteListAfterDispatch = false
+    var virtualizeNoteRowsAfterDispatch = false
+    var moveNoteListAfterDispatch = false
+    var insertNoteAccessoryAfterDispatch = false
+    var reorderNoteRowsAfterDispatch = false
+    var duplicateSelectedNoteListAfterDispatch = false
+    var jumpToLastNoteAfterDispatch = false
+    var selectLastNoteBeforeExecution = false
     var includeDynamicTabDescription = false
     var changeTabCollectionIdentityAfterDispatch = false
     var focusCreatedWindowOnDispatch = false
@@ -530,9 +801,14 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
     private var addUnrelatedRadioOnDispatch = false
     private var lazyNewWindowMenu = false
     private var menuDiscoveryActive = false
+    private var nestedNewWindowMenu = false
     private var ambiguousLazyNewWindowMenus = false
     private var anonymousNoteRows = false
+    private var valueOnlyNoteRows = false
+    private var duplicateNoteValues = false
+    private var framedNoteRows = false
     private var lazyMenuParentTitle = "Actions"
+    private var finderIconSelected = false
 
     func selectLastRow() {
         selectedRow = 2
@@ -540,6 +816,22 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
 
     func useAnonymousNoteRows() {
         anonymousNoteRows = true
+    }
+
+    func useValueOnlyNoteRows() {
+        anonymousNoteRows = true
+        valueOnlyNoteRows = true
+    }
+
+    func useThreeNoteRows() {
+        noteCount = 3
+    }
+
+    func useFramedRowsWithDuplicateValues() {
+        anonymousNoteRows = true
+        valueOnlyNoteRows = true
+        duplicateNoteValues = true
+        framedNoteRows = true
     }
 
     func useNestedTabStripWithOneInitialTab() {
@@ -569,11 +861,23 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         ambiguousLazyNewWindowMenus = true
     }
 
+    func useNestedNewWindowMenu() {
+        includeNewWindowMenu = true
+        nestedNewWindowMenu = true
+        lazyNewWindowMenu = true
+        lazyMenuParentTitle = "Shell"
+    }
+
     func capture(
         turnID: String, observationEpoch: Int, query: NativeObservationQuery
     ) -> NativeCapturedObservation {
         captureIncludesMenu.append(query.includeMenu)
         captureDeadlines.append(query.deadlineMs)
+        if selectLastNoteBeforeExecution,
+           dispatchCount == 0,
+           captureIncludesMenu.count > 1 {
+            selectedRow = noteCount
+        }
         var nodes = [
             NativeObservationNode(ref: "menu-bar", role: "AXMenuBar"),
             NativeObservationNode(
@@ -597,6 +901,19 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
                 role: "AXMenuItem",
                 title: "New Window", enabled: true,
                 supportedActions: ["AXPress"]))
+            if nestedNewWindowMenu {
+                nodes.append(NativeObservationNode(
+                    ref: "new-window-menu", parentRef: "new-window",
+                    role: "AXMenu"))
+                nodes.append(NativeObservationNode(
+                    ref: "new-window-basic", parentRef: "new-window-menu",
+                    role: "AXMenuItem", title: "Basic", enabled: true,
+                    supportedActions: ["AXPress"], menuShortcut: ["cmd", "n"]))
+                nodes.append(NativeObservationNode(
+                    ref: "new-window-grass", parentRef: "new-window-menu",
+                    role: "AXMenuItem", title: "Grass", enabled: true,
+                    supportedActions: ["AXPress"]))
+            }
         }
         if lazyNewWindowMenu {
             nodes.append(NativeObservationNode(
@@ -663,22 +980,68 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         let notesListRef = virtualizeNoteListAfterDispatch && dispatchCount > 0
             ? "notes-list-v2" : "notes-list"
         nodes.append(NativeObservationNode(
-            ref: notesListRef, path: [2], role: "AXTable"))
-        for index in 1...noteCount {
+            ref: notesListRef,
+            path: moveNoteListAfterDispatch && dispatchCount > 0 ? [7] : [2],
+            role: "AXTable"))
+        let noteRowOrder = reorderNoteRowsAfterDispatch && dispatchCount > 0
+            ? Array((1...noteCount).reversed()) : Array(1...noteCount)
+        for (position, index) in noteRowOrder.enumerated() {
+            let rowRef = virtualizeNoteRowsAfterDispatch && dispatchCount > 0
+                ? "fresh-row-\(index)" : "row-\(index)"
+            let rowPath = virtualizeNoteRowsAfterDispatch && dispatchCount > 0
+                ? [8, position] : [2, position]
             nodes.append(NativeObservationNode(
-                ref: "row-\(index)", parentRef: notesListRef, path: [2, index - 1],
-                role: "AXRow", title: index == 1 ? "Groceries" : "Ideas",
+                ref: rowRef, parentRef: notesListRef, path: rowPath,
+                role: "AXRow",
+                title: index == 1 ? "Groceries" : index == 2 ? "Ideas" : "Tasks",
                 identifier: anonymousNoteRows ? nil : "notes.row.\(index)",
                 selected: selectedRow == index,
+                frame: framedNoteRows
+                    ? NativeRect(
+                        x: 200, y: Double(index * 60),
+                        width: 280, height: 56
+                    ) : nil,
                 settableAttributes: ["AXSelected"]))
             if anonymousNoteRows {
                 nodes[nodes.count - 1].title = nil
+                if insertNoteAccessoryAfterDispatch {
+                    nodes.append(NativeObservationNode(
+                        ref: "row-\(index)-accessory",
+                        parentRef: rowRef,
+                        path: [2, index - 1, 0],
+                        role: "AXStaticText",
+                        redactedValue: "Row \(index) " + (
+                            dispatchCount > 0 ? "edited now" : "edited yesterday"
+                        )
+                    ))
+                }
                 nodes.append(NativeObservationNode(
                     ref: "row-\(index)-title",
-                    parentRef: "row-\(index)",
-                    path: [2, index - 1, 0],
+                    parentRef: rowRef,
+                    path: [2, index - 1, insertNoteAccessoryAfterDispatch ? 1 : 0],
                     role: "AXStaticText",
-                    title: index == 1 ? "Groceries" : "Ideas"
+                    title: valueOnlyNoteRows
+                        ? nil : index == 1 ? "Groceries" : index == 2 ? "Ideas" : "Tasks",
+                    redactedValue: valueOnlyNoteRows
+                        ? (duplicateNoteValues
+                            ? "Note"
+                            : index == 1 ? "Groceries" : index == 2 ? "Ideas" : "Tasks")
+                        : nil
+                ))
+            }
+        }
+        if duplicateSelectedNoteListAfterDispatch && dispatchCount > 0 {
+            nodes.append(NativeObservationNode(
+                ref: "replacement-notes-list", path: [9], role: "AXTable"
+            ))
+            for position in 0..<noteCount {
+                nodes.append(NativeObservationNode(
+                    ref: "replacement-row-\(position)",
+                    parentRef: "replacement-notes-list",
+                    path: [9, position],
+                    role: "AXRow",
+                    selected: position == 0,
+                    settableAttributes: ["AXSelected"]
                 ))
             }
         }
@@ -701,6 +1064,28 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             nodes.append(NativeObservationNode(
                 ref: "other-row-2", parentRef: "other-notes", path: [4, 1],
                 role: "AXRow", title: "Another"))
+        }
+        if includeDuplicateIdeasRow {
+            nodes.append(NativeObservationNode(
+                ref: "duplicate-list", path: [5], role: "AXList"))
+            nodes.append(NativeObservationNode(
+                ref: "duplicate-ideas", parentRef: "duplicate-list",
+                path: [5, 0], role: "AXRow", title: "Ideas",
+                identifier: "duplicate.ideas", selected: false,
+                settableAttributes: ["AXSelected"]))
+        }
+        if includeFinderIconItem {
+            nodes.append(NativeObservationNode(
+                ref: "icon-view", path: [6], role: "AXList"))
+            nodes.append(NativeObservationNode(
+                ref: "projects-group", parentRef: "icon-view",
+                path: [6, 0], role: "AXGroup", identifier: "Projects",
+                selected: finderIconSelected))
+            nodes.append(NativeObservationNode(
+                ref: "projects-image", parentRef: "projects-group",
+                path: [6, 0, 0], role: "AXImage", title: "Projects",
+                identifier: "Projects.image",
+                settableAttributes: ["AXFocused"]))
         }
         if addUnrelatedRadioOnDispatch && dispatchCount > 0 {
             nodes.append(NativeObservationNode(
@@ -762,8 +1147,11 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             let leaf = request.payload.menuPath.last ?? ""
             if leaf == "New Tab" && createTabOnDispatch { tabCount += 1 }
             if leaf == "New Note" { noteCount += 1 }
-            if leaf == "New Window" { windowCount += 1 }
-            if leaf == "New Window" && focusCreatedWindowOnDispatch {
+            if leaf == "New Window" || nestedNewWindowMenu && leaf == "Basic" {
+                windowCount += 1
+            }
+            if (leaf == "New Window" || nestedNewWindowMenu && leaf == "Basic")
+                && focusCreatedWindowOnDispatch {
                 windowID += 1
             }
         }
@@ -772,6 +1160,7 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
         case "tabs.1": selectedTab = 1
         case "notes.row.2": selectedRow = 2
         case "notes.row.1": selectedRow = 1
+        case "Projects.image": finderIconSelected = true
         default: break
         }
         if anonymousNoteRows {
@@ -780,6 +1169,9 @@ final class IntentFixtureBackend: NativeSemanticBackend, @unchecked Sendable {
             case "row-1": selectedRow = 1
             default: break
             }
+        }
+        if jumpToLastNoteAfterDispatch && dispatchCount > 0 {
+            selectedRow = noteCount
         }
         return NativeDispatchResult(state: .dispatched, nativeError: nil)
     }

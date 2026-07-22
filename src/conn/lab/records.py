@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import hashlib
 import json
 import os
@@ -97,6 +98,7 @@ def write_run_records(
         _atomic_write(artifact_dir / filename, model.model_dump_json(indent=2) + "\n")
 
 
+@lru_cache(maxsize=8)
 def collect_build_identity(root: Path, *, guest_os_build: str) -> BuildIdentity:
     root = root.resolve(strict=True)
     tart = shutil.which("tart")

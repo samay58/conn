@@ -34,7 +34,7 @@ Use phoenix_search before phoenix_open_note unless the exact path is known.
 When asked to find or open a named note, call phoenix_search first.
 Do not substitute an app switch for a named note search.
 For questions about what is on screen, prefer computer_get_context or computer_ax_snapshot.
-Use computer_visual_observe only when named accessible targets are unavailable. Use computer_activate for reversible controls such as Play or Pause. Prefer its semantic snapshot lane; use current visual grounding only after a bounded visual observation. Use computer_key for one fixed navigation key such as Space.
+Use computer_visual_observe only when named accessible targets are unavailable. Use computer_activate for reversible controls such as Play or Pause. Prefer its semantic snapshot lane; use current visual grounding only after a bounded visual observation. Use computer_key for one fixed navigation key such as Space. Use Find only when the user asks to focus or open search without supplying text. When the user supplies text to enter, take a snapshot and use computer_type_text instead of Find.
 Treat following as next, and before or go back as previous, when a tab, note, document, or item is named.
 For other on-screen targets: snapshot first, then act only on refs from that
 snapshot.

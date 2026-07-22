@@ -121,7 +121,8 @@ final class NativeObservationStore {
             baseline: baseline,
             current: current,
             allowAnonymousWitness: false,
-            mutableCollectionDescription: false
+            mutableCollectionDescription: false,
+            allowFrameMovement: false
         )
     }
 
@@ -135,7 +136,23 @@ final class NativeObservationStore {
             baseline: baseline,
             current: current,
             allowAnonymousWitness: true,
-            mutableCollectionDescription: false
+            mutableCollectionDescription: false,
+            allowFrameMovement: false
+        )
+    }
+
+    func resolveMovingWitness(
+        target: NativeActionTarget,
+        baseline: NativeCapturedObservation,
+        current: NativeCapturedObservation
+    ) -> Result<NativeResolvedTarget, NativeResolutionError> {
+        resolve(
+            target: target,
+            baseline: baseline,
+            current: current,
+            allowAnonymousWitness: true,
+            mutableCollectionDescription: false,
+            allowFrameMovement: true
         )
     }
 
@@ -149,7 +166,8 @@ final class NativeObservationStore {
             baseline: baseline,
             current: current,
             allowAnonymousWitness: true,
-            mutableCollectionDescription: true
+            mutableCollectionDescription: true,
+            allowFrameMovement: false
         )
     }
 
@@ -158,7 +176,8 @@ final class NativeObservationStore {
         baseline: NativeCapturedObservation,
         current: NativeCapturedObservation,
         allowAnonymousWitness: Bool,
-        mutableCollectionDescription: Bool
+        mutableCollectionDescription: Bool,
+        allowFrameMovement: Bool
     ) -> Result<NativeResolvedTarget, NativeResolutionError> {
         guard baseline.turnID == current.turnID,
               baseline.observationEpoch == current.observationEpoch else {
@@ -190,12 +209,11 @@ final class NativeObservationStore {
                 && candidate.supportedActions == original.supportedActions
                 && (original.identifier == nil
                     || candidate.identifier == original.identifier)
-                && (
-                    target.descendantKey == nil
-                        || Self.descendantSemanticKey(
-                            of: candidate, in: current
-                        ) == target.descendantKey
-                )
+                && (target.descendantKey.map {
+                    Self.descendantSemanticKeys(
+                        of: candidate, in: current
+                    ).contains($0)
+                } ?? true)
         }
         guard allowAnonymousWitness
                 || hasSemanticName(original)
@@ -208,7 +226,8 @@ final class NativeObservationStore {
         let fullMatches = semanticMatches.filter { candidate in
             candidate.path == original.path
                 && candidate.siblingSignature == original.siblingSignature
-                && framesWithinDrift(candidate.frame, original.frame)
+                && (allowFrameMovement
+                    || framesWithinDrift(candidate.frame, original.frame))
                 && (
                     mutableCollectionDescription
                     ? collectionAncestorSignature(of: original, in: baseline)
@@ -264,19 +283,25 @@ final class NativeObservationStore {
         of node: NativeObservationNode,
         in snapshot: NativeCapturedObservation
     ) -> String? {
+        descendantSemanticKeys(of: node, in: snapshot).first
+    }
+
+    static func descendantSemanticKeys(
+        of node: NativeObservationNode,
+        in snapshot: NativeCapturedObservation
+    ) -> [String] {
         let descendants = snapshot.nodes.filter {
             isDescendant($0, of: node.ref, in: snapshot)
         }.sorted { lhs, rhs in
             lhs.path.lexicographicallyPrecedes(rhs.path)
         }
-        if let text = descendants.first(where: {
-            !$0.secure && $0.role == "AXStaticText" && $0.valueHash != nil
-        }), let valueHash = text.valueHash {
-            return NativeHash.sha256(
-                "\(text.role)\u{1f}\(valueHash)"
-            )
-        }
+        var keys: [String] = []
         for descendant in descendants where !descendant.secure {
+            if descendant.role == "AXStaticText", let valueHash = descendant.valueHash {
+                keys.append(NativeHash.sha256(
+                    "\(descendant.role)\u{1f}\(valueHash)"
+                ))
+            }
             let value = [
                 descendant.title,
                 descendant.description,
@@ -289,15 +314,65 @@ final class NativeObservationStore {
                     options: [.caseInsensitive, .diacriticInsensitive],
                     locale: .current
                 )
-                return NativeHash.sha256(
+                keys.append(NativeHash.sha256(
                     "\(descendant.role)\u{1f}\(normalized)"
-                )
+                ))
             }
         }
-        return nil
+        var seen = Set<String>()
+        return keys.filter { seen.insert($0).inserted }
     }
 
-    private static func isDescendant(
+    static func selectionPeers(
+        matching anchor: NativeObservationNode,
+        collectionRef: String,
+        in snapshot: NativeCapturedObservation
+    ) -> [NativeObservationNode] {
+        let peers = snapshot.nodes.filter { candidate in
+            candidate.parentRef == collectionRef
+                && candidate.role == anchor.role
+                && candidate.subrole == anchor.subrole
+                && candidate.supportedActions == anchor.supportedActions
+                && candidate.settableAttributes == anchor.settableAttributes
+                && compatibleSelectionFrame(anchor.frame, candidate.frame)
+        }
+        guard peers.count > 1 else { return [] }
+        if peers.allSatisfy({ $0.frame != nil }) {
+            let ordered = peers.sorted { lhs, rhs in
+                guard let left = lhs.frame, let right = rhs.frame else {
+                    return false
+                }
+                if left.y != right.y { return left.y < right.y }
+                return left.x < right.x
+            }
+            let positions = ordered.compactMap { node in
+                node.frame.map { "\($0.x):\($0.y)" }
+            }
+            guard Set(positions).count == ordered.count else { return [] }
+            return ordered
+        }
+        guard peers.allSatisfy({ $0.frame == nil }) else { return [] }
+        return peers.sorted { lhs, rhs in
+            lhs.path.lexicographicallyPrecedes(rhs.path)
+        }
+    }
+
+    private static func compatibleSelectionFrame(
+        _ anchor: NativeRect?,
+        _ candidate: NativeRect?
+    ) -> Bool {
+        switch (anchor, candidate) {
+        case (nil, nil):
+            return true
+        case let (anchor?, candidate?):
+            return abs(anchor.width - candidate.width) <= 2
+                && abs(anchor.height - candidate.height) <= 2
+        default:
+            return false
+        }
+    }
+
+    static func isDescendant(
         _ node: NativeObservationNode,
         of ancestorRef: String,
         in snapshot: NativeCapturedObservation

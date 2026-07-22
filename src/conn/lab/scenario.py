@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 from pathlib import Path
 import plistlib
 import re
@@ -22,7 +23,7 @@ from .desktop import (
 from .runner import LabRunner, LabRunnerConfig, LabRunnerError, VNCGuestSession
 from .models import ScenarioManifest, ScenarioMode
 from .records import collect_build_identity, write_run_records
-from .vnc import VNCClient
+from .vnc import VNCClient, connect_with_retry
 
 
 GUEST_REPO = "/Volumes/My Shared Files/repo"
@@ -104,6 +105,192 @@ def parse_nonnegative_count(value: str) -> int:
     return count
 
 
+def parse_lab_oracle(value: str, *, expected_bundle: str) -> dict:
+    if not value or len(value.encode()) > 4_096:
+        raise ValueError("lab oracle is invalid")
+    try:
+        payload = json.loads(value)
+    except ValueError as error:
+        raise ValueError("lab oracle is invalid") from error
+    required = {
+        "schema_version",
+        "bundle_id",
+        "selected_match_count",
+        "focused_match_count",
+        "focused_match_roles",
+        "value_match_roles",
+        "value_hash_match_roles",
+        "window_title_matches",
+        "value_match_count",
+        "label_match_count",
+        "page_statuses",
+    }
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != required
+        or payload.get("schema_version") != 1
+        or payload.get("bundle_id") != expected_bundle
+        or type(payload.get("window_title_matches")) is not bool
+    ):
+        raise ValueError("lab oracle is invalid")
+    for key in (
+        "selected_match_count",
+        "focused_match_count",
+        "value_match_count",
+        "label_match_count",
+    ):
+        count = payload.get(key)
+        if type(count) is not int or not 0 <= count <= 1_000:
+            raise ValueError("lab oracle is invalid")
+    for key in (
+        "focused_match_roles", "value_match_roles", "value_hash_match_roles",
+    ):
+        roles = payload.get(key)
+        if not isinstance(roles, dict) or len(roles) > 32:
+            raise ValueError("lab oracle is invalid")
+        for role, count in roles.items():
+            if (
+                not isinstance(role, str)
+                or re.fullmatch(r"AX[A-Za-z0-9_]{1,62}", role) is None
+                or type(count) is not int
+                or not 0 <= count <= 1_000
+            ):
+                raise ValueError("lab oracle is invalid")
+    page_statuses = payload.get("page_statuses")
+    if not isinstance(page_statuses, list) or len(page_statuses) > 4:
+        raise ValueError("lab oracle is invalid")
+    for status in page_statuses:
+        if not isinstance(status, str):
+            raise ValueError("lab oracle is invalid")
+        match = re.fullmatch(
+            r"(?i:page) ([1-9]\d{0,4}) (?i:of) ([1-9]\d{0,4})",
+            status,
+        )
+        if match is None or int(match.group(1)) > int(match.group(2)):
+            raise ValueError("lab oracle is invalid")
+    return payload
+
+
+def parse_lab_affordances(value: str, *, expected_bundle: str) -> dict:
+    if not value or len(value.encode()) > 4_096:
+        raise ValueError("lab affordances are invalid")
+    try:
+        payload = json.loads(value)
+    except ValueError as error:
+        raise ValueError("lab affordances are invalid") from error
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {
+            "schema_version", "bundle_id", "match_count", "matches",
+        }
+        or payload.get("schema_version") != 1
+        or payload.get("bundle_id") != expected_bundle
+        or type(payload.get("match_count")) is not int
+        or not isinstance(payload.get("matches"), list)
+        or payload["match_count"] != len(payload["matches"])
+        or not 0 <= payload["match_count"] <= 4
+    ):
+        raise ValueError("lab affordances are invalid")
+    required = {
+        "role", "selected", "selected_known", "focused", "focused_known",
+        "supported_actions", "settable_attributes", "parent_role",
+        "parent_supported_actions", "parent_settable_attributes",
+        "frame",
+    }
+    for match in payload["matches"]:
+        if not isinstance(match, dict) or set(match) != required:
+            raise ValueError("lab affordances are invalid")
+        for key in ("role", "parent_role"):
+            role = match[key]
+            if (
+                not isinstance(role, str)
+                or (role and re.fullmatch(r"AX[A-Za-z0-9_]{1,62}", role) is None)
+            ):
+                raise ValueError("lab affordances are invalid")
+        for key in ("selected", "selected_known", "focused", "focused_known"):
+            if type(match[key]) is not bool:
+                raise ValueError("lab affordances are invalid")
+        frame = match["frame"]
+        if frame is not None:
+            if not isinstance(frame, dict) or set(frame) != {
+                "x", "y", "width", "height",
+            }:
+                raise ValueError("lab affordances are invalid")
+            if any(
+                isinstance(frame[key], bool)
+                or not isinstance(frame[key], (int, float))
+                or not math.isfinite(frame[key])
+                or abs(frame[key]) > 100_000
+                for key in frame
+            ):
+                raise ValueError("lab affordances are invalid")
+        for key in (
+            "supported_actions", "settable_attributes",
+            "parent_supported_actions", "parent_settable_attributes",
+        ):
+            names = match[key]
+            if (
+                not isinstance(names, list)
+                or len(names) > 16
+                or names != sorted(set(names))
+                or any(
+                    not isinstance(name, str)
+                    or re.fullmatch(r"AX[A-Za-z0-9_]{1,62}", name) is None
+                    for name in names
+                )
+            ):
+                raise ValueError("lab affordances are invalid")
+    return payload
+
+
+def parse_lab_target(value: str, *, expected_bundle: str) -> dict:
+    if not value or len(value.encode()) > 4_096:
+        raise ValueError("lab target is invalid")
+    try:
+        payload = json.loads(value)
+    except ValueError as error:
+        raise ValueError("lab target is invalid") from error
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema_version", "bundle_id", "match_count", "frame"}
+        or payload.get("schema_version") != 1
+        or payload.get("bundle_id") != expected_bundle
+        or payload.get("match_count") != 1
+        or not isinstance(payload.get("frame"), dict)
+        or set(payload["frame"]) != {"x", "y", "width", "height"}
+    ):
+        raise ValueError("lab target is invalid")
+    frame = {}
+    for key in ("x", "y", "width", "height"):
+        value = payload["frame"].get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("lab target is invalid")
+        number = float(value)
+        if not 0 <= number <= 100_000:
+            raise ValueError("lab target is invalid")
+        frame[key] = number
+    if frame["width"] <= 0 or frame["height"] <= 0:
+        raise ValueError("lab target is invalid")
+    return {**payload, "frame": frame}
+
+
+def _lab_target_absent(value: str, *, expected_bundle: str) -> bool:
+    try:
+        payload = json.loads(value)
+    except ValueError:
+        return False
+    return (
+        isinstance(payload, dict)
+        and set(payload) == {
+            "schema_version", "bundle_id", "match_count", "frame",
+        }
+        and payload.get("schema_version") == 1
+        and payload.get("bundle_id") == expected_bundle
+        and payload.get("match_count") == 0
+        and payload.get("frame") is None
+    )
+
+
 def parse_notes_titles(value: str) -> tuple[str, ...]:
     try:
         titles = json.loads(value)
@@ -168,7 +355,12 @@ def browser_capsule_passes(
         "safari_local": {"verified", "dispatch_only"},
         "firefox_local": {"verified", "dispatch_only"},
         "firefox_visual": {"dispatch_only"},
+        "safari_visual": {"dispatch_only"},
         "firefox_space": {"dispatch_only"},
+        "firefox_scroll": {"verified", "dispatch_only"},
+        "safari_scroll": {"verified"},
+        "safari_focus": {"verified"},
+        "safari_history": {"verified", "dispatch_only"},
     }.get(scenario)
     if allowed_outcomes is None:
         return False
@@ -184,6 +376,23 @@ def browser_capsule_passes(
         and dispatch_count == 1
         and actual_bundle == expected_bundle
         and oracle.get("verdict") == "matched"
+    )
+
+
+def fixture_visual_passes(
+    *,
+    receipt: dict,
+    oracle: dict,
+    transaction_count: int,
+    dispatch_count: int,
+) -> bool:
+    return (
+        receipt.get("outcome") == "dispatch_only"
+        and receipt.get("reason_code") == "no_trustworthy_witness"
+        and oracle.get("verdict") == "matched"
+        and oracle.get("effect") == "playback_changed"
+        and transaction_count == 1
+        and dispatch_count == 1
     )
 
 
@@ -234,6 +443,115 @@ def notes_selection_oracle(
         "selected_before": selected_before,
         "selected_after": selected_after,
         "expected_selected": expected_selected,
+        "frontmost_bundle": frontmost_bundle,
+    }
+
+
+def window_count_oracle(
+    *,
+    before: int,
+    after: int,
+    frontmost_bundle: str,
+    expected_bundle: str,
+) -> dict:
+    matched = after == before + 1 and frontmost_bundle == expected_bundle
+    return {
+        "verdict": "matched" if matched else "not_matched",
+        "effect": "window_count_delta",
+        "effect_count": after - before,
+        "before": before,
+        "after": after,
+        "frontmost_bundle": frontmost_bundle,
+    }
+
+
+def calendar_period_oracle(
+    *,
+    before: dict,
+    after: dict,
+    frontmost_bundle: str,
+    effect: str,
+) -> dict:
+    expected_counts = {
+        "next_month_visible": (0, 1),
+        "current_month_visible": (1, 0),
+    }.get(effect)
+    matched = (
+        expected_counts is not None
+        and before.get("bundle_id") == "com.apple.iCal"
+        and after.get("bundle_id") == "com.apple.iCal"
+        and before.get("value_match_count") == expected_counts[0]
+        and after.get("value_match_count") == expected_counts[1]
+        and frontmost_bundle == "com.apple.iCal"
+    )
+    return {
+        "verdict": "matched" if matched else "not_matched",
+        "effect": effect,
+        "effect_count": 1 if matched else 0,
+        "before_match_count": before.get("value_match_count"),
+        "after_match_count": after.get("value_match_count"),
+        "frontmost_bundle": frontmost_bundle,
+    }
+
+
+def preview_page_oracle(
+    *, before: dict, after: dict, frontmost_bundle: str,
+    effect: str = "page_2_visible",
+) -> dict:
+    matched = (
+        before.get("bundle_id") == "com.apple.Preview"
+        and after.get("bundle_id") == "com.apple.Preview"
+        and before.get("value_match_count") == 0
+        and after.get("value_match_count") == 1
+        and frontmost_bundle == "com.apple.Preview"
+    )
+    return {
+        "verdict": "matched" if matched else "not_matched",
+        "effect": effect,
+        "effect_count": 1 if matched else 0,
+        "before_match_count": before.get("value_match_count"),
+        "after_match_count": after.get("value_match_count"),
+        "frontmost_bundle": frontmost_bundle,
+    }
+
+
+def finder_search_oracle(
+    *, before: dict, after: dict, frontmost_bundle: str
+) -> dict:
+    matched = (
+        before.get("bundle_id") == "com.apple.finder"
+        and after.get("bundle_id") == "com.apple.finder"
+        and before.get("value_match_count") == 0
+        and after.get("value_match_count") == 1
+        and frontmost_bundle == "com.apple.finder"
+    )
+    return {
+        "verdict": "matched" if matched else "not_matched",
+        "effect": "finder_search_value",
+        "effect_count": 1 if matched else 0,
+        "before_match_count": before.get("value_match_count"),
+        "after_match_count": after.get("value_match_count"),
+        "frontmost_bundle": frontmost_bundle,
+    }
+
+
+def finder_selection_oracle(
+    *,
+    selected_match_count: int,
+    value_match_count: int,
+    frontmost_bundle: str,
+) -> dict:
+    matched = (
+        selected_match_count >= 1
+        and value_match_count == 1
+        and frontmost_bundle == "com.apple.finder"
+    )
+    return {
+        "verdict": "matched" if matched else "not_matched",
+        "effect": "row_selected",
+        "effect_count": 1 if matched else 0,
+        "selected_match_count": selected_match_count,
+        "value_match_count": value_match_count,
         "frontmost_bundle": frontmost_bundle,
     }
 
@@ -328,6 +646,7 @@ def _wait_for_truth_event(
     *,
     event: str,
     timeout_s: float,
+    required: bool = False,
 ) -> list[dict]:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
@@ -335,7 +654,10 @@ def _wait_for_truth_event(
         if any(item.get("event") == event for item in events):
             return events
         time.sleep(0.05)
-    return _read_jsonl(path)
+    events = _read_jsonl(path)
+    if required:
+        raise LabRunnerError(f"guest_truth_event_timeout:{event}")
+    return events
 
 
 def _desktop_payload(session: VNCGuestSession) -> dict:
@@ -502,6 +824,88 @@ def _set_launch_environment(
         session.execute_private(["/bin/launchctl", "setenv", key, value])
 
 
+def _native_lab_oracle(
+    session: VNCGuestSession,
+    *,
+    bundle_id: str,
+    expected: str,
+    record_name: str,
+) -> dict:
+    output = session.artifact_dir / f"capability-{record_name}.json"
+    output.unlink(missing_ok=True)
+    session.execute([
+        "/usr/bin/open",
+        "-na",
+        "/Applications/Conn.app",
+        "--args",
+        "--lab-oracle",
+        bundle_id,
+        expected,
+        "--output",
+        f"{GUEST_ARTIFACTS}/{output.name}",
+    ])
+    _wait_for_file(output, 4)
+    return parse_lab_oracle(output.read_text(), expected_bundle=bundle_id)
+
+
+def _native_lab_affordances(
+    session: VNCGuestSession,
+    *,
+    bundle_id: str,
+    expected: str,
+    record_name: str,
+) -> dict:
+    output = session.artifact_dir / f"capability-{record_name}.json"
+    output.unlink(missing_ok=True)
+    session.execute([
+        "/usr/bin/open",
+        "-na",
+        "/Applications/Conn.app",
+        "--args",
+        "--lab-affordances",
+        bundle_id,
+        expected,
+        "--output",
+        f"{GUEST_ARTIFACTS}/{output.name}",
+    ])
+    _wait_for_file(output, 4)
+    return parse_lab_affordances(output.read_text(), expected_bundle=bundle_id)
+
+
+def _native_lab_target(
+    session: VNCGuestSession,
+    *,
+    bundle_id: str,
+    expected: str,
+    record_name: str,
+) -> dict:
+    output = session.artifact_dir / f"capability-{record_name}.json"
+    deadline = time.monotonic() + 5
+    while True:
+        output.unlink(missing_ok=True)
+        session.execute([
+            "/usr/bin/open",
+            "-na",
+            "/Applications/Conn.app",
+            "--args",
+            "--lab-target",
+            bundle_id,
+            expected,
+            "--output",
+            f"{GUEST_ARTIFACTS}/{output.name}",
+        ])
+        _wait_for_file(output, 2)
+        value = output.read_text()
+        try:
+            return parse_lab_target(value, expected_bundle=bundle_id)
+        except ValueError:
+            if not _lab_target_absent(value, expected_bundle=bundle_id):
+                raise
+        if time.monotonic() >= deadline:
+            raise LabRunnerError("guest_lab_target_timeout")
+        time.sleep(0.1)
+
+
 def _stop_worker(worker) -> None:
     if worker is None or worker.poll() is not None:
         return
@@ -541,14 +945,24 @@ def run_l3(
         raise ValueError("lab input mode is invalid")
     if model_mode not in {"scripted", "live"}:
         raise ValueError("lab model mode is invalid")
+    expected_bundle: str | None = None
+    initial_app: str | None = None
+    initial_bundle: str | None = None
+    window_owner: str | None = None
     if manifest is not None:
         manifest = manifest.model_copy(
             update={"mode": ScenarioMode(model_mode)}
         )
         driver = driver_config(manifest)
-        fixture_scene = driver.fixture_scene
-        vertical_scenario = driver.vertical_scenario
-        truth_server_run_id = driver.truth_server_run_id
+        fixture_scene = driver.setup.fixture_scene
+        vertical_scenario = driver.setup.vertical_scenario
+        truth_server_run_id = driver.setup.truth_server_run_id
+        expected_bundle = driver.setup.expected_bundle
+        initial_app = driver.setup.initial_app
+        initial_bundle = driver.setup.initial_bundle
+        window_owner = driver.setup.window_owner
+    if expected_bundle is None and vertical_scenario == "firefox_open":
+        expected_bundle = "org.mozilla.firefox"
     api_key = load_config().api_key if model_mode == "live" else None
     if model_mode == "live" and not api_key:
         raise LabRunnerError("live_model_key_missing")
@@ -566,6 +980,15 @@ def run_l3(
     notes_titles_before: tuple[str, ...] | None = None
     notes_selected_before: str | None = None
     notes_expected_selected: str | None = None
+    notes_affordances_before: dict | None = None
+    notes_target_before: dict | None = None
+    window_count_before: int | None = None
+    calendar_oracle_before: dict | None = None
+    calendar_period_term: str | None = None
+    calendar_effect: str | None = None
+    preview_oracle_before: dict | None = None
+    preview_page_term = "Page 2 of 3"
+    finder_search_oracle_before: dict | None = None
     timings = {
         "install_ms": 0,
         "scenario_ms": 0,
@@ -639,6 +1062,30 @@ def run_l3(
             else:
                 (session.artifact_dir / "fixture-truth.jsonl").write_text("")
             _wait_for_file(session.artifact_dir / "fixture-truth.jsonl", 10)
+            if expected_bundle is not None:
+                session.execute([
+                    "/usr/bin/open",
+                    "-a",
+                    "/System/Applications/Utilities/Terminal.app",
+                ])
+                _wait_for_frontmost_bundle(
+                    session,
+                    bundle_id="com.apple.Terminal",
+                    timeout_s=10,
+                )
+            if initial_app is not None and initial_bundle is not None:
+                session.execute(["/usr/bin/open", "-a", initial_app])
+                _wait_for_frontmost_bundle(
+                    session,
+                    bundle_id=initial_bundle,
+                    timeout_s=10,
+                )
+            if window_owner is not None:
+                _, windows = _snapshot(session)
+                window_count_before = sum(
+                    window.owner == window_owner and window.layer == 0
+                    for window in windows
+                )
             if truth_server_run_id is not None:
                 truth_worker = session.start_execute(
                     [
@@ -662,17 +1109,193 @@ def run_l3(
                     timeout_s=10,
                     process=truth_worker,
                 )
-            if vertical_scenario in {"firefox_visual", "firefox_space"}:
+            if vertical_scenario in {"finder_search", "finder_select"}:
+                session.execute([
+                    "/bin/mkdir", "-p", "/Users/admin/Conn Lab/Projects",
+                ])
+                session.execute([
+                    "/bin/mkdir", "-p", "/Users/admin/Conn Lab/Archive",
+                ])
+                if vertical_scenario == "finder_select":
+                    session.execute([
+                        "/usr/bin/defaults", "write", "com.apple.finder",
+                        "FXPreferredViewStyle", "-string", "Nlsv",
+                    ])
+                    session.execute_optional(["/usr/bin/killall", "Finder"])
+                    time.sleep(1)
+                session.execute(["/usr/bin/open", "/Users/admin/Conn Lab"])
+                _wait_for_frontmost_bundle(
+                    session,
+                    bundle_id="com.apple.finder",
+                    timeout_s=10,
+                )
+                if vertical_scenario == "finder_search":
+                    finder_search_oracle_before = _native_lab_oracle(
+                        session,
+                        bundle_id="com.apple.finder",
+                        expected="conn lab query",
+                        record_name="finder-search-before",
+                    )
+                    if finder_search_oracle_before["value_match_count"] != 0:
+                        raise LabRunnerError("guest_finder_search_not_reset")
+            if vertical_scenario in {"calendar_today", "calendar_next"}:
                 session.execute([
                     "/usr/bin/open",
                     "-a",
-                    "/Applications/Firefox.app",
+                    "/System/Applications/Calendar.app",
+                ])
+                _wait_for_frontmost_bundle(
+                    session,
+                    bundle_id="com.apple.iCal",
+                    timeout_s=10,
+                )
+                if vnc is None:
+                    vnc = connect_with_retry(*session.vnc_endpoint)
+                vnc.key_chord(("meta", "3"))
+                time.sleep(0.5)
+                if vertical_scenario == "calendar_today":
+                    target = _native_lab_target(
+                        session,
+                        bundle_id="com.apple.iCal",
+                        expected="previous month",
+                        record_name="calendar-previous-target",
+                    )
+                    session.execute([
+                        "/usr/bin/open",
+                        "-a",
+                        "/System/Applications/Calendar.app",
+                    ])
+                    _wait_for_frontmost_bundle(
+                        session,
+                        bundle_id="com.apple.iCal",
+                        timeout_s=5,
+                    )
+                    frame = target["frame"]
+                    calendar_screen, _ = _snapshot(session)
+                    vnc.click(
+                        (
+                            frame["x"] + frame["width"] / 2,
+                            frame["y"] + frame["height"] / 2,
+                        ),
+                        logical_size=calendar_screen,
+                    )
+                    calendar_period_term = session.execute([
+                        "/bin/date", "-v-1m", "+%B %Y",
+                    ]).stdout.strip()
+                    calendar_effect = "current_month_visible"
+                else:
+                    calendar_period_term = session.execute([
+                        "/bin/date", "-v+1m", "+%B %Y",
+                    ]).stdout.strip()
+                    calendar_effect = "next_month_visible"
+                time.sleep(0.5)
+                calendar_oracle_before = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.iCal",
+                    expected=calendar_period_term,
+                    record_name="calendar-before",
+                )
+                if vertical_scenario == "calendar_today":
+                    if calendar_oracle_before["value_match_count"] == 0:
+                        session.execute([
+                            "/usr/bin/open",
+                            "-a",
+                            "/System/Applications/Calendar.app",
+                        ])
+                        _wait_for_frontmost_bundle(
+                            session,
+                            bundle_id="com.apple.iCal",
+                            timeout_s=5,
+                        )
+                        vnc.click(
+                            (
+                                frame["x"] + frame["width"] / 2,
+                                frame["y"] + frame["height"] / 2,
+                            ),
+                            logical_size=calendar_screen,
+                        )
+                        time.sleep(0.5)
+                        calendar_oracle_before = _native_lab_oracle(
+                            session,
+                            bundle_id="com.apple.iCal",
+                            expected=calendar_period_term,
+                            record_name="calendar-before",
+                        )
+                expected_before = (
+                    1 if vertical_scenario == "calendar_today" else 0
+                )
+                if (
+                    calendar_oracle_before["value_match_count"]
+                    != expected_before
+                ):
+                    raise LabRunnerError("guest_calendar_setup_not_distinct")
+            if vertical_scenario in {"preview_next_page", "preview_scroll"}:
+                preview_page_term = (
+                    "Page 3 of 3"
+                    if vertical_scenario == "preview_scroll"
+                    else "Page 2 of 3"
+                )
+                session.execute([
+                    "/usr/bin/open",
+                    f"{GUEST_REPO}/lab/fixtures/preview-atlas.pdf",
+                ])
+                _wait_for_frontmost_bundle(
+                    session,
+                    bundle_id="com.apple.Preview",
+                    timeout_s=10,
+                )
+                preview_oracle_before = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.Preview",
+                    expected=preview_page_term,
+                    record_name="preview-before",
+                )
+                if preview_oracle_before["value_match_count"] != 0:
+                    raise LabRunnerError("guest_preview_setup_not_distinct")
+            if vertical_scenario in {
+                "firefox_visual", "firefox_space", "safari_visual"
+            }:
+                app = (
+                    "/Applications/Safari.app"
+                    if vertical_scenario == "safari_visual"
+                    else "/Applications/Firefox.app"
+                )
+                session.execute([
+                    "/usr/bin/open",
+                    "-a",
+                    app,
                     "http://127.0.0.1:18888/media",
                 ])
                 _wait_for_truth_event(
                     session.artifact_dir / "browser-truth.jsonl",
                     event="page_loaded",
                     timeout_s=10,
+                    required=True,
+                )
+            if vertical_scenario == "safari_history":
+                session.execute([
+                    "/usr/bin/open",
+                    "-a",
+                    "/Applications/Safari.app",
+                    "http://127.0.0.1:18888/history-start",
+                ])
+                _wait_for_truth_event(
+                    session.artifact_dir / "browser-truth.jsonl",
+                    event="history_start_loaded",
+                    timeout_s=10,
+                    required=True,
+                )
+                _wait_for_truth_event(
+                    session.artifact_dir / "browser-truth.jsonl",
+                    event="history_accessibility_ready",
+                    timeout_s=10,
+                    required=True,
+                )
+                _wait_for_truth_event(
+                    session.artifact_dir / "browser-truth.jsonl",
+                    event="history_end_loaded",
+                    timeout_s=10,
+                    required=True,
                 )
             if vertical_scenario == "safari_tab":
                 session.execute([
@@ -685,6 +1308,50 @@ def run_l3(
                     session.artifact_dir / "browser-truth.jsonl",
                     event="page_loaded",
                     timeout_s=10,
+                    required=True,
+                )
+            if vertical_scenario == "safari_focus":
+                session.execute([
+                    "/usr/bin/open",
+                    "-a",
+                    "/Applications/Safari.app",
+                    "http://127.0.0.1:18888/target",
+                ])
+                _wait_for_truth_event(
+                    session.artifact_dir / "browser-truth.jsonl",
+                    event="target_loaded",
+                    timeout_s=10,
+                    required=True,
+                )
+                session.execute([
+                    "/usr/bin/open",
+                    "-a",
+                    "/Applications/Safari.app",
+                    "http://127.0.0.1:18888/media",
+                ])
+                _wait_for_truth_event(
+                    session.artifact_dir / "browser-truth.jsonl",
+                    event="page_loaded",
+                    timeout_s=10,
+                    required=True,
+                )
+            if vertical_scenario in {"firefox_scroll", "safari_scroll"}:
+                app = (
+                    "/Applications/Firefox.app"
+                    if vertical_scenario == "firefox_scroll"
+                    else "/Applications/Safari.app"
+                )
+                session.execute([
+                    "/usr/bin/open",
+                    "-a",
+                    app,
+                    "http://127.0.0.1:18888/navigation",
+                ])
+                _wait_for_truth_event(
+                    session.artifact_dir / "browser-truth.jsonl",
+                    event="accessibility_ready",
+                    timeout_s=10,
+                    required=True,
                 )
             if vertical_scenario in {
                 "notes_create",
@@ -718,7 +1385,7 @@ def run_l3(
                     ]
                     if len(note_windows) != 1:
                         raise LabRunnerError("guest_notes_window_ambiguous")
-                    vnc = VNCClient.connect(*session.vnc_endpoint)
+                    vnc = connect_with_retry(*session.vnc_endpoint)
                     setup_point = notes_new_note_point(note_windows[0])
                     (session.artifact_dir / "notes-setup-pointer.json").write_text(
                         json.dumps({
@@ -765,6 +1432,18 @@ def run_l3(
                         time.sleep(0.1)
                     else:
                         raise LabRunnerError("guest_notes_selection_setup_timeout")
+                    notes_affordances_before = _native_lab_affordances(
+                        session,
+                        bundle_id="com.apple.Notes",
+                        expected="conn lab seed",
+                        record_name="notes-selection-affordances",
+                    )
+                    notes_target_before = _native_lab_oracle(
+                        session,
+                        bundle_id="com.apple.Notes",
+                        expected="conn lab seed",
+                        record_name="notes-selection-before",
+                    )
             session.execute_optional(["/usr/bin/pkill", "-x", "Conn"])
             _wait_for_process_absent(
                 session,
@@ -812,7 +1491,7 @@ def run_l3(
                 timeout_s=10,
             )
             if vnc is None:
-                vnc = VNCClient.connect(*session.vnc_endpoint)
+                vnc = connect_with_retry(*session.vnc_endpoint)
             vnc.click(status_item.center, logical_size=screen)
             _, _, menu = _wait_for_new_window(
                 session,
@@ -904,11 +1583,10 @@ def run_l3(
             result_path = session.artifact_dir / "vertical-result.json"
             _wait_for_file(result_path, 2)
             result = json.loads(result_path.read_text())
-            if vertical_scenario == "firefox_open":
+            if expected_bundle is not None:
                 actual_bundle = parse_frontmost_bundle(
                     _desktop_payload(session)
                 )
-                expected_bundle = "org.mozilla.firefox"
                 result["independent_oracle"] = {
                     "verdict": (
                         "matched"
@@ -925,6 +1603,154 @@ def run_l3(
                     and result.get("transaction_count") == 1
                     and result.get("dispatch_count") == 1
                     and actual_bundle == expected_bundle
+                )
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True)
+                )
+            if vertical_scenario == "finder_select":
+                oracle = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.finder",
+                    expected="Projects",
+                    record_name="finder-selection",
+                )
+                actual_bundle = parse_frontmost_bundle(
+                    _desktop_payload(session)
+                )
+                result["independent_oracle"] = finder_selection_oracle(
+                    selected_match_count=oracle["selected_match_count"],
+                    value_match_count=oracle["value_match_count"],
+                    frontmost_bundle=actual_bundle,
+                )
+                receipt = result.get("machine_receipt") or {}
+                result["passed"] = (
+                    receipt.get("outcome") == "verified"
+                    and result.get("transaction_count") == 1
+                    and result.get("dispatch_count") == 1
+                    and result["independent_oracle"]["verdict"] == "matched"
+                )
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True)
+                )
+            if vertical_scenario == "finder_search":
+                if finder_search_oracle_before is None:
+                    raise LabRunnerError("guest_finder_search_oracle_missing")
+                result["focus_probe"] = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.finder",
+                    expected="Search",
+                    record_name="finder-search-focus",
+                )
+                after = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.finder",
+                    expected="conn lab query",
+                    record_name="finder-search-after",
+                )
+                result["independent_oracle"] = finder_search_oracle(
+                    before=finder_search_oracle_before,
+                    after=after,
+                    frontmost_bundle=parse_frontmost_bundle(
+                        _desktop_payload(session)
+                    ),
+                )
+                receipt = result.get("machine_receipt") or {}
+                result["passed"] = (
+                    receipt.get("outcome") == "verified"
+                    and result.get("transaction_count") == 2
+                    and result.get("dispatch_count") == 2
+                    and result["independent_oracle"]["verdict"] == "matched"
+                )
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True)
+                )
+            if vertical_scenario in {"calendar_today", "calendar_next"}:
+                if (
+                    calendar_oracle_before is None
+                    or calendar_period_term is None
+                    or calendar_effect is None
+                ):
+                    raise LabRunnerError("guest_calendar_oracle_missing")
+                after = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.iCal",
+                    expected=calendar_period_term,
+                    record_name="calendar-after",
+                )
+                result["independent_oracle"] = calendar_period_oracle(
+                    before=calendar_oracle_before,
+                    after=after,
+                    frontmost_bundle=parse_frontmost_bundle(
+                        _desktop_payload(session)
+                    ),
+                    effect=calendar_effect,
+                )
+                receipt = result.get("machine_receipt") or {}
+                result["passed"] = (
+                    receipt.get("outcome") == "dispatch_only"
+                    and receipt.get("reason_code") == "no_trustworthy_witness"
+                    and result.get("transaction_count") == 1
+                    and result.get("dispatch_count") == 1
+                    and result["independent_oracle"]["verdict"] == "matched"
+                )
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True)
+                )
+            if vertical_scenario in {"preview_next_page", "preview_scroll"}:
+                if preview_oracle_before is None:
+                    raise LabRunnerError("guest_preview_oracle_missing")
+                after = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.Preview",
+                    expected=preview_page_term,
+                    record_name="preview-after",
+                )
+                result["independent_oracle"] = preview_page_oracle(
+                    before=preview_oracle_before,
+                    after=after,
+                    frontmost_bundle=parse_frontmost_bundle(
+                        _desktop_payload(session)
+                    ),
+                    effect=(
+                        "appendix_visible"
+                        if vertical_scenario == "preview_scroll"
+                        else "page_2_visible"
+                    ),
+                )
+                receipt = result.get("machine_receipt") or {}
+                result["passed"] = (
+                    receipt.get("outcome") == "verified"
+                    and result.get("transaction_count") == (
+                        2 if vertical_scenario == "preview_scroll" else 1
+                    )
+                    and result.get("dispatch_count") == (
+                        2 if vertical_scenario == "preview_scroll" else 1
+                    )
+                    and result["independent_oracle"]["verdict"] == "matched"
+                )
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True)
+                )
+            if window_owner is not None and initial_bundle is not None:
+                _, windows = _snapshot(session)
+                window_count_after = sum(
+                    window.owner == window_owner and window.layer == 0
+                    for window in windows
+                )
+                result["independent_oracle"] = window_count_oracle(
+                    before=window_count_before or 0,
+                    after=window_count_after,
+                    frontmost_bundle=parse_frontmost_bundle(
+                        _desktop_payload(session)
+                    ),
+                    expected_bundle=initial_bundle,
+                )
+                receipt = result.get("machine_receipt") or {}
+                result["passed"] = (
+                    receipt.get("outcome") == "verified"
+                    and result.get("transaction_count") == 1
+                    and result.get("dispatch_count") == 1
+                    and result["independent_oracle"]["verdict"] == "matched"
                 )
                 result_path.write_text(
                     json.dumps(result, indent=2, sort_keys=True)
@@ -957,6 +1783,10 @@ def run_l3(
                     json.dumps(result, indent=2, sort_keys=True)
                 )
             if vertical_scenario == "notes_select":
+                if notes_affordances_before is None or notes_target_before is None:
+                    raise LabRunnerError("guest_notes_affordances_missing")
+                result["target_affordances"] = notes_affordances_before
+                result["target_oracle_before"] = notes_target_before
                 deadline = time.monotonic() + 5
                 selected_after = _notes_selected_object_id(session)
                 while (
@@ -977,6 +1807,18 @@ def run_l3(
                     expected_selected=notes_expected_selected or "",
                     frontmost_bundle=actual_bundle,
                 )
+                result["target_oracle_after"] = _native_lab_oracle(
+                    session,
+                    bundle_id="com.apple.Notes",
+                    expected="conn lab seed",
+                    record_name="notes-selection-after",
+                )
+                result["target_affordances_after"] = _native_lab_affordances(
+                    session,
+                    bundle_id="com.apple.Notes",
+                    expected="conn lab seed",
+                    record_name="notes-selection-affordances-after",
+                )
                 receipt = result.get("machine_receipt") or {}
                 result["passed"] = (
                     receipt.get("outcome") == "verified"
@@ -991,14 +1833,24 @@ def run_l3(
                 "safari_local": "com.apple.Safari",
                 "firefox_local": "org.mozilla.firefox",
                 "firefox_visual": "org.mozilla.firefox",
+                "safari_visual": "com.apple.Safari",
                 "firefox_space": "org.mozilla.firefox",
+                "firefox_scroll": "org.mozilla.firefox",
+                "safari_scroll": "com.apple.Safari",
+                "safari_focus": "com.apple.Safari",
+                "safari_history": "com.apple.Safari",
             }.get(vertical_scenario)
             if browser_bundle is not None:
                 expected_event, expected_value = {
                     "safari_local": ("page_loaded", "ready"),
                     "firefox_local": ("page_loaded", "ready"),
                     "firefox_visual": ("pointer_play", "playing"),
+                    "safari_visual": ("pointer_play", "playing"),
                     "firefox_space": ("space_play", "playing"),
+                    "firefox_scroll": ("appendix_visible", "visible"),
+                    "safari_scroll": ("appendix_visible", "visible"),
+                    "safari_focus": ("page_hidden", "hidden"),
+                    "safari_history": ("history_returned", "returned"),
                 }[vertical_scenario]
                 events = _wait_for_truth_event(
                     session.artifact_dir / "browser-truth.jsonl",
@@ -1086,6 +1938,16 @@ def run_l3(
                     and result.get("dispatch_count") == 1
                     and actual_bundle == "com.apple.Notes"
                     and result["independent_oracle"]["verdict"] == "matched"
+                )
+                result_path.write_text(
+                    json.dumps(result, indent=2, sort_keys=True)
+                )
+            if vertical_scenario == "visual":
+                result["passed"] = fixture_visual_passes(
+                    receipt=result.get("machine_receipt") or {},
+                    oracle=result.get("independent_oracle") or {},
+                    transaction_count=result.get("transaction_count", 0),
+                    dispatch_count=result.get("dispatch_count", 0),
                 )
                 result_path.write_text(
                     json.dumps(result, indent=2, sort_keys=True)

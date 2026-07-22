@@ -138,15 +138,20 @@ is not a requirement.
 ## Current distance
 
 Mechanical reliability, capable navigation, Conn Lab, intent quality, and the
-first real-app capsules are built. V1 is not done.
+frozen real-app breadth are built. V1 is not done.
 
 Open gates:
 
-- Finder, Calendar, Preview, and broader cross-app capability atlas
-- generic fixes for red required shapes
-- exact-candidate twenty-clone release run after breadth stabilizes
 - physical-Mac confidence drill
 - acoustic, hardware, notch, and external-display checks
 - thirty-command, three-session daily-use gate
+
+The frozen breadth gate passed 20 of 20 core commands and 9 of 9 supporting
+coverage scenarios. All nine required jobs have at least three structurally
+different successful surfaces and one source-validated adversarial refusal.
+Every independent oracle matched its receipt. The exact-candidate 20-clone
+release suite also passed with 20 verified receipts, 20 matching oracles, zero
+protected host changes, and cleanup after every run. This closes non-human v1
+implementation; it does not satisfy the remaining physical daily-use gates.
 
 Next work should close these gates in order. It should not expand v1 scope.

@@ -1,20 +1,205 @@
 import pytest
 
 from conn.lab.scenario import (
+    _wait_for_truth_event,
+    _lab_target_absent,
     browser_capsule_passes,
     browser_truth_oracle,
+    calendar_period_oracle,
+    finder_selection_oracle,
+    finder_search_oracle,
+    fixture_visual_passes,
     guest_launch_environment,
     has_owner_window,
     notes_type_oracle,
     notes_selection_oracle,
+    parse_lab_affordances,
+    parse_lab_oracle,
+    parse_lab_target,
     parse_frontmost_bundle,
     parse_nonnegative_count,
     parse_notes_selected_object_id,
     parse_notes_titles,
+    preview_page_oracle,
     parse_snapshot,
     trace_reached_phase,
     trace_reached_ui_moment,
+    window_count_oracle,
 )
+
+
+def test_required_truth_event_fails_closed_on_setup_timeout(tmp_path) -> None:
+    truth = tmp_path / "truth.jsonl"
+    truth.write_text(
+        '{"event":"history_start_loaded","value":"ready"}\n'
+    )
+
+    with pytest.raises(RuntimeError, match="guest_truth_event_timeout"):
+        _wait_for_truth_event(
+            truth,
+            event="history_end_loaded",
+            timeout_s=0.01,
+            required=True,
+        )
+
+
+def test_only_zero_match_target_probe_is_retryable() -> None:
+    absent = (
+        '{"schema_version":1,"bundle_id":"com.apple.Safari",'
+        '"match_count":0,"frame":null}'
+    )
+    ambiguous = (
+        '{"schema_version":1,"bundle_id":"com.apple.Safari",'
+        '"match_count":2,"frame":null}'
+    )
+
+    assert _lab_target_absent(absent, expected_bundle="com.apple.Safari")
+    assert not _lab_target_absent(
+        ambiguous, expected_bundle="com.apple.Safari"
+    )
+
+
+def test_lab_affordance_parser_accepts_only_bounded_structural_facts() -> None:
+    payload = parse_lab_affordances(
+        '{"schema_version":1,"bundle_id":"com.apple.Notes",'
+        '"match_count":1,"matches":[{"role":"AXRow","selected":false,'
+        '"selected_known":true,"focused":false,"focused_known":true,'
+        '"supported_actions":["AXPress"],'
+        '"settable_attributes":["AXSelected"],"parent_role":"AXTable",'
+        '"parent_supported_actions":[],"parent_settable_attributes":'
+        '["AXSelectedRows"],"frame":{"x":10,"y":20,"width":100,'
+        '"height":30}}]}',
+        expected_bundle="com.apple.Notes",
+    )
+
+    assert payload["matches"][0]["supported_actions"] == ["AXPress"]
+    with pytest.raises(ValueError, match="affordances"):
+        parse_lab_affordances(
+            '{"schema_version":1,"bundle_id":"com.apple.Notes",'
+            '"match_count":1,"matches":[],"label":"private"}',
+            expected_bundle="com.apple.Notes",
+        )
+
+
+def test_preview_page_oracle_requires_one_new_exact_page_value() -> None:
+    before = {"bundle_id": "com.apple.Preview", "value_match_count": 0}
+    after = {"bundle_id": "com.apple.Preview", "value_match_count": 1}
+
+    assert preview_page_oracle(
+        before=before,
+        after=after,
+        frontmost_bundle="com.apple.Preview",
+    )["verdict"] == "matched"
+    assert preview_page_oracle(
+        before=after,
+        after=after,
+        frontmost_bundle="com.apple.Preview",
+    )["verdict"] == "not_matched"
+
+
+def test_finder_search_oracle_requires_one_new_exact_value() -> None:
+    before = {"bundle_id": "com.apple.finder", "value_match_count": 0}
+    after = {"bundle_id": "com.apple.finder", "value_match_count": 1}
+
+    assert finder_search_oracle(
+        before=before,
+        after=after,
+        frontmost_bundle="com.apple.finder",
+    )["verdict"] == "matched"
+    assert finder_search_oracle(
+        before=before,
+        after=after | {"value_match_count": 2},
+        frontmost_bundle="com.apple.finder",
+    )["verdict"] == "not_matched"
+
+
+def test_finder_selection_oracle_accepts_related_selected_nodes_for_one_item() -> None:
+    assert finder_selection_oracle(
+        selected_match_count=3,
+        value_match_count=1,
+        frontmost_bundle="com.apple.finder",
+    )["verdict"] == "matched"
+    assert finder_selection_oracle(
+        selected_match_count=0,
+        value_match_count=1,
+        frontmost_bundle="com.apple.finder",
+    )["verdict"] == "not_matched"
+
+
+def test_lab_target_parser_requires_one_bounded_frame() -> None:
+    payload = parse_lab_target(
+        '{"schema_version":1,"bundle_id":"com.apple.iCal",'
+        '"match_count":1,"frame":{"x":100,"y":80,"width":20,"height":20}}',
+        expected_bundle="com.apple.iCal",
+    )
+    assert payload["frame"] == {
+        "x": 100.0,
+        "y": 80.0,
+        "width": 20.0,
+        "height": 20.0,
+    }
+    with pytest.raises(ValueError, match="lab target"):
+        parse_lab_target(
+            '{"schema_version":1,"bundle_id":"com.apple.iCal",'
+            '"match_count":2,"frame":null}',
+            expected_bundle="com.apple.iCal",
+        )
+
+
+def test_calendar_period_oracle_requires_one_new_exact_period_value() -> None:
+    before = {
+        "value_match_count": 0,
+        "bundle_id": "com.apple.iCal",
+    }
+    after = {
+        "value_match_count": 1,
+        "bundle_id": "com.apple.iCal",
+    }
+
+    assert calendar_period_oracle(
+        before=before,
+        after=after,
+        frontmost_bundle="com.apple.iCal",
+        effect="next_month_visible",
+    )["verdict"] == "matched"
+    assert calendar_period_oracle(
+        before=after,
+        after=after,
+        frontmost_bundle="com.apple.iCal",
+        effect="next_month_visible",
+    )["verdict"] == "not_matched"
+    assert calendar_period_oracle(
+        before=after,
+        after=before,
+        frontmost_bundle="com.apple.iCal",
+        effect="current_month_visible",
+    )["verdict"] == "matched"
+
+
+def test_lab_oracle_parser_requires_bounded_counts_and_exact_bundle() -> None:
+    payload = parse_lab_oracle(
+        '{"schema_version":1,"bundle_id":"com.apple.finder",'
+        '"selected_match_count":1,"focused_match_count":1,\n'
+        '"window_title_matches":false,"value_match_count":0,'
+        '"label_match_count":1,"focused_match_roles":{"AXTextField":1},'
+        '"value_match_roles":{"AXStaticText":1},'
+        '"value_hash_match_roles":{"AXStaticText":1},'
+        '"page_statuses":["Page 2 of 3"]}',
+        expected_bundle="com.apple.finder",
+    )
+    assert payload["selected_match_count"] == 1
+    assert payload["page_statuses"] == ["Page 2 of 3"]
+    with pytest.raises(ValueError, match="lab oracle"):
+        parse_lab_oracle(
+            '{"schema_version":1,"bundle_id":"com.apple.Safari",'
+            '"selected_match_count":1,"focused_match_count":1,\n'
+            '"window_title_matches":false,"value_match_count":0,'
+            '"label_match_count":1,"focused_match_roles":{"AXTextField":1},'
+            '"value_match_roles":{"AXStaticText":1},'
+            '"value_hash_match_roles":{"AXStaticText":1},'
+            '"page_statuses":[]}',
+            expected_bundle="com.apple.finder",
+        )
 
 
 def test_guest_launch_environment_is_bounded_to_lab_paths() -> None:
@@ -86,6 +271,21 @@ def test_frontmost_parser_requires_exact_bundle_identity() -> None:
         parse_frontmost_bundle({"frontmost_bundle": ""})
 
 
+def test_window_count_oracle_requires_one_new_window_in_the_same_app() -> None:
+    assert window_count_oracle(
+        before=1,
+        after=2,
+        frontmost_bundle="com.apple.Terminal",
+        expected_bundle="com.apple.Terminal",
+    )["verdict"] == "matched"
+    assert window_count_oracle(
+        before=1,
+        after=3,
+        frontmost_bundle="com.apple.Terminal",
+        expected_bundle="com.apple.Terminal",
+    )["verdict"] == "not_matched"
+
+
 def test_browser_truth_oracle_requires_one_exact_event() -> None:
     assert browser_truth_oracle(
         [{"event": "page_loaded", "value": "ready"}],
@@ -123,6 +323,51 @@ def test_visual_capsule_accepts_the_honest_dispatch_only_ceiling() -> None:
         expected_bundle="org.mozilla.firefox",
     ) is True
     assert receipt["outcome"] == "dispatch_only"
+
+
+def test_fixture_visual_counts_oracle_match_without_upgrading_receipt() -> None:
+    receipt = {
+        "outcome": "dispatch_only",
+        "reason_code": "no_trustworthy_witness",
+    }
+
+    assert fixture_visual_passes(
+        receipt=receipt,
+        oracle={"verdict": "matched", "effect": "playback_changed"},
+        transaction_count=1,
+        dispatch_count=1,
+    )
+    assert receipt["outcome"] == "dispatch_only"
+
+
+def test_safari_visual_and_history_are_bounded_browser_capsules() -> None:
+    visual = {
+        "outcome": "dispatch_only",
+        "reason_code": "no_trustworthy_witness",
+    }
+    history = {
+        "outcome": "dispatch_only",
+        "reason_code": "no_trustworthy_witness",
+    }
+
+    assert browser_capsule_passes(
+        scenario="safari_visual",
+        receipt=visual,
+        oracle={"verdict": "matched"},
+        transaction_count=1,
+        dispatch_count=1,
+        actual_bundle="com.apple.Safari",
+        expected_bundle="com.apple.Safari",
+    )
+    assert browser_capsule_passes(
+        scenario="safari_history",
+        receipt=history,
+        oracle={"verdict": "matched"},
+        transaction_count=1,
+        dispatch_count=1,
+        actual_bundle="com.apple.Safari",
+        expected_bundle="com.apple.Safari",
+    )
 
 
 def test_notes_store_count_parser_is_bounded() -> None:

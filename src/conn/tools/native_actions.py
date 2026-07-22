@@ -90,12 +90,19 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
         if args.get("kind"):
             payload["kind"] = args["kind"]
         payload.update(_intent_scope(args, cfg))
+    elif name == "computer_select":
+        payload = {"family": "select_named", "target_name": args["name"]}
+        if args.get("kind"):
+            payload["kind"] = args["kind"]
+        payload.update(_intent_scope(args, cfg))
 
     timeout_ms = (
         cfg.actions.launch_verify_ms
         if name in {"app_open", "app_switch"}
         else cfg.actions.create_verify_ms
         if name == "computer_create"
+        else cfg.actions.visual_verify_ms
+        if name == "computer_activate" and isinstance(args.get("grounding"), dict)
         else cfg.actions.semantic_verify_ms
     )
     strategy_ceiling = (
@@ -200,6 +207,7 @@ def validate_plan(
         "ax_set_value",
         "ax_set_selected",
         "ax_set_selected_rows",
+        "semantic_row_key_select",
         "ax_scroll_to_visible",
         "ax_menu_action",
         "live_menu_shortcut",

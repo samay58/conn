@@ -1,7 +1,11 @@
 # Verified semantic engine live checklist
 
-Updated 2026-07-20. The capable-navigation candidate and Conn Lab release
-matrix are mechanically green.
+Updated 2026-07-21. The capable-navigation candidate and Conn Lab are
+mechanically green. The frozen breadth gate passed 20 of 20 core commands and
+9 of 9 supporting cases. All nine primitives have at least three successful
+surfaces and one source-validated adversarial refusal. The exact-candidate
+twenty-clone suite also passed. Run this checklist against the installed signed
+candidate.
 This checklist is the human evidence layer for `docs/NORTH-STAR.md`; the north
 star owns the complete v1 finish line and stop rule.
 Run this only after the signed voice checks and the confidence drill in

@@ -81,6 +81,7 @@ class ActionsCfg(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     semantic_verify_ms: int = 1200
+    visual_verify_ms: int = 2500
     create_verify_ms: int = 2500
     launch_verify_ms: int = 4000
     max_fallbacks: int = 1

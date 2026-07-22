@@ -18,6 +18,10 @@ enum FixtureScene: String, CaseIterable {
     case reorderedSiblings = "reordered_siblings"
     case changedWindowApp = "changed_window_app"
     case uncertainDispatch = "uncertain_dispatch"
+    case composed
+    case selectableList = "selectable_list"
+    case textField = "text_field"
+    case scrollTarget = "scroll_target"
 
     static func select(
         arguments: [String] = CommandLine.arguments,
@@ -92,6 +96,19 @@ enum FixtureScene: String, CaseIterable {
             state = ["control": "fixture.window.change", "window": "main"]
         case .uncertainDispatch:
             state = ["control": "fixture.uncertain", "exit_after_first_input": true]
+        case .composed:
+            state = [
+                "menu": "Actions",
+                "item": "New Window",
+                "selection": "Projects",
+                "rows": ["Projects", "Archive"],
+            ]
+        case .selectableList:
+            state = ["selection": "Projects", "rows": ["Projects", "Archive"]]
+        case .textField:
+            state = ["field": "fixture.text.search", "value": ""]
+        case .scrollTarget:
+            state = ["target": "fixture.scroll.appendix", "visible": false]
         }
         return [
             "schema_version": 1,
@@ -231,7 +248,8 @@ final class OpaquePlaybackTarget: NSView {
 }
 
 @MainActor
-final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate,
+    NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private(set) var scene: FixtureScene
     let truth: FixtureTruthLog
     private var mainWindow: NSWindow?
@@ -382,6 +400,16 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             root.addArrangedSubview(button(
                 "Dispatch then exit", #selector(uncertainInput), id: "fixture.uncertain"
             ))
+        case .composed, .selectableList:
+            root.addArrangedSubview(selectableList())
+        case .textField:
+            let field = NSTextField(string: "")
+            field.placeholderString = "Search"
+            field.setAccessibilityIdentifier("fixture.text.search")
+            field.delegate = self
+            root.addArrangedSubview(field)
+        case .scrollTarget:
+            root.addArrangedSubview(scrollTargetView())
         }
         return root
     }
@@ -422,6 +450,66 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return list
     }
 
+    private func selectableList() -> NSView {
+        let table = NSTableView()
+        table.setAccessibilityIdentifier("fixture.selection.table")
+        table.headerView = nil
+        table.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier(
+            "fixture.selection.column"
+        )))
+        table.dataSource = self
+        table.delegate = self
+        table.allowsEmptySelection = false
+        table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        let scroll = NSScrollView()
+        scroll.documentView = table
+        scroll.hasVerticalScroller = true
+        scroll.frame = NSRect(x: 0, y: 0, width: 520, height: 220)
+        return scroll
+    }
+
+    private func scrollTargetView() -> NSView {
+        let document = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 1200))
+        let target = button(
+            "Appendix", #selector(noEffect), id: "fixture.scroll.appendix"
+        )
+        target.frame = NSRect(x: 20, y: 1100, width: 180, height: 32)
+        document.addSubview(target)
+        let scroll = NSScrollView()
+        scroll.documentView = document
+        scroll.hasVerticalScroller = true
+        scroll.frame = NSRect(x: 0, y: 0, width: 560, height: 420)
+        return scroll
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        2
+    }
+
+    func tableView(
+        _ tableView: NSTableView,
+        viewFor tableColumn: NSTableColumn?,
+        row: Int
+    ) -> NSView? {
+        let title = row == 0 ? "Projects" : "Archive"
+        let field = NSTextField(labelWithString: title)
+        field.setAccessibilityIdentifier("fixture.selection.row.\(row + 1)")
+        return field
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let table = notification.object as? NSTableView,
+              table.selectedRow >= 0 else { return }
+        let title = table.selectedRow == 0 ? "Projects" : "Archive"
+        truth.record("row_selected", value: title)
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField,
+              field.accessibilityIdentifier() == "fixture.text.search" else { return }
+        truth.record("text_changed", value: field.stringValue)
+    }
+
     private func button(
         _ title: String, _ action: Selector, id: String?
     ) -> NSButton {
@@ -454,7 +542,7 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch scene {
         case .lazyMenu:
             title = "Lazy New Window"
-        case .menuRecapture:
+        case .composed, .menuRecapture:
             title = "New Window"
         default:
             return
@@ -465,7 +553,7 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             keyEquivalent: "n"
         )
         item.target = self
-        if scene == .menuRecapture {
+        if scene == .composed || scene == .menuRecapture {
             item.setAccessibilityIdentifier("fixture.menu.new_window")
         }
         menu.addItem(item)
@@ -508,7 +596,9 @@ final class FixtureController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func createWindow() {
         let window = makeWindow(title: "Fixture child \(NSApp.windows.count)")
-        window.contentView = NSTextField(labelWithString: "Created window")
+        window.contentView = scene == .composed
+            ? buildContent()
+            : NSTextField(labelWithString: "Created window")
         window.makeKeyAndOrderFront(nil)
         childWindows.append(window)
         truth.record("window_created", value: window.title)

@@ -98,7 +98,13 @@ function activate(source) {{
   draw();
   report(source, playing ? "playing" : "paused");
 }}
-canvas.addEventListener("click", () => activate("pointer_play"));
+document.addEventListener("click", event => {{
+  const bounds = canvas.getBoundingClientRect();
+  if (event.clientX >= bounds.left && event.clientX <= bounds.right &&
+      event.clientY >= bounds.top && event.clientY <= bounds.bottom) {{
+    activate("pointer_play");
+  }}
+}});
 document.addEventListener("keydown", event => {{
   if (event.code === "Space") {{
     event.preventDefault();
@@ -119,6 +125,160 @@ report("page_loaded", "ready");
 """
 
 
+def render_navigation_page(*, run_id: str) -> str:
+    if not _RUN_ID.fullmatch(run_id):
+        raise ValueError("run id is invalid")
+    return f"""<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Conn Lab Navigation</title>
+<style>
+body {{ margin: 0; padding: 32px; font: 20px system-ui; }}
+.spacer {{ height: 500px; }}
+</style>
+<h1>Conn Lab Navigation</h1>
+<div class="spacer" aria-hidden="true"></div>
+<h2 id="appendix">Appendix</h2>
+<script>
+const runID = {json.dumps(run_id)};
+function report(event, value) {{
+  fetch("/event", {{
+    method: "POST",
+    headers: {{"Content-Type": "application/json"}},
+    body: JSON.stringify({{run_id: runID, event, value}})
+  }});
+}}
+let reported = false;
+new IntersectionObserver(entries => {{
+  if (!reported && entries.some(entry => entry.isIntersecting)) {{
+    reported = true;
+    report("appendix_visible", "visible");
+  }}
+}}).observe(document.getElementById("appendix"));
+report("page_loaded", "ready");
+requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {{
+  report("accessibility_ready", "ready");
+}}, 250)));
+</script>
+</html>
+"""
+
+
+def render_history_page(*, run_id: str, page: str) -> str:
+    if not _RUN_ID.fullmatch(run_id):
+        raise ValueError("run id is invalid")
+    if page not in {"start", "end"}:
+        raise ValueError("history page is invalid")
+    if page == "end":
+        return f"""<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Conn Lab History End</title>
+<h1>History end</h1>
+<script>
+fetch("/event", {{
+  method: "POST",
+  headers: {{"Content-Type": "application/json"}},
+  body: JSON.stringify({{
+    run_id: {json.dumps(run_id)},
+    event: "history_end_loaded",
+    value: "ready"
+  }})
+}});
+</script>
+</html>
+"""
+    return f"""<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Conn Lab History Start</title>
+<h1>History start</h1>
+<script>
+const runID = {json.dumps(run_id)};
+function report(event, value) {{
+  fetch("/event", {{
+    method: "POST",
+    headers: {{"Content-Type": "application/json"}},
+    body: JSON.stringify({{run_id: runID, event, value}})
+  }});
+}}
+window.addEventListener("pageshow", event => {{
+  const navigation = performance.getEntriesByType("navigation")[0];
+  const returned = event.persisted || navigation?.type === "back_forward";
+  if (returned) {{
+    report("history_returned", "returned");
+    return;
+  }}
+  setTimeout(() => window.location.assign("/history-end"), 500);
+}});
+report("history_start_loaded", "ready");
+requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {{
+  report("history_accessibility_ready", "ready");
+}}, 250)));
+</script>
+</html>
+"""
+
+
+def render_atlas_page(*, run_id: str) -> str:
+    if not _RUN_ID.fullmatch(run_id):
+        raise ValueError("run id is invalid")
+    return f"""<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Conn Lab Atlas</title>
+<nav><a href="#start">Start</a><a href="#appendix">Appendix</a></nav>
+<main id="start">
+<h1>Conn Lab Atlas</h1>
+<label>Search <input type="search" value="conn lab"></label>
+<button type="button">Continue</button>
+<div style="height: 1200px" aria-hidden="true"></div>
+<h2 id="appendix">Appendix</h2>
+</main>
+<script>
+const runID = {json.dumps(run_id)};
+function report(event, value) {{
+  fetch("/event", {{
+    method: "POST",
+    headers: {{"Content-Type": "application/json"}},
+    body: JSON.stringify({{run_id: runID, event, value}})
+  }});
+}}
+report("page_loaded", "ready");
+requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {{
+  report("accessibility_ready", "ready");
+}}, 250)));
+</script>
+</html>
+"""
+
+
+def render_target_page(*, run_id: str) -> str:
+    if not _RUN_ID.fullmatch(run_id):
+        raise ValueError("run id is invalid")
+    return f"""<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Example Domain</title>
+<h1>Example Domain</h1>
+<script>
+const runID = {json.dumps(run_id)};
+function report(event, value) {{
+  fetch("/event", {{
+    method: "POST",
+    headers: {{"Content-Type": "application/json"}},
+    body: JSON.stringify({{run_id: runID, event, value}})
+  }});
+}}
+document.addEventListener("visibilitychange", () => {{
+  if (document.hidden) report("target_hidden", "hidden");
+}});
+report("target_loaded", "ready");
+</script>
+</html>
+"""
+
+
 class TruthHandler(BaseHTTPRequestHandler):
     store: TruthStore
 
@@ -129,6 +289,32 @@ class TruthHandler(BaseHTTPRequestHandler):
             return
         if path == "/media":
             page = render_media_page(run_id=self.store.run_id).encode()
+            self._send(200, page, "text/html; charset=utf-8")
+            return
+        if path == "/atlas":
+            page = render_atlas_page(run_id=self.store.run_id).encode()
+            self._send(200, page, "text/html; charset=utf-8")
+            return
+        if path == "/navigation":
+            page = render_navigation_page(run_id=self.store.run_id).encode()
+            self._send(200, page, "text/html; charset=utf-8")
+            return
+        if path == "/history-start":
+            page = render_history_page(
+                run_id=self.store.run_id,
+                page="start",
+            ).encode()
+            self._send(200, page, "text/html; charset=utf-8")
+            return
+        if path == "/history-end":
+            page = render_history_page(
+                run_id=self.store.run_id,
+                page="end",
+            ).encode()
+            self._send(200, page, "text/html; charset=utf-8")
+            return
+        if path == "/target":
+            page = render_target_page(run_id=self.store.run_id).encode()
             self._send(200, page, "text/html; charset=utf-8")
             return
         self._send(404, b'{"ok":false}', "application/json")

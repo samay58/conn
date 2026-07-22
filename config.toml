@@ -29,6 +29,7 @@ reconnect_max_delay_s = 30 # cap exponential retry spacing so recovery stays res
 
 [actions]
 visual_enabled = true
+visual_verify_ms = 2500
 create_verify_ms = 2500
 
 [apps]

@@ -47,6 +47,7 @@ class TestModelSurface:
     def test_intent_tools_are_exported(self):
         exported = {tool["name"] for tool in export_openai(build_registry())}
         assert "computer_create" in exported
+        assert "computer_select" in exported
         assert "computer_select_relative" in exported
         assert "computer_activate" in exported
         assert "computer_key" in exported
@@ -82,6 +83,23 @@ class TestIntentCompilation:
         assert request["operation"] == "semantic_intent"
         assert request["payload"] == {"family": "select_relative",
                                       "relation": "next", "kind": "document"}
+
+    def test_named_selection_compiles_to_a_goal_only_intent(self, cfg):
+        registry = build_registry()
+        request = compile_action_request(
+            registry["computer_select"],
+            {"name": "Projects", "kind": "item", "app": "Finder"},
+            cfg,
+        )
+
+        assert request["operation"] == "semantic_intent"
+        assert request["target"] is None
+        assert request["payload"] == {
+            "family": "select_named",
+            "target_name": "Projects",
+            "kind": "item",
+            "app_name": "Finder",
+        }
 
     def test_click_no_longer_forwards_model_predicates(self, cfg):
         registry = build_registry()
@@ -322,6 +340,8 @@ class TestIntentEvalGrader:
         assert "prefer computer_get_context or computer_ax_snapshot" in INSTRUCTIONS
         assert "Use computer_visual_observe only when named accessible targets are unavailable" in INSTRUCTIONS
         assert "Use computer_activate for reversible controls such as Play or Pause" in INSTRUCTIONS
+        assert "without supplying text" in INSTRUCTIONS
+        assert "use computer_type_text instead of Find" in INSTRUCTIONS
         assert "computer_screenshot" not in INSTRUCTIONS
         assert "Treat following as next" in INSTRUCTIONS
         assert "use only the current candidate descriptions" in INSTRUCTIONS

@@ -14,9 +14,11 @@ import subprocess
 import sys
 
 from .catalog import driver_config, load_catalog
+from .atlas_runner import run_native_atlas
+from .promotion import promote_file
 from .records import PINNED_BASE_IMAGE, PINNED_TART_VERSION, SIGNING_IDENTITY
 from .scenario import run_l3
-from .suite import run_scripted_matrix, run_smoke_suite
+from .suite import run_scripted_matrix, run_smoke_suite, run_v1_breadth_gate
 
 
 GOLDEN_VM = "conn-lab-golden"
@@ -48,6 +50,10 @@ def build_parser() -> argparse.ArgumentParser:
         "bootstrap",
         help="create the golden guest before its one-time permission setup",
     )
+    commands.add_parser(
+        "atlas",
+        help="measure the frozen capability matrix in one disposable guest",
+    )
 
     run = commands.add_parser("run", help="run one scenario in a fresh guest")
     run.add_argument("scenario", choices=tuple(load_catalog(repo_root())))
@@ -59,10 +65,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     suite = commands.add_parser("suite", help="run a frozen lab suite")
-    suite.add_argument("suite", choices=("smoke", "release"))
+    suite.add_argument("suite", choices=("breadth", "smoke", "release"))
 
     report = commands.add_parser("report", help="print one bounded run report")
     report.add_argument("run_id")
+    promote = commands.add_parser(
+        "promote",
+        help="turn one sanitized data artifact into a review candidate",
+    )
+    promote.add_argument("source")
+    promote.add_argument("--incident-id", required=True)
     return parser
 
 
@@ -228,6 +240,9 @@ def run_scenario(
 
 
 def run_suite(root: Path, name: str) -> dict:
+    if name == "breadth":
+        prefix = f"v1-breadth-{datetime.now().strftime('%H%M%S')}"
+        return run_v1_breadth_gate(root, run_prefix=prefix)
     runs = 1 if name == "smoke" else 20
     prefix = f"lab-{name}-{datetime.now().strftime('%H%M%S')}"
     smoke = run_smoke_suite(root, runs=runs, run_prefix=prefix)
@@ -259,6 +274,9 @@ def main(argv: list[str] | None = None) -> int:
             result = doctor(root)
         elif args.command == "bootstrap":
             result = bootstrap(root)
+        elif args.command == "atlas":
+            _build_candidate(root)
+            result = run_native_atlas(root)
         elif args.command == "run":
             _build_candidate(root)
             result = run_scenario(
@@ -269,9 +287,19 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "suite":
             _build_candidate(root)
             result = run_suite(root, args.suite)
+        elif args.command == "promote":
+            output = promote_file(
+                root,
+                root / args.source,
+                incident_id=args.incident_id,
+            )
+            result = {
+                "status": "candidate",
+                "path": str(output.relative_to(root)),
+            }
         else:
             result = load_run_report(root, args.run_id)
-    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))
@@ -279,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["ok"] else 1
     if args.command == "bootstrap":
         return 0 if result["ok"] else 3
+    if args.command == "run":
+        return 0 if result["passed"] and result["contract_passed"] else 1
     if args.command == "suite":
         return 0 if result["passed"] else 1
     return 0
@@ -286,6 +316,11 @@ def main(argv: list[str] | None = None) -> int:
 
 def _build_candidate(root: Path) -> None:
     _required([str(root / "macos" / "make-app.sh")], 600, cwd=root / "macos")
+    _required(
+        [str(root / "macos" / "make-fixture-app.sh")],
+        600,
+        cwd=root / "macos",
+    )
 
 
 def _new_run_id(scenario: str) -> str:

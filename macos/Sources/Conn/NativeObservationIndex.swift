@@ -89,7 +89,13 @@ struct NativeObservationIndex {
                   query.expectedRoles.isEmpty || query.expectedRoles.contains(node.role),
                   query.expectedActions.isSubset(of: Set(node.supportedActions)),
                   query.includeMenu || !hasMenuAncestor(node, nodesByRef: nodesByRef),
-                  let label = safeLabel(node) else { return nil }
+                  let label = candidateLabel(
+                    node,
+                    query: query,
+                    focusedElementRef: observation.focusedElementRef,
+                    nodesByRef: nodesByRef,
+                    nodes: observation.nodes
+                  ) else { return nil }
 
             let match = score(node, label: label, query: query)
             guard match.matched else { return nil }
@@ -191,6 +197,7 @@ struct NativeObservationIndex {
     ) -> (matched: Bool, score: Int, reasons: [String]) {
         let normalizedLabel = normalize(label)
         let fields: [(String, String, Int)] = [
+            ("label_contains", normalizedLabel, 35),
             ("title_contains", normalize(node.title), 30),
             ("description_contains", normalize(node.description), 20),
             ("identifier_contains", normalize(node.identifier), 16),
@@ -282,6 +289,67 @@ struct NativeObservationIndex {
             }
         }
         return nil
+    }
+
+    private func candidateLabel(
+        _ node: NativeObservationNode,
+        query: NativeObservationQuery,
+        focusedElementRef: String?,
+        nodesByRef: [String: NativeObservationNode],
+        nodes: [NativeObservationNode]
+    ) -> String? {
+        if let label = safeLabel(node), query.searchTerms.isEmpty
+            || labelMatchesQuery(label, terms: query.searchTerms) {
+            return label
+        }
+        let fieldRoles = ["AXComboBox", "AXSearchField", "AXTextArea", "AXTextField"]
+        if fieldRoles.contains(node.role), !query.searchTerms.isEmpty,
+           let value = node.redactedValue,
+           labelMatchesQuery(value, terms: query.searchTerms) {
+            return String(query.searchTerms.joined(separator: " ").prefix(160))
+        }
+        guard node.focused == true || node.ref == focusedElementRef,
+              fieldRoles.contains(node.role) else { return nil }
+
+        var relatedLabels: [String] = []
+        var parentRef = node.parentRef
+        var visited: Set<String> = []
+        while let ref = parentRef, visited.count < 20,
+              visited.insert(ref).inserted,
+              let parent = nodesByRef[ref] {
+            if parent.role == "AXWindow" { break }
+            if let label = safeLabel(parent) { relatedLabels.append(label) }
+            parentRef = parent.parentRef
+        }
+
+        var frontier = nodes.filter { $0.parentRef == node.ref }
+        visited = []
+        for _ in 0..<20 where !frontier.isEmpty {
+            relatedLabels.append(contentsOf: frontier.compactMap(safeLabel))
+            let refs = Set(frontier.map(\.ref))
+            visited.formUnion(refs)
+            frontier = nodes.filter {
+                $0.parentRef.map(refs.contains) == true
+                    && !visited.contains($0.ref)
+            }
+        }
+        if query.searchTerms.isEmpty { return relatedLabels.first }
+        let matching = relatedLabels.filter {
+            labelMatchesQuery($0, terms: query.searchTerms)
+        }
+        let exact = matching.filter { label in
+            let normalized = normalize(label)
+            return query.searchTerms.contains { normalize($0) == normalized }
+        }
+        let values = exact.isEmpty ? matching : exact
+        let unique = Dictionary(grouping: values, by: normalize)
+        guard unique.count == 1 else { return nil }
+        return unique.values.first?.first
+    }
+
+    private func labelMatchesQuery(_ label: String, terms: [String]) -> Bool {
+        let normalized = normalize(label)
+        return terms.allSatisfy { normalized.contains(normalize($0)) }
     }
 
     private func ancestorTrail(

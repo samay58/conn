@@ -47,6 +47,7 @@ enum NativeActionStrategy: String, Codable {
     case axSetValue = "ax_set_value"
     case axSetSelected = "ax_set_selected"
     case axSetSelectedRows = "ax_set_selected_rows"
+    case semanticRowKeySelect = "semantic_row_key_select"
     case axScrollToVisible = "ax_scroll_to_visible"
     case axMenuAction = "ax_menu_action"
     case liveMenuShortcut = "live_menu_shortcut"
@@ -235,6 +236,33 @@ struct NativeObservationNode: Equatable {
     }
 }
 
+enum NativePageStatus {
+    static func pageAndTotal(
+        _ node: NativeObservationNode
+    ) -> (page: Int, total: Int)? {
+        guard node.role == "AXStaticText",
+              let value = node.redactedValue else { return nil }
+        return pageAndTotal(value)
+    }
+
+    static func pageAndTotal(_ value: String) -> (page: Int, total: Int)? {
+        let parts = value.split(separator: " ")
+        guard parts.count == 4,
+              parts[0].localizedCaseInsensitiveCompare("page") == .orderedSame,
+              parts[2].localizedCaseInsensitiveCompare("of") == .orderedSame,
+              let page = Int(parts[1]),
+              let total = Int(parts[3]),
+              page >= 1, total >= page else { return nil }
+        return (page, total)
+    }
+
+    static func recognizedValue(_ node: NativeObservationNode) -> String? {
+        guard let value = node.redactedValue,
+              pageAndTotal(node) != nil else { return nil }
+        return value
+    }
+}
+
 struct NativeCapturedObservation {
     var snapshotID: String
     var observationID: String
@@ -400,12 +428,13 @@ struct NativeObservationQuery {
         let actions = boundedUnique(
             dictionary["expected_actions"] as? [String] ?? [], count: 16, length: 64
         )
+        let targeted = !terms.isEmpty || !roles.isEmpty || !actions.isEmpty
         return Self(
             bundleID: dictionary["bundle_id"] as? String,
             pid: (dictionary["pid"] as? Int).map(Int32.init),
             includeMenu: dictionary["include_menu"] as? Bool ?? false,
-            maxNodes: dictionary["max_nodes"] as? Int ?? 300,
-            maxDepth: dictionary["max_depth"] as? Int ?? 12,
+            maxNodes: dictionary["max_nodes"] as? Int ?? (targeted ? 500 : 300),
+            maxDepth: dictionary["max_depth"] as? Int ?? (targeted ? 16 : 12),
             deniedBundles: Set(denied),
             searchTerms: terms,
             expectedRoles: Set(roles),
@@ -479,6 +508,7 @@ struct NativeActionPayload {
     var intentFamily: String?
     var intentKind: String?
     var intentRelation: String?
+    var intentName: String?
 
     static func parse(_ value: Any?) -> Self {
         if let text = value as? String {
@@ -486,7 +516,8 @@ struct NativeActionPayload {
                         bundleIDHint: nil, appName: nil, url: nil,
                         browserScope: nil,
                         direction: nil, amount: nil, keys: [], menuPath: [], submit: false,
-                        intentFamily: nil, intentKind: nil, intentRelation: nil)
+                        intentFamily: nil, intentKind: nil, intentRelation: nil,
+                        intentName: nil)
         }
         let dictionary = value as? [String: Any] ?? [:]
         return Self(
@@ -506,7 +537,8 @@ struct NativeActionPayload {
             submit: dictionary["submit"] as? Bool ?? false,
             intentFamily: dictionary["family"] as? String,
             intentKind: dictionary["kind"] as? String,
-            intentRelation: dictionary["relation"] as? String
+            intentRelation: dictionary["relation"] as? String,
+            intentName: dictionary["target_name"] as? String
         )
     }
 
@@ -518,6 +550,7 @@ struct NativeActionPayload {
             keys.joined(separator: ","), menuPath.joined(separator: ">"),
             String(submit),
             intentFamily ?? "", intentKind ?? "", intentRelation ?? "",
+            intentName ?? "",
         ].joined(separator: "\u{1f}"))
     }
 }
@@ -572,6 +605,8 @@ struct NativeEffectPredicate: Equatable {
                 "element_attribute_equals", "element_attribute_changes",
                 "focused_element_equals", "text_contains", "text_hash_equals",
                 "clipboard_hash_equals", "document_url_equals", "notification",
+                "unique_focused_find_field_appears",
+                "unique_page_status_changes",
               ]).contains(kind) else { return nil }
         let expectedValue = dictionary["expected"] ?? dictionary["value"]
         return Self(

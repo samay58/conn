@@ -135,6 +135,7 @@ final class NavigationGrantTests: XCTestCase {
             ("set_text", ["text": "hello", "submit": true], .consequential),
             ("clipboard_write", ["text": "hello"], .consequential),
             ("key_chord", ["keys": ["cmd", "t"]], .reversibleNavigation),
+            ("key_chord", ["keys": ["find"]], .reversibleNavigation),
             ("key_chord", ["keys": ["return"]], .consequential),
             ("menu", ["menu_path": ["File", "New Note"]], .consequential),
         ]
@@ -213,6 +214,25 @@ final class NavigationGrantTests: XCTestCase {
         XCTAssertEqual(
             compiler.effectClass(request: request, target: target, baseline: baseline),
             .unknown
+        )
+    }
+
+    func testTodayButtonIsReversibleTemporalNavigation() throws {
+        let compiler = NativeActionCompiler(applications: NativeApplicationResolver())
+        let request = try XCTUnwrap(request(
+            operation: "press", payload: ["goal": "Go to today"]
+        ))
+        let target = NativeObservationNode(
+            ref: "today", role: "AXButton", title: "Today",
+            supportedActions: ["AXPress"]
+        )
+        let baseline = NativeCapturedObservation.fixture(
+            turnID: "turn", observationEpoch: 1, nodes: [target]
+        )
+
+        XCTAssertEqual(
+            compiler.effectClass(request: request, target: target, baseline: baseline),
+            .reversibleNavigation
         )
     }
 

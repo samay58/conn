@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "frozen": true,
+  "successes": [
+    {"id": "fixture-control", "scenario": "control", "effect": "control_changed", "surface": "fixture", "job": "control_activation"},
+    {"id": "fixture-field", "scenario": "fixture-type", "effect": "text_changed", "surface": "fixture", "job": "field_text_entry"},
+    {"id": "finder-multi-step", "scenario": "finder-search", "effect": "finder_search_value", "surface": "finder", "job": "multi_step"},
+    {"id": "preview-multi-step", "scenario": "preview-scroll", "effect": "appendix_visible", "surface": "preview", "job": "multi_step"},
+    {"id": "safari-scroll", "scenario": "safari-scroll", "effect": "appendix_visible", "surface": "safari", "job": "named_scroll"},
+    {"id": "firefox-scroll", "scenario": "firefox-scroll", "effect": "appendix_visible", "surface": "firefox", "job": "named_scroll"},
+    {"id": "fixture-visual", "scenario": "visual", "effect": "playback_changed", "surface": "fixture", "job": "visual_fallback"},
+    {"id": "safari-visual", "scenario": "safari-visual", "effect": "pointer_play", "surface": "safari", "job": "visual_fallback"},
+    {"id": "safari-history", "scenario": "safari-history", "effect": "history_returned", "surface": "safari", "job": "document_history"}
+  ],
+  "refusals": [
+    {"job": "app_window_selection", "test_id": "swift:testRequestedAppCannotDispatchAConflictingBundle", "source": "macos/Tests/ConnTests/NativeSemanticActionEngineTests.swift"},
+    {"job": "collection_selection", "test_id": "swift:testSelectRelativeNoteRefusesTwoSelectedMultiRowNoteLists", "source": "macos/Tests/ConnTests/SemanticIntentTests.swift"},
+    {"job": "control_activation", "test_id": "swift:testDuplicateSemanticTargetIsAmbiguousBeforeDispatch", "source": "macos/Tests/ConnTests/NativeSemanticActionEngineTests.swift"},
+    {"job": "document_history", "test_id": "swift:testPageDownRefusesToInventAWitnessForTwoPageStatuses", "source": "macos/Tests/ConnTests/NativeSemanticActionEngineTests.swift"},
+    {"job": "field_text_entry", "test_id": "swift:testSecureTextTargetIsBlockedBeforeDispatch", "source": "macos/Tests/ConnTests/NativeSemanticActionEngineTests.swift"},
+    {"job": "menus_overlays", "test_id": "swift:testCreateWindowRefusesAmbiguousLazyMenuPaths", "source": "macos/Tests/ConnTests/SemanticIntentTests.swift"},
+    {"job": "multi_step", "test_id": "python:test_verified_sequence_stops_before_a_second_action", "source": "tests/test_lab_vertical.py"},
+    {"job": "named_scroll", "test_id": "swift:testScrollWitnessRefusesAChangedTargetPath", "source": "macos/Tests/ConnTests/NativeSemanticActionEngineTests.swift"},
+    {"job": "visual_fallback", "test_id": "swift:testChangedWindowFrameRefusesBeforeInput", "source": "macos/Tests/ConnTests/VisualPlanTests.swift"}
+  ]
+}
