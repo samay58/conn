@@ -327,13 +327,19 @@ class OpenAIRealtimeAdapter:
             async for raw in ws:
                 for ev in self._normalize(json.loads(raw)):
                     yield ev
+            if self._superseded(ws):
+                return
             closing, self._ws = self._closing, None
             if not closing:
                 yield RtClosed(reason="connection closed: clean")
         except websockets.ConnectionClosed as e:
+            if self._superseded(ws):
+                return
             self._ws = None
             yield RtClosed(reason=f"connection closed: {e.code}")
         except Exception as e:
+            if self._superseded(ws):
+                return
             self._ws = None
             yield RtError(message=str(e), fatal=True)
         finally:
@@ -341,6 +347,12 @@ class OpenAIRealtimeAdapter:
             # which is a BaseException and skips the `except Exception` above.
             if self._ws is ws:
                 self._ws = None
+
+    def _superseded(self, ws) -> bool:
+        """A reconnect inside the consumer's handler made another socket
+        current; this generator's ending is old news and must not clear or
+        disconnect the new one."""
+        return self._ws is not None and self._ws is not ws
 
     def _normalize(self, msg: dict) -> list[RtEvent]:
         kind = msg.get("type", "")

@@ -146,3 +146,42 @@ def test_reconnect_during_abandoned_generator_is_not_clobbered():
     asyncio.run(run())
     assert adapter.connected is True
     assert adapter._ws is new_ws
+
+
+async def _swap_then_drain(adapter, new_ws):
+    gen = adapter.events()
+    first = await gen.__anext__()
+    assert first == RtSessionReady(session_id="s1")
+    adapter._ws = new_ws  # reconnect landed inside the event handler
+    return [ev async for ev in gen]
+
+
+def test_superseded_clean_end_is_silent_and_keeps_new_socket():
+    adapter = make_adapter(FakeWS(messages=[_session_msg("s1")]))
+    new_ws = FakeWS()
+    rest = asyncio.run(_swap_then_drain(adapter, new_ws))
+    assert rest == []
+    assert adapter._ws is new_ws
+    assert adapter.connected is True
+
+
+def test_superseded_connection_closed_is_silent_and_keeps_new_socket():
+    adapter = make_adapter(FakeWS(
+        messages=[_session_msg("s1")],
+        raise_exc=websockets.ConnectionClosed(None, None),
+    ))
+    new_ws = FakeWS()
+    rest = asyncio.run(_swap_then_drain(adapter, new_ws))
+    assert rest == []
+    assert adapter._ws is new_ws
+
+
+def test_superseded_error_is_silent_and_keeps_new_socket():
+    adapter = make_adapter(FakeWS(
+        messages=[_session_msg("s1")],
+        raise_exc=RuntimeError("old socket broke"),
+    ))
+    new_ws = FakeWS()
+    rest = asyncio.run(_swap_then_drain(adapter, new_ws))
+    assert rest == []
+    assert adapter._ws is new_ws
