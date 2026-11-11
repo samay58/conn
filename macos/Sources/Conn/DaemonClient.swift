@@ -410,8 +410,7 @@ final class DaemonClient {
                     }
                     self.receive(on: task, connection: connection)
                 case .failure:
-                    self.state.connected = false
-                    self.state.clearNavigationState()
+                    self.state.markDaemonLost()
                     self.invalidateNativeActions()
                     guard !self.closed else { return }
                     self.task = nil
@@ -473,8 +472,7 @@ final class DaemonClient {
         connection: UUID
     ) {
         guard self.task === task, connectionID == connection else { return }
-        state.connected = false
-        state.clearNavigationState()
+        state.markDaemonLost()
         invalidateNativeActions()
         task.cancel(with: .policyViolation, reason: nil)
         self.task = nil

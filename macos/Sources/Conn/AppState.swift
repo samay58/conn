@@ -140,6 +140,20 @@ final class AppState: ObservableObject {
         navigationGuidance = ""
     }
 
+    /// The daemon socket died: show the reconnecting state now rather than
+    /// freezing the last phase, and drop chips whose buttons can no longer
+    /// reach the daemon. The next daemon `state` message restores the truth.
+    func markDaemonLost() {
+        connected = false
+        phase = "failed"
+        chips = []
+        userLine = ""
+        modelLine = ""
+        toast = nil
+        level = 0
+        clearNavigationState()
+    }
+
     /// T2 grant preflight: one short line for the island; the console banner
     /// and doctor carry the full fix. The app lane leads because it covers
     /// context reads; "unattached" and "unknown" are not dark lanes.
