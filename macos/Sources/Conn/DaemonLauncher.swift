@@ -193,10 +193,25 @@ enum DaemonLauncher {
         )
     }
 
+    /// Only the process listening on the port is the daemon. A bare `:port`
+    /// query also lists every client holding a socket to it (a browser with
+    /// the console open, this app itself), and those must never be signalled.
+    static func portListenerLsofArguments(_ port: Int) -> [String] {
+        ["-nP", "-t", "-iTCP:\(port)", "-sTCP:LISTEN"]
+    }
+
+    static func listenerPIDs(fromLsofOutput output: String, excluding ownPID: Int32) -> [Int32] {
+        output.split(separator: "\n").compactMap { line in
+            guard let pid = Int32(line.trimmingCharacters(in: .whitespaces)),
+                  pid > 0, pid != ownPID else { return nil }
+            return pid
+        }
+    }
+
     static func terminatePortOwner(_ port: Int) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        proc.arguments = ["-ti", ":\(port)"]
+        proc.arguments = portListenerLsofArguments(port)
         let outPipe = Pipe()
         proc.standardOutput = outPipe
         proc.standardError = Pipe()
@@ -208,10 +223,8 @@ enum DaemonLauncher {
         proc.waitUntilExit()
         let data = outPipe.fileHandleForReading.readDataToEndOfFile()
         guard let output = String(data: data, encoding: .utf8) else { return }
-        for line in output.split(separator: "\n") {
-            if let pid = Int32(line.trimmingCharacters(in: .whitespaces)) {
-                kill(pid, SIGTERM)
-            }
+        for pid in listenerPIDs(fromLsofOutput: output, excluding: getpid()) {
+            kill(pid, SIGTERM)
         }
     }
 

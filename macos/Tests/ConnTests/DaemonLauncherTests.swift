@@ -2,6 +2,21 @@ import XCTest
 @testable import Conn
 
 final class DaemonLauncherTests: XCTestCase {
+    func testPortOwnerQueryMatchesOnlyTheListener() {
+        let args = DaemonLauncher.portListenerLsofArguments(8787)
+        XCTAssertTrue(args.contains("-sTCP:LISTEN"))
+        XCTAssertTrue(args.contains("-iTCP:8787"))
+        XCTAssertFalse(args.contains(":8787"))
+    }
+
+    func testListenerPIDsSkipOwnProcessAndJunk() {
+        let pids = DaemonLauncher.listenerPIDs(
+            fromLsofOutput: "4242\n 77 \n\nnot-a-pid\n0\n-1\n",
+            excluding: 77
+        )
+        XCTAssertEqual(pids, [4242])
+    }
+
     func testLoopbackEndpointUsesLabPortFromEnvironment() {
         let endpoint = DaemonEndpoint.resolve(
             environment: ["CONN_SERVER_PORT": "18787"]
