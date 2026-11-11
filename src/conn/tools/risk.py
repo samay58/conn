@@ -124,8 +124,14 @@ def _exception_reason(exc: Exception) -> str:
 
 def _guard_vault_path(args: dict, cfg: Config) -> str | None:
     raw = str(args.get("path", "")).lstrip("/")
-    root = Path(cfg.phoenix.vault_root).resolve()
-    target = (root / raw).resolve()
+    # Path.resolve raises on NUL; model-supplied paths must block, not raise.
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        return "path_invalid: control character in path"
+    try:
+        root = Path(cfg.phoenix.vault_root).resolve()
+        target = (root / raw).resolve()
+    except (OSError, ValueError, RuntimeError) as exc:
+        return f"path_invalid: {type(exc).__name__}"
     if not target.is_relative_to(root):
         return f"path_outside_vault: {raw!r}"
     return None

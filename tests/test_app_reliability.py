@@ -469,3 +469,33 @@ class TestDoneReturnsToIdle:
             return phase
 
         assert asyncio.run(run()) is Phase.IDLE
+
+
+class TestPumpSurvivesHandlerErrors:
+    def test_handler_error_is_traced_and_the_next_event_is_processed(self, cfg, ctx):
+        from conn.realtime.base import RtSessionReady
+
+        async def run():
+            app, messages = build_app(cfg, ctx)
+            seen = []
+
+            async def flaky(ev):
+                seen.append(ev)
+                if len(seen) == 1:
+                    raise ValueError("lstat: embedded null character in path")
+
+            app._on_rt_event = flaky
+            await app.start()          # connect() queues the first RtSessionReady
+            await asyncio.sleep(0.05)
+            await app.adapter._queue.put(RtSessionReady(session_id="second"))
+            await asyncio.sleep(0.05)
+            alive = not app._pump_task.done()
+            kinds = [event["kind"] for event in app.trace.read()]
+            await app.stop()
+            return seen, alive, kinds, messages
+
+        seen, alive, kinds, messages = asyncio.run(run())
+        assert len(seen) == 2
+        assert alive
+        assert "realtime_event_failed" in kinds
+        assert any(m.get("type") == "toast" and m.get("level") == "error" for m in messages)

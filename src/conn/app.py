@@ -579,7 +579,20 @@ class ConnApp:
     async def _pump(self) -> None:
         try:
             async for ev in self.adapter.events():
-                await self._on_rt_event(ev)
+                try:
+                    await self._on_rt_event(ev)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    # One bad event must not end the session silently: record
+                    # it, show it, keep reading. The watchdog still catches a
+                    # turn left stuck by the failed handler.
+                    self.trace.log("realtime_event_failed",
+                                   event=type(ev).__name__,
+                                   error=f"{type(exc).__name__}: {exc}")
+                    self.publish({"type": "toast", "level": "error",
+                                  "text": "Conn hit an internal error on that turn; "
+                                          "it is still listening."})
         except asyncio.CancelledError:
             pass
 

@@ -75,6 +75,33 @@ class TestGateDecisions:
         assert call.gate is Gate.BLOCKED
         assert "path_outside_vault" in harness.block_reason(call)
 
+    def test_nul_in_note_path_is_blocked_not_raised(self, harness):
+        call = gate(harness, "phoenix_open_note", {"path": "notes/a\u0000b.md"})
+        assert call.gate is Gate.BLOCKED
+        assert harness.block_reason(call).startswith("path_invalid")
+
+    def test_nul_in_note_path_is_blocked_on_the_live_prepare_path(self, harness):
+        from types import SimpleNamespace
+        provenance = SimpleNamespace(turn_id="t1", response_epoch=1, observation_epoch=1)
+        call = asyncio.run(harness.prepare_call(
+            "c_nul", "phoenix_open_note", json.dumps({"path": "a\u0000b.md"}), provenance))
+        assert call.gate is Gate.BLOCKED
+        assert call.block_reason.startswith("path_invalid")
+
+    def test_guard_exception_on_live_prepare_path_blocks_the_call(self, harness, monkeypatch):
+        from types import SimpleNamespace
+        from conn.tools import risk
+
+        def boom(args, cfg):
+            raise RuntimeError("boom")
+
+        monkeypatch.setitem(risk.ARG_GUARDS, "phoenix_open_note", boom)
+        provenance = SimpleNamespace(turn_id="t1", response_epoch=1, observation_epoch=1)
+        call = asyncio.run(harness.prepare_call(
+            "c_boom", "phoenix_open_note", json.dumps({"path": "ok.md"}), provenance))
+        assert call.gate is Gate.BLOCKED
+        assert call.block_reason == "gating_failed: RuntimeError: boom"
+
     def test_vault_path_is_allowed(self, harness):
         call = gate(harness, "phoenix_open_note", {"path": "01-active/tasks.md"})
         assert call.gate is Gate.AUTO

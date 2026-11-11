@@ -223,7 +223,12 @@ class ToolHarness:
                 observation_epoch=provenance.observation_epoch,
             )
 
-        reason = argument_guard(name, args, self.cfg)
+        try:
+            reason = argument_guard(name, args, self.cfg)
+        except Exception as exc:
+            # Same rule as gate(): a guard that raises blocks the call; it must
+            # never escape into the realtime event pump.
+            reason = f"gating_failed: {type(exc).__name__}: {exc}"
         if reason:
             return ToolCall(
                 call_id=call_id,
