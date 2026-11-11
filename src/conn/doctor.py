@@ -155,16 +155,20 @@ def _screencapture() -> dict:
 
 
 def _qmd(cfg: Config) -> dict:
-    bin_path = cfg.phoenix.qmd_bin
-    if not Path(bin_path).exists() and bin_path == "qmd":
-        from shutil import which
-        found = which("qmd")
-        if found:
-            return _result("qmd", WARN, f"using PATH lookup ({found}); pin the absolute "
-                                        "path in config.toml for launchd use")
-    if Path(bin_path).exists():
-        return _result("qmd", OK, bin_path)
-    return _result("qmd", FAIL, f"not found at {bin_path}; phoenix_search will fail")
+    # Same resolution phoenix_search uses, so the doctor reports what runs.
+    from .tools.base import ToolError
+    from .tools.phoenix import _qmd_command
+
+    configured = cfg.phoenix.qmd_bin
+    try:
+        exe, _env = _qmd_command(configured)
+    except ToolError:
+        return _result("qmd", FAIL, f"qmd not found (configured {configured}); "
+                                    "phoenix_search will fail")
+    if Path(configured).is_absolute() and not Path(configured).exists():
+        return _result("qmd", WARN, f"configured {configured} is missing; using {exe}. "
+                                    'Set qmd_bin = "qmd" to follow node upgrades')
+    return _result("qmd", OK, exe)
 
 
 def _obsidian(cfg: Config) -> dict:

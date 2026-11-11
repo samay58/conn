@@ -61,24 +61,32 @@ def parse_qmd_output(text: str) -> list[dict]:
 # no nvm), where a bare "qmd" resolves to nothing and qmd's own launcher
 # script cannot find `node`. Resolve the binary explicitly and run it with
 # its own bin directory prepended to PATH so the node runtime beside it wins.
-def _qmd_command(qmd_bin: str) -> tuple[str, dict[str, str]]:
-    exe = shutil.which(qmd_bin)
-    if exe is None and not Path(qmd_bin).is_absolute():
-        def _version_key(p: Path) -> tuple:
-            name = p.parent.parent.name.lstrip("v")
-            try:
-                return tuple(int(part) for part in name.split("."))
-            except ValueError:
-                return (0,)
+# A pinned absolute path goes stale when node is upgraded under nvm, so a
+# missing pin falls back to the same discovery a bare name gets.
+def _discover_qmd() -> str | None:
+    def _version_key(p: Path) -> tuple:
+        name = p.parent.parent.name.lstrip("v")
+        try:
+            return tuple(int(part) for part in name.split("."))
+        except ValueError:
+            return (0,)
 
-        nvm_candidates = sorted(
-            Path.home().glob(".nvm/versions/node/*/bin/qmd"), key=_version_key
-        )
-        brew = Path("/opt/homebrew/bin/qmd")
-        if nvm_candidates:
-            exe = str(nvm_candidates[-1])
-        elif brew.exists():
-            exe = str(brew)
+    found = shutil.which("qmd")
+    if found:
+        return found
+    nvm_candidates = sorted(
+        Path.home().glob(".nvm/versions/node/*/bin/qmd"), key=_version_key
+    )
+    if nvm_candidates:
+        return str(nvm_candidates[-1])
+    for fixed in (Path("/opt/homebrew/bin/qmd"), Path.home() / ".bun/bin/qmd"):
+        if fixed.exists():
+            return str(fixed)
+    return None
+
+
+def _qmd_command(qmd_bin: str) -> tuple[str, dict[str, str]]:
+    exe = shutil.which(qmd_bin) or _discover_qmd()
     if exe is None:
         raise ToolError(
             "qmd_not_found: qmd is not on the daemon's PATH; "

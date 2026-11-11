@@ -85,6 +85,30 @@ class TestPhoenixExecutors:
             with pytest.raises(ToolError, match="qmd_not_found"):
                 phoenix.phoenix_search({"query": "x"}, ctx)
 
+    def test_stale_pinned_qmd_falls_back_to_newest_nvm_install(self, tmp_path):
+        for version in ("v22.9.0", "v22.23.4"):
+            exe = tmp_path / ".nvm/versions/node" / version / "bin/qmd"
+            exe.parent.mkdir(parents=True)
+            exe.write_text("#!/bin/sh\n")
+        stale = str(tmp_path / ".nvm/versions/node/v22.15.0/bin/qmd")
+        with patch("conn.tools.phoenix.shutil.which", return_value=None), \
+             patch("conn.tools.phoenix.Path.home", return_value=tmp_path):
+            exe, env = phoenix._qmd_command(stale)
+        assert exe == str(tmp_path / ".nvm/versions/node/v22.23.4/bin/qmd")
+        assert env["PATH"].startswith(str(tmp_path / ".nvm/versions/node/v22.23.4/bin"))
+
+    def test_doctor_reports_the_qmd_that_will_run(self, cfg, tmp_path):
+        from conn import doctor
+        exe = tmp_path / ".nvm/versions/node/v22.23.4/bin/qmd"
+        exe.parent.mkdir(parents=True)
+        exe.write_text("#!/bin/sh\n")
+        cfg.phoenix.qmd_bin = str(tmp_path / "gone/bin/qmd")
+        with patch("conn.tools.phoenix.shutil.which", return_value=None), \
+             patch("conn.tools.phoenix.Path.home", return_value=tmp_path):
+            result = doctor._qmd(cfg)
+        assert result["status"] == doctor.WARN
+        assert str(exe) in result["detail"]
+
     def test_open_note_builds_obsidian_url(self, ctx, tmp_path):
         note = tmp_path / "vault" / "01-active" / "tasks.md"
         note.parent.mkdir(parents=True)

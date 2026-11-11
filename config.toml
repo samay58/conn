@@ -51,7 +51,7 @@ search_url = "https://www.google.com/search?q={q}"
 
 [phoenix]
 vault_root = "/Users/samaydhawan/phoenix"
-qmd_bin = "/Users/samaydhawan/.nvm/versions/node/v22.15.0/bin/qmd"
+qmd_bin = "qmd"          # resolved at run time: PATH, newest nvm node, Homebrew, Bun; survives node upgrades
 obsidian_vault = "phoenix"
 
 [screenshots]
