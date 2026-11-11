@@ -195,6 +195,19 @@ class TestWatchdog:
         assert cmds == []
         assert m.phase is Phase.FAILED
 
+    def test_watchdog_in_done_is_noop(self):
+        from conn.events import ModelSpeaking, PlaybackDrained
+        m = SessionStateMachine(computer_mutations=MUTATIONS, watchdog_timeout_s=5)
+        start_turn(m, t0=1000, t1=2000)
+        m.handle(ModelSpeaking())
+        m.handle(ResponseDone(had_tool_calls=False))
+        m.handle(PlaybackDrained())
+        assert m.phase is Phase.DONE
+        m.handle(WatchdogTick(ts_ms=2000))
+        cmds = m.handle(WatchdogTick(ts_ms=2000 + 10_000))
+        assert cmds == []
+        assert m.phase is Phase.DONE
+
 
 class TestLastTransition:
     def test_last_transition_records_the_move(self, m):

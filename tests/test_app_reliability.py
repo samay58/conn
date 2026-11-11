@@ -16,7 +16,8 @@ import conn.app as app_module
 from conn.app import ConnApp, reconnect_delays
 from conn.config import Config
 from conn.events import (
-    Gate, PttDown, PttUp, TextCommand, ToolCall, ToolProposed,
+    Gate, PlaybackDrained, PttDown, PttUp, ResponseDone, TextCommand, ToolCall,
+    ToolProposed,
 )
 from conn.realtime.fake import FakeRealtimeAdapter
 from conn.server.http import build_server
@@ -432,3 +433,39 @@ class TestWatchdogArmed:
             return armed
 
         assert asyncio.run(run())
+
+
+class TestDoneReturnsToIdle:
+    def test_drain_after_spoken_reply_returns_to_idle(self, cfg, ctx):
+        # Live audio reports drain on its own, after ResponseDone; the reset
+        # to IDLE must still follow.
+        async def run():
+            cfg.session.done_flash_ms = 20
+            app, _ = build_app(cfg, ctx)
+            await app.start()
+            app.machine.phase = Phase.SPEAKING  # reply audio still playing
+            await app.dispatch(PlaybackDrained())
+            assert app.machine.phase is Phase.DONE
+            await asyncio.sleep(0.2)
+            phase = app.machine.phase
+            await app.stop()
+            return phase
+
+        assert asyncio.run(run()) is Phase.IDLE
+
+    def test_text_reply_still_returns_to_idle(self, cfg, ctx):
+        async def run():
+            cfg.session.done_flash_ms = 20
+            app, _ = build_app(cfg, ctx)
+            await app.start()
+            app.machine.phase = Phase.THINKING
+            app.machine._response_open = True
+            await app.dispatch(ResponseDone(had_tool_calls=False))
+            await app._maybe_drain()
+            assert app.machine.phase is Phase.DONE
+            await asyncio.sleep(0.2)
+            phase = app.machine.phase
+            await app.stop()
+            return phase
+
+        assert asyncio.run(run()) is Phase.IDLE

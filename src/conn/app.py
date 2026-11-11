@@ -89,6 +89,7 @@ class ConnApp:
         self._closing = False
         self._idle_timer: asyncio.TimerHandle | None = None
         self._watchdog_timer: asyncio.TimerHandle | None = None
+        self._done_reset: asyncio.TimerHandle | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._turn_count = 0
         self._phase_since = time.monotonic()
@@ -158,6 +159,8 @@ class ConnApp:
             self._pump_task.cancel()
         if self._watchdog_timer:
             self._watchdog_timer.cancel()
+        if self._done_reset:
+            self._done_reset.cancel()
         if self.adapter.connected:
             await self.adapter.close()
         receipt = self.cost.receipt()
@@ -375,6 +378,8 @@ class ConnApp:
         cmds = self.machine.handle(ev)
         if self.machine.phase != old_phase:
             self._on_phase_changed(old_phase, self.machine.phase)
+        if self.machine.phase is Phase.DONE and old_phase is not Phase.DONE:
+            self._schedule_done_reset()
         for cmd in cmds:
             if not await self._exec(cmd):
                 break
@@ -762,9 +767,17 @@ class ConnApp:
         live audio the playback module reports drain itself."""
         if self.audio is None and self.machine.phase is Phase.SPEAKING:
             await self.dispatch(PlaybackDrained())
-        if self.machine.phase is Phase.DONE and self._loop:
-            self._loop.call_later(self.cfg.session.done_flash_ms / 1000,
-                                  lambda: self.dispatch_soon(ResetTick()))
+
+    def _schedule_done_reset(self) -> None:
+        # Every route into DONE (text reply, demo drain, live playback drain)
+        # passes through dispatch, so the DONE -> IDLE flash is scheduled here.
+        if self._loop is None:
+            return
+        if self._done_reset is not None:
+            self._done_reset.cancel()
+        self._done_reset = self._loop.call_later(
+            self.cfg.session.done_flash_ms / 1000,
+            lambda: self.dispatch_soon(ResetTick()))
 
     def _maybe_warn_budget(self) -> None:
         if not self._warned_budget and self.cost.should_warn():

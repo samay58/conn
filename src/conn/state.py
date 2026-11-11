@@ -549,8 +549,12 @@ class SessionStateMachine:
         again from FAILED is a no-op that just re-emits CloseMic/
         FlushPlayback, and the watchdog's purpose (forcing a stuck session
         into visible failure) is already satisfied once we're here.
+
+        DONE is exempt too: it is a resting phase, and a missed DONE -> IDLE
+        reset once let the watchdog fail healthy live sessions about ten
+        minutes after a spoken reply.
         """
-        if self.phase in (Phase.IDLE, Phase.AWAITING_APPROVAL, Phase.FAILED):
+        if self.phase in (Phase.IDLE, Phase.DONE, Phase.AWAITING_APPROVAL, Phase.FAILED):
             self._watchdog_armed_seq = None
             self._watchdog_armed_ts_ms = None
             return []
