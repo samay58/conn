@@ -16,6 +16,8 @@ All Python commands run from the repo root with the project venv and `PYTHONPATH
 
 ```bash
 # Tests (no hardware/TCC needed; addopts skip the "hardware" and "lifecycle" markers)
+./verify.sh                                                    # the gate: pytest (incl. all 14 harness evals) + swift test
+./verify.sh --python-only                                      # same, without Swift
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_state_machine.py -q          # one file
 PYTHONPATH=src .venv/bin/python -m pytest tests -q -k "approval"                  # by keyword
