@@ -114,6 +114,30 @@ final class SemanticIntentTests: XCTestCase {
         XCTAssertEqual(receipt["ok"] as? Bool, false)
     }
 
+    func testNoPredicatePlanDoesNotWaitForTheDeadline() async throws {
+        // Nothing can verify a plan with no predicates, so the executor must
+        // not poll until timeout before reporting dispatch_only.
+        let backend = IntentFixtureBackend()
+        backend.useNestedTabStripWithOneInitialTab()
+        backend.effectOnDispatch = true
+        let engine = NativeSemanticActionEngine(backend: backend)
+        let plan = await engine.prepare(intentParams(
+            family: "create", slots: ["kind": "tab"], timeoutMs: 3000))
+        let predicates = try XCTUnwrap(plan?["predicates"] as? [[String: Any]])
+        XCTAssertTrue(predicates.isEmpty)
+        let fingerprint = try XCTUnwrap(plan?["plan_fingerprint"] as? String)
+
+        let receipt = await engine.execute([
+            "plan_fingerprint": fingerprint,
+            "turn_id": "turn-1", "response_epoch": 1, "observation_epoch": 1,
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "dispatch_only")
+        XCTAssertEqual(receipt["dispatch_state"] as? String, "dispatched")
+        let duration = try XCTUnwrap(receipt["duration_ms"] as? Int)
+        XCTAssertLessThan(duration, 1000)
+    }
+
     func testCreateTabDoesNotVerifyAnUnrelatedRadioButton() async throws {
         let backend = IntentFixtureBackend()
         backend.useNestedTabStripWithOneInitialTab()
@@ -740,7 +764,7 @@ final class SemanticIntentTests: XCTestCase {
     }
 
     private func intentParams(
-        family: String, slots: [String: String]
+        family: String, slots: [String: String], timeoutMs: Int = 20
     ) -> [String: Any] {
         var payload: [String: Any] = ["family": family]
         for (key, value) in slots { payload[key] = value }
@@ -752,7 +776,7 @@ final class SemanticIntentTests: XCTestCase {
                 "operation": "semantic_intent",
                 "payload": payload,
                 "risk": "reversible_navigation",
-                "timeout_ms": 20,
+                "timeout_ms": timeoutMs,
             ] as [String: Any],
         ]
     }

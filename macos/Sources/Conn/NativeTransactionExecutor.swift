@@ -1111,23 +1111,30 @@ struct NativeTransactionExecutor {
             }
         }
 
-        let verification = await verify(
-            plan: plan,
-            query: verificationQuery(for: plan, deadline: deadline),
-            deadline: deadline
-        )
         if plan.effect.predicates.isEmpty {
+            // No predicate can ever match, so polling would only wait out the
+            // deadline. Take one observation for the receipt and return.
+            let after = store.observe(
+                turnID: plan.request.turnID,
+                observationEpoch: plan.request.observationEpoch,
+                query: verificationQuery(for: plan, deadline: deadline)
+            )
             return receipt(
                 outcome: .dispatchOnly,
                 dispatch: .dispatched,
                 plan: plan,
                 strategy: selectedStrategy,
-                evidence: verification.evidence,
+                evidence: [],
                 nativeError: nil,
                 started: started,
-                after: verification.after
+                after: after
             )
         }
+        let verification = await verify(
+            plan: plan,
+            query: verificationQuery(for: plan, deadline: deadline),
+            deadline: deadline
+        )
         if plan.request.operation == .navigate,
            verification.after.bundleID == plan.request.payload.bundleID,
            verification.after.documentURL == nil {
