@@ -171,7 +171,10 @@ struct NativeActionCompiler {
 
     static func visualPointerInput(goal: String, label: String) -> NativePointerInput {
         let words = semanticWords("\(goal) \(label)")
-        if words.contains("scroll") { return .scroll }
+        if words.contains("scroll") {
+            return words.isDisjoint(with: ["up", "top", "upward", "upwards"])
+                ? .scroll : .scrollUp
+        }
         if words.contains("double") { return .doubleClick }
         if words.contains("right") || words.contains("context") { return .rightClick }
         return .primaryClick

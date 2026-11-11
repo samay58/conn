@@ -61,12 +61,13 @@ enum NativePointerInput: String {
     case doubleClick = "double_click"
     case rightClick = "right_click"
     case scroll
+    case scrollUp = "scroll_up"
 
     var eventCount: Int {
         switch self {
         case .primaryClick, .rightClick: return 2
         case .doubleClick: return 4
-        case .scroll: return 1
+        case .scroll, .scrollUp: return 1
         }
     }
 }
@@ -527,6 +528,25 @@ final class ScreenCaptureVisualProvider: NativeVisualCaptureProvider, @unchecked
     func dispatch(
         input: NativePointerInput, at point: CGPoint
     ) -> NativeDispatchResult {
+        let events = Self.pointerEvents(for: input, at: point)
+        guard events.count == input.eventCount,
+              events.allSatisfy({ $0 != nil }) else {
+            return NativeDispatchResult(
+                state: .notDispatched, nativeError: "native_event_creation_failed"
+            )
+        }
+        for event in events.compactMap({ $0 }) {
+            event.post(tap: .cghidEventTap)
+        }
+        return NativeDispatchResult(state: .dispatched, nativeError: nil)
+    }
+
+    /// Every event lands at the grounded point. A scroll-wheel event carries
+    /// no position of its own, so without an explicit location it would
+    /// scroll whatever pane sits under the cursor instead of the target.
+    static func pointerEvents(
+        for input: NativePointerInput, at point: CGPoint
+    ) -> [CGEvent?] {
         let events: [CGEvent?]
         switch input {
         case .primaryClick:
@@ -555,22 +575,17 @@ final class ScreenCaptureVisualProvider: NativeVisualCaptureProvider, @unchecked
                 CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp,
                         mouseCursorPosition: point, mouseButton: .right),
             ]
-        case .scroll:
-            events = [CGEvent(
+        case .scroll, .scrollUp:
+            // Positive wheel deltas move content toward the top.
+            let scroll = CGEvent(
                 scrollWheelEvent2Source: nil, units: .line,
-                wheelCount: 1, wheel1: -3, wheel2: 0, wheel3: 0
-            )]
-        }
-        guard events.count == input.eventCount,
-              events.allSatisfy({ $0 != nil }) else {
-            return NativeDispatchResult(
-                state: .notDispatched, nativeError: "native_event_creation_failed"
+                wheelCount: 1, wheel1: input == .scrollUp ? 3 : -3,
+                wheel2: 0, wheel3: 0
             )
+            scroll?.location = point
+            events = [scroll]
         }
-        for event in events.compactMap({ $0 }) {
-            event.post(tap: .cghidEventTap)
-        }
-        return NativeDispatchResult(state: .dispatched, nativeError: nil)
+        return events
     }
 
     private static func boundedSize(width: Double, height: Double) -> (width: Int, height: Int) {
