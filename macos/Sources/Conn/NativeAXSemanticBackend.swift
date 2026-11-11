@@ -918,6 +918,17 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         }
     }
 
+    /// Row selection shares the AX write classifier, so an ambiguous error
+    /// stays possibly dispatched and never earns an automatic replan. The
+    /// strategy-specific text is kept for receipts.
+    static func classifySelectedRowsError(_ error: AXError) -> NativeDispatchResult {
+        var result = classifyDispatchError(error)
+        if error != .success {
+            result.nativeError = "selected_rows_set_failed:\(error.rawValue)"
+        }
+        return result
+    }
+
     private func application(for query: NativeObservationQuery) -> NSRunningApplication? {
         if let pid = query.pid { return NSRunningApplication(processIdentifier: pid) }
         if let bundleID = query.bundleID {
@@ -1076,12 +1087,7 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             kAXSelectedRowsAttribute as CFString,
             [row] as CFArray
         )
-        return error == .success
-            ? NativeDispatchResult(state: .dispatched, nativeError: nil)
-            : NativeDispatchResult(
-                state: .notDispatched,
-                nativeError: "selected_rows_set_failed:\(error.rawValue)"
-            )
+        return Self.classifySelectedRowsError(error)
     }
 
     private func stringValue(_ value: Any?) -> String? {
