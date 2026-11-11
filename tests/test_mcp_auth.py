@@ -251,3 +251,18 @@ def test_tokens_never_in_trace_or_status(kr):
     blob = repr(status) + repr(events)
     assert SECRET_ACCESS not in blob and SECRET_REFRESH not in blob
     assert kr.items  # tokens really were stored
+
+
+def test_expected_login_refusal_is_not_logged_but_other_oauth_errors_are():
+    import logging
+    from conn import mcp_auth
+    log = logging.getLogger("mcp.client.auth.oauth2")
+    def record(error):
+        try:
+            raise error
+        except Exception:
+            import sys
+            return log.makeRecord(log.name, logging.ERROR, __file__, 1, "OAuth flow error", (), sys.exc_info())
+    assert not log.filter(record(mcp_auth.McpLoginRequired("granola")))
+    assert not log.filter(record(ExceptionGroup("g", [mcp_auth.McpLoginRequired("wispr")])))
+    assert log.filter(record(RuntimeError("token endpoint refused")))

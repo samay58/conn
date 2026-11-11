@@ -8,6 +8,7 @@ mid-sentence, so only the explicit `--mcp-login` command does.
 from __future__ import annotations
 
 import asyncio
+import logging
 import subprocess
 from urllib.parse import parse_qs, urlparse
 
@@ -184,6 +185,20 @@ def _find(error: BaseException, kind: type) -> BaseException | None:
         if found is not None:
             return found
     return None
+
+
+class _QuietLoginRequired(logging.Filter):
+    """The SDK logs a full traceback when the daemon declines to open a
+    browser. That refusal is the designed path for a server nobody has
+    signed in to yet, so drop exactly those records and keep every other
+    OAuth error."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        error = record.exc_info[1] if record.exc_info else None
+        return error is None or _find(error, McpLoginRequired) is None
+
+
+logging.getLogger("mcp.client.auth.oauth2").addFilter(_QuietLoginRequired())
 
 
 def _open_in_browser(url: str) -> None:
