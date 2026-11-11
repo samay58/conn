@@ -7,7 +7,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from .base import ExecutionContext, ToolError
 
@@ -34,7 +34,7 @@ def parse_qmd_output(text: str) -> list[dict]:
             if current is not None:
                 current["snippet"] = "\n".join(snippet).strip()
                 results.append(current)
-            current = {"path": head["path"], "line": int(head["line"]),
+            current = {"collection": head["collection"], "path": head["path"], "line": int(head["line"]),
                        "docid": head["docid"], "title": None, "score": None}
             snippet = []
             continue
@@ -101,20 +101,61 @@ def _qmd_command(qmd_bin: str) -> tuple[str, dict[str, str]]:
     return exe, env
 
 
+def _qmd_index_env(cfg) -> dict[str, str]:
+    """Point qmd at Phoenix's own index; never fall back to qmd's global one,
+    which can be months stale."""
+    ph = cfg.phoenix
+    base = Path(ph.vault_root) / "data/qmd/phoenix"
+    index = Path(ph.qmd_index) if ph.qmd_index else base / "index.sqlite"
+    config_dir = Path(ph.qmd_config_dir) if ph.qmd_config_dir else base / "config"
+    if not index.exists():
+        raise ToolError(
+            f"qmd_index_missing: {index}; Phoenix's index is required, "
+            "Conn will not search a stale copy"
+        )
+    return {"INDEX_PATH": str(index), "QMD_CONFIG_DIR": str(config_dir)}
+
+
+def _vault_relative(result: dict, collections: dict[str, str]) -> dict | None:
+    collection = result.pop("collection")
+    path = unquote(result["path"])
+    if ".." in path.split("/"):
+        return None
+    if collection == "phoenix":  # legacy global-index shape, already vault-relative
+        result["path"] = path
+        return result
+    root = collections.get(collection)
+    if root is None:
+        return None
+    result["path"] = f"{root}/{path}"
+    return result
+
+
 def phoenix_search(args: dict, ctx: ExecutionContext) -> dict:
     query = args["query"]
     limit = int(args.get("limit", 5))
-    exe, env = _qmd_command(ctx.cfg.phoenix.qmd_bin)
+    cfg = ctx.cfg.phoenix
+    exe, env = _qmd_command(cfg.qmd_bin)
+    env.update(_qmd_index_env(ctx.cfg))
+    argv = [exe, "search", query]
+    for name in cfg.qmd_collections:
+        argv += ["-c", name]
     proc = subprocess.run(
-        [exe, "search", query],
-        capture_output=True, text=True, timeout=20,
-        cwd=ctx.cfg.phoenix.vault_root, env=env,
+        argv, capture_output=True, text=True, timeout=20,
+        cwd=cfg.vault_root, env=env,
     )
     if proc.returncode != 0:
         raise ToolError(f"qmd search failed: {proc.stderr.strip()[:300]}")
-    results = parse_qmd_output(proc.stdout)[:limit]
-    for r in results:
+    results: list[dict] = []
+    seen: set[str] = set()
+    for raw in parse_qmd_output(proc.stdout):
+        r = _vault_relative(raw, cfg.qmd_collections)
+        if r is None or r["path"] in seen:
+            continue
+        seen.add(r["path"])
         r["snippet"] = r["snippet"][:400]
+        results.append(r)
+    results = results[:limit]
     return {"query": query, "results": results, "count": len(results)}
 
 

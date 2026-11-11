@@ -157,7 +157,7 @@ def _screencapture() -> dict:
 def _qmd(cfg: Config) -> dict:
     # Same resolution phoenix_search uses, so the doctor reports what runs.
     from .tools.base import ToolError
-    from .tools.phoenix import _qmd_command
+    from .tools.phoenix import _qmd_command, _qmd_index_env
 
     configured = cfg.phoenix.qmd_bin
     try:
@@ -168,7 +168,15 @@ def _qmd(cfg: Config) -> dict:
     if Path(configured).is_absolute() and not Path(configured).exists():
         return _result("qmd", WARN, f"configured {configured} is missing; using {exe}. "
                                     'Set qmd_bin = "qmd" to follow node upgrades')
-    return _result("qmd", OK, exe)
+    try:
+        index = Path(_qmd_index_env(cfg)["INDEX_PATH"])
+    except ToolError as e:
+        return _result("qmd", FAIL, str(e))
+    age_days = (time.time() - index.stat().st_mtime) / 86400
+    if age_days > 3:
+        return _result("qmd", WARN, f"Phoenix index is {int(age_days)} days old; "
+                                    "Phoenix's qmd-refresh job may be failing")
+    return _result("qmd", OK, f"{exe}; index {index}")
 
 
 def _obsidian(cfg: Config) -> dict:

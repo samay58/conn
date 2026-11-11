@@ -4,6 +4,7 @@ so a refactor can never quietly widen what conn touches on the machine.
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -54,8 +55,26 @@ class TestArgv:
                 mac.open_app({"app": "Ghost"}, ctx)
 
 
+def make_index(cfg):
+    index = Path(cfg.phoenix.vault_root) / "data/qmd/phoenix/index.sqlite"
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_bytes(b"")
+    (index.parent / "config").mkdir(exist_ok=True)
+    return index
+
+
+def run_search(ctx, stdout="", query="transformer paper", **args):
+    with patch("conn.tools.phoenix.shutil.which", return_value="/fake/bin/qmd"), \
+         patch("conn.tools.phoenix.subprocess.run",
+               return_value=ok_proc(stdout=stdout)) as run:
+        run.return_value.stdout = stdout
+        out = phoenix.phoenix_search({"query": query, **args}, ctx)
+    return out, run
+
+
 class TestPhoenixExecutors:
     def test_qmd_search_argv_cwd_and_env(self, ctx):
+        make_index(ctx.cfg)
         with patch.dict(os.environ, {
                 "CONN_BRIDGE_TOKEN": "bridge-secret",
                 "CONN_CONSOLE_CAPABILITY": "console-secret",
@@ -68,7 +87,7 @@ class TestPhoenixExecutors:
             run.return_value.stdout = ""
             phoenix.phoenix_search({"query": "transformer paper"}, ctx)
         argv = run.call_args.args[0]
-        assert argv == ["/fake/bin/qmd", "search", "transformer paper"]
+        assert argv[:3] == ["/fake/bin/qmd", "search", "transformer paper"]
         assert run.call_args.kwargs["cwd"] == ctx.cfg.phoenix.vault_root
         # qmd's launcher script needs `node` beside it even when the daemon
         # was spawned by the app with a minimal PATH.
@@ -77,6 +96,71 @@ class TestPhoenixExecutors:
         assert "CONN_CONSOLE_CAPABILITY" not in run.call_args.kwargs["env"]
         assert "OPENAI_API_KEY" not in run.call_args.kwargs["env"]
         assert "UNRELATED_SECRET" not in run.call_args.kwargs["env"]
+
+    def test_search_uses_phoenix_index_and_personal_collections(self, ctx):
+        index = make_index(ctx.cfg)
+        _, run = run_search(ctx)
+        assert run.call_args.args[0] == [
+            "/fake/bin/qmd", "search", "transformer paper",
+            "-c", "active", "-c", "career", "-c", "personal", "-c", "kb", "-c", "mymind",
+        ]
+        env = run.call_args.kwargs["env"]
+        assert env["INDEX_PATH"] == str(index)
+        assert env["QMD_CONFIG_DIR"] == str(index.parent / "config")
+
+    def test_work_collections_are_never_searched(self, ctx):
+        make_index(ctx.cfg)
+        out, run = run_search(ctx, stdout="qmd://every/secret.md:1 #cccccc\nTitle: x\n\nwork text\n")
+        argv = run.call_args.args[0]
+        assert "every" not in argv and "nventures" not in argv
+        assert out["results"] == []
+
+    def test_result_paths_are_vault_relative(self, ctx):
+        make_index(ctx.cfg)
+        out, _ = run_search(ctx, stdout=(
+            "qmd://active/daily-journal/2026-10-22.md:54 #6e495c\nTitle: a\n\nx\n\n"
+            "qmd://kb/tools/qmd.md:3 #aaaaaa\nTitle: b\n\ny\n"))
+        assert [r["path"] for r in out["results"]] == [
+            "01-active/daily-journal/2026-10-22.md", "04-knowledge-base/tools/qmd.md"]
+        assert all("collection" not in r for r in out["results"])
+
+    def test_result_paths_are_unquoted_and_traversal_dropped(self, ctx):
+        make_index(ctx.cfg)
+        out, _ = run_search(ctx, stdout=(
+            "qmd://active/My%20Note.md:1 #bbbbbb\nTitle: a\n\nx\n\n"
+            "qmd://active/..%2F..%2Fetc/passwd:1 #dddddd\nTitle: b\n\ny\n"))
+        assert [r["path"] for r in out["results"]] == ["01-active/My Note.md"]
+
+    def test_duplicate_paths_are_collapsed(self, ctx):
+        make_index(ctx.cfg)
+        out, _ = run_search(ctx, limit=2, stdout=(
+            "qmd://active/a.md:1 #111111\nTitle: first\n\nx\n\n"
+            "qmd://active/a.md:9 #222222\nTitle: dup\n\ny\n\n"
+            "qmd://kb/b.md:1 #333333\nTitle: b\n\nz\n"))
+        assert [r["path"] for r in out["results"]] == ["01-active/a.md", "04-knowledge-base/b.md"]
+        assert out["results"][0]["title"] == "first"
+
+    def test_missing_index_fails_loudly(self, ctx):
+        with patch("conn.tools.phoenix.shutil.which", return_value="/fake/bin/qmd"), \
+             patch("conn.tools.phoenix.subprocess.run") as run:
+            with pytest.raises(ToolError, match="qmd_index_missing"):
+                phoenix.phoenix_search({"query": "x"}, ctx)
+        run.assert_not_called()
+
+    def test_explicit_index_path_wins(self, ctx, tmp_path):
+        make_index(ctx.cfg)
+        other = tmp_path / "other.sqlite"
+        other.write_bytes(b"")
+        ctx.cfg.phoenix.qmd_index = str(other)
+        _, run = run_search(ctx)
+        assert run.call_args.kwargs["env"]["INDEX_PATH"] == str(other)
+
+    def test_doctor_fails_without_phoenix_index(self, cfg):
+        from conn import doctor
+        with patch("conn.tools.phoenix.shutil.which", return_value="/fake/bin/qmd"):
+            result = doctor._qmd(cfg)
+        assert result["status"] == doctor.FAIL
+        assert "qmd_index_missing" in result["detail"]
 
     def test_qmd_missing_raises_clear_error(self, ctx, tmp_path):
         with patch("conn.tools.phoenix.shutil.which", return_value=None), \

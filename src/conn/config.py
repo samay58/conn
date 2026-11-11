@@ -57,6 +57,20 @@ class PhoenixCfg(BaseModel):
     vault_root: str = str(Path.home() / "phoenix")
     qmd_bin: str = "qmd"
     obsidian_vault: str = "phoenix"
+    # Phoenix's own index (kept fresh nightly). Empty means
+    # <vault_root>/data/qmd/phoenix/index.sqlite and .../config.
+    qmd_index: str = ""
+    qmd_config_dir: str = ""
+    # Collections Conn may search, mapped to their root under vault_root.
+    # Work collections (every, nventures) are deliberately absent: search
+    # snippets go to the model provider.
+    qmd_collections: dict[str, str] = Field(default_factory=lambda: {
+        "active": "01-active",
+        "career": "02-personal/career-exploration",
+        "personal": "02-personal",
+        "kb": "04-knowledge-base",
+        "mymind": "04-knowledge-base/mymind-cards",
+    })
 
 
 class ShortcutsCfg(BaseModel):
