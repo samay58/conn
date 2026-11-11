@@ -88,6 +88,29 @@ and Conn reports only that it ran plus any output. A Shortcut gets a plain
 environment, never Conn's API key or bridge token. A run counts as the turn's
 one action. Turn it off with `[shortcuts] enabled = false`.
 
+### Connectors (MCP)
+
+Conn can also use tools from MCP servers (the Model Context Protocol, a
+standard way for a program to offer tools to an AI client): a local server
+for your own notes and calendar, or a vendor's server for your meetings or
+mail. Servers live in `config.local.toml` beside `config.toml`; git ignores
+it, so private paths and accounts never reach the repository. Each exposed
+tool needs a `kind` (`read` or `write`) and Conn's own description. A
+server's descriptions, parameter text and error text never reach the model
+or an approval chip.
+
+- Reads run at once. Every write waits for an Approve click, and config can
+  block a write but never auto-approve it. A write takes the turn's one action
+  slot and is never retried.
+- A write counts as done only when the server read its own write back and
+  returned `verified: true`. Anything else is reported as not confirmed.
+- `withhold_markers` drops any result that mentions one of them; `fixed_args`
+  pins hidden arguments, such as an account, that the model cannot change.
+- Remote servers sign in once with `python -m conn --mcp-login NAME` (a
+  browser page); tokens live in the login Keychain. `--mcp-tools` lists what
+  each server offers, and `--doctor` reports who still needs to sign in.
+- `[mcp] enabled = false` turns every connector off.
+
 ## Stable signing
 
 macOS privacy grants bind to code identity. `make-app.sh` uses the persistent

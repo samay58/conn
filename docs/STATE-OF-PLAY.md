@@ -278,6 +278,15 @@ value, match rule, and match Boolean.
   and reports only that it ran plus its output. Added 2026-11-11 at Samay's
   request, ahead of v1 acceptance, as the first depth layer that avoids
   per-app click scripts
+- MCP connectors (built 2026-11-11 at Samay's request, ahead of v1
+  acceptance): a generic MCP client configured in the gitignored
+  `config.local.toml`. Reads run at once; writes are pointer-approved local
+  actions, serialized and never retried, and count as done only when the server
+  returns `verified: true` after reading its write back. Server-written text is
+  stripped from everything the model or a chip sees. Remote servers sign in
+  with `--mcp-login`, tokens in the Keychain. Each turn's context now carries
+  the local date and time. The live switch is off until the sign-ins and the
+  live voice gate run (`plans/` holds the private wiring plan)
 
 Menu commands, raw key chords, and submit without a surviving target-bound
 effect return `dispatch_only`. Global window changes and bounded-tree absence

@@ -122,6 +122,14 @@ Keychain Access) refuses snapshots of sensitive apps entirely with
 `bundle_denied`. Snapshots live only in the daemon's in-memory store and the
 trace (local, gitignored).
 
+> Note, 2026-11-11: D9 to D11 were built in a revised form. Servers are
+> configured in the gitignored `config.local.toml`, because `config.toml` is
+> now tracked. Every exposed tool needs a Conn-written description and a
+> declared `kind`, and server text is stripped from schemas rather than capped.
+> The harness kept its thread path, and MCP calls cross to the loop with
+> `run_coroutine_threadsafe` instead of D11's async executors. See README
+> "Connectors (MCP)".
+
 **D9. MCP servers are explicit-allowlist only.** `[[mcp.servers]]` config
 entries name a server (stdio `command` + optional `env` map, or HTTP `url`)
 and a required `expose` list of tool names. No wildcard exposure. Secrets live

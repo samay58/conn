@@ -82,6 +82,25 @@ approval chip; navigation has no per-host rule and chip previews hide the
 payload; the idle disconnect never fires (keep sessions connected, or close
 after five idle minutes and reconnect on the next push-to-talk).
 
+## Connectors: the live steps (with Samay at the Mini)
+
+Built and merged on 2026-11-11: the MCP client, gates, sign-in, eval fixtures
+and the Phoenix side's local server. The private wiring plan is
+`plans/018-wire-connectors-and-measure.md` (gitignored). `config.local.toml`
+exists with `[mcp] enabled = false`. What is left:
+
+1. `python -m conn --mcp-login granola`, then `wispr`, then `superhuman`, one
+   browser sign-in each. Then `--mcp-tools`, pick Superhuman's two read tools,
+   and pin the personal account with `fixed_args` (no pinnable argument is a
+   stop).
+2. Run the protected-meeting check from the plan, so work meetings come back
+   withheld.
+3. Approve up to $5 for the live intent eval. The gate is: the original 232
+   items score at least 226, and the connector items score at least 90%.
+4. `cd macos && ./make-app.sh install` (adds the Notes, Reminders and Calendar
+   usage strings), set `enabled = true`, reopen Conn.app, approve the macOS
+   prompts, and say the 16 commands in `plans/VOICE-CONNECTORS.md`.
+
 ## Human gates still open
 
 - microphone acoustic barge-in
