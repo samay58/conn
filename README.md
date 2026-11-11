@@ -172,7 +172,7 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ./make-app.sh
 ```
 
-Latest gate (2026-11-11): `./verify.sh` passed 865 Python tests (all 14
+Latest gate (2026-11-11): `./verify.sh` passed 867 Python tests (all 14
 harness-only evals included), 289 XCTest and 5 Swift Testing cases, and the 3
 lifecycle tests passed. The live intent corpus passed 224 of 226 on
 `gpt-realtime-2.1`. Earlier evidence (2026-07-13): the release build passed, a strict Realtime replay ran 1,000 turns

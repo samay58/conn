@@ -7,7 +7,7 @@ for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 ## Current verdict
 
 The capable-navigation recovery, Conn Lab, and frozen capability-breadth
-implementation are built. On 2026-11-11 the gate (`./verify.sh`) passed 865
+implementation are built. On 2026-11-11 the gate (`./verify.sh`) passed 867
 Python tests, including all 14 harness evals, with three intentional
 deselections, plus 289 XCTest cases and 5 Swift Testing cases; the three
 lifecycle tests also passed. The exact-candidate breadth and 20-clone release
@@ -34,7 +34,7 @@ use.
 
 ## November 10 and 11 hardening
 
-Twelve defects found by a code audit were fixed with tests that fail on the
+Sixteen defects, most from a code audit, were fixed with tests that fail on the
 old code. Reliability: a spoken reply now returns the session to idle, so the
 watchdog no longer fails healthy sessions; one bad tool argument can no longer
 stop the realtime event pump; a reconnect clears stale response provenance, so
@@ -49,7 +49,10 @@ plans with no predicates return `dispatch_only` at once. Flexibility: visual
 scrolls land at the grounded point instead of under the cursor, a visual
 "scroll up" now scrolls up, and the launcher signals only the daemon that
 listens on its port. The lab keeps mixed-case bundle IDs such as
-`com.apple.Safari` in promoted scenarios.
+`com.apple.Safari` in promoted scenarios. Vault search finds `qmd` after node
+upgrades: the config names `qmd` instead of a pinned node-version path, a
+stale pin falls back to the newest install, and the doctor reports the binary
+that will run.
 
 The safety kernel is unchanged and still pinned: mutations serialize, raw
 native success cannot produce `Done.`, `possibly_dispatched` never retries,

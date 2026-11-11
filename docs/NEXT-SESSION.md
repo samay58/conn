@@ -47,7 +47,7 @@ when the page oracle matches but Conn has no trustworthy semantic witness.
 Mechanical boundary on 2026-11-11, after the audit fixes in
 `docs/STATE-OF-PLAY.md` ("November 10 and 11 hardening"):
 
-- `./verify.sh` passed: 865 Python tests (all 14 harness evals included),
+- `./verify.sh` passed: 867 Python tests (all 14 harness evals included),
   three intentionally deselected, two dependency warnings; 289 XCTest cases
   and 5 Swift Testing cases
 - three lifecycle tests passed
