@@ -287,8 +287,14 @@ class ConnApp:
     async def on_approval(self, call_id: str, approved: bool,
                           client_ts_ms: int | None = None) -> None:
         latency = self.approvals.decide(call_id)
+        if latency is None:
+            # The chip already expired, was decided, or was cleared by stop:
+            # its timeout (or the stop) owns the outcome, not this click.
+            self.trace.log("approval_decision_ignored", call_id=call_id,
+                           approved=approved, client_ts_ms=client_ts_ms)
+            return
         self.trace.log("approval_decision", call_id=call_id, approved=approved,
-                       latency_s=round(latency, 2) if latency is not None else None,
+                       latency_s=round(latency, 2),
                        client_ts_ms=client_ts_ms)
         await self.dispatch(ApprovalDecision(call_id=call_id, approved=approved))
 

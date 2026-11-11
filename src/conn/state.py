@@ -178,10 +178,13 @@ class SessionStateMachine:
                 return self._approval(ev)
             case ApprovalTimeout():
                 entry = self.ledger.get(ev.call_id)
+                # The timer and the click race as separate tasks; a decision
+                # that landed first owns the call, so a late timeout is void.
+                if entry is None or entry.status is not CallStatus.PROPOSED:
+                    return []
                 output = (
                     self._predispatch_failure_output(entry.call, "approval_timeout")
-                    if entry is not None
-                    and self._is_computer_mutation(entry.call.name)
+                    if self._is_computer_mutation(entry.call.name)
                     else '{"ok": false, "error": "approval_timeout"}'
                 )
                 return self._resolve(ev.call_id, CallStatus.TIMEOUT,
