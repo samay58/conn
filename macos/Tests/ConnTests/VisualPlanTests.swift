@@ -183,6 +183,85 @@ final class VisualPlanTests: XCTestCase {
         XCTAssertEqual(receipt["ok"] as? Bool, true)
     }
 
+    func testStaticPlayPauseLabelCapsAtDispatchOnly() async throws {
+        // A combined "Play/Pause" label holds both words before and after the
+        // click, so it is no evidence that anything changed.
+        let provider = VisualFixtureProvider()
+        provider.hitLabel = "Play/Pause"
+        let interlock = NativeExecutionInterlock()
+        interlock.beginConnection("connection-1")
+        XCTAssertTrue(interlock.accept(
+            connectionID: "connection-1", generation: 3, suspended: false
+        ))
+        let control = NativeVisualControl(provider: provider, executionInterlock: interlock)
+        let capture = await control.observe(observeParams())
+        let prepared = await control.prepareVisual(
+            prepareParams(captureID: try XCTUnwrap(capture["capture_id"] as? String))
+        )
+
+        let receipt = await control.executeVisual([
+            "plan_fingerprint": try XCTUnwrap(prepared["plan_fingerprint"] as? String),
+            "navigation_generation": 3,
+            "execution_connection_id": "connection-1",
+        ])
+
+        XCTAssertEqual(provider.dispatchCount, 1)
+        XCTAssertEqual(receipt["outcome"] as? String, "dispatch_only")
+        XCTAssertEqual(receipt["ok"] as? Bool, false)
+        XCTAssertEqual(receipt["reason_code"] as? String, "no_trustworthy_witness")
+    }
+
+    func testPauseToPlayAccessibleStateCanVerifyVisualDispatch() async throws {
+        let provider = VisualFixtureProvider()
+        provider.hitLabels = ["Pause", "Play"]
+        let interlock = NativeExecutionInterlock()
+        interlock.beginConnection("connection-1")
+        XCTAssertTrue(interlock.accept(
+            connectionID: "connection-1", generation: 3, suspended: false
+        ))
+        let control = NativeVisualControl(provider: provider, executionInterlock: interlock)
+        let capture = await control.observe(observeParams())
+        let prepared = await control.prepareVisual(
+            prepareParams(
+                captureID: try XCTUnwrap(capture["capture_id"] as? String),
+                goal: "Pause video", label: "Pause"
+            )
+        )
+
+        let receipt = await control.executeVisual([
+            "plan_fingerprint": try XCTUnwrap(prepared["plan_fingerprint"] as? String),
+            "navigation_generation": 3,
+            "execution_connection_id": "connection-1",
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "verified")
+        XCTAssertEqual(receipt["ok"] as? Bool, true)
+    }
+
+    func testAmbiguousBeforeLabelCapsAtDispatchOnly() async throws {
+        let provider = VisualFixtureProvider()
+        provider.hitLabels = ["Play/Pause", "Pause"]
+        let interlock = NativeExecutionInterlock()
+        interlock.beginConnection("connection-1")
+        XCTAssertTrue(interlock.accept(
+            connectionID: "connection-1", generation: 3, suspended: false
+        ))
+        let control = NativeVisualControl(provider: provider, executionInterlock: interlock)
+        let capture = await control.observe(observeParams())
+        let prepared = await control.prepareVisual(
+            prepareParams(captureID: try XCTUnwrap(capture["capture_id"] as? String))
+        )
+
+        let receipt = await control.executeVisual([
+            "plan_fingerprint": try XCTUnwrap(prepared["plan_fingerprint"] as? String),
+            "navigation_generation": 3,
+            "execution_connection_id": "connection-1",
+        ])
+
+        XCTAssertEqual(receipt["outcome"] as? String, "dispatch_only")
+        XCTAssertEqual(receipt["reason_code"] as? String, "no_trustworthy_witness")
+    }
+
     func testPossibleDispatchCannotReplayTheVisualPlan() async throws {
         let provider = VisualFixtureProvider()
         provider.dispatchResult = NativeDispatchResult(

@@ -1641,8 +1641,13 @@ extension NativeTransactionExecutor {
         guard let before, let after else { return false }
         let first = words(before)
         let second = words(after)
-        return (first.contains("play") && second.contains("pause"))
-            || (first.contains("pause") && second.contains("play"))
+        // Each side must name exactly one state. A combined "Play/Pause"
+        // label names both and proves nothing about a change.
+        let beforePlay = first.contains("play") && !first.contains("pause")
+        let beforePause = first.contains("pause") && !first.contains("play")
+        let afterPlay = second.contains("play") && !second.contains("pause")
+        let afterPause = second.contains("pause") && !second.contains("play")
+        return (beforePlay && afterPause) || (beforePause && afterPlay)
     }
 
     private static func words(_ text: String) -> Set<String> {
