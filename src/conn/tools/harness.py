@@ -38,7 +38,7 @@ from ..observations import (
     parse_visual_observation,
 )
 from .registry import ToolSpec, computer_mutation_names
-from .risk import argument_guard, gate_for, gate_for_prepared
+from .risk import RiskLevel, argument_guard, gate_for, gate_for_prepared
 
 PREVIEW_BUDGET = 32
 
@@ -154,6 +154,12 @@ class ToolHarness:
         self.ctx = ctx
         self._executors = executors
         self.computer_mutations = computer_mutation_names(registry)
+        # Approval-gated actions that run in the daemon; the state machine
+        # serializes them with computer mutations.
+        self.local_actions = frozenset(
+            name for name, spec in registry.items()
+            if spec.risk is not RiskLevel.READ and not spec.computer_mutation
+        )
 
     def is_computer_mutation(self, name: str) -> bool:
         return name in self.computer_mutations

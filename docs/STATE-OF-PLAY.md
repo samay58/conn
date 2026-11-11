@@ -7,7 +7,7 @@ for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 ## Current verdict
 
 The capable-navigation recovery, Conn Lab, and frozen capability-breadth
-implementation are built. On 2026-11-11 the gate (`./verify.sh`) passed 867
+implementation are built. On 2026-11-11 the gate (`./verify.sh`) passed 890
 Python tests, including all 14 harness evals, with three intentional
 deselections, plus 289 XCTest cases and 5 Swift Testing cases; the three
 lifecycle tests also passed. The exact-candidate breadth and 20-clone release
@@ -30,7 +30,11 @@ selecting the next one, and `Open Linear`, which opens linear.app in the
 browser instead of launching an app (Linear is not installed on the primary
 Mac). Both failures remain in the grader. The text-based corpus cannot measure
 2.1's audio gains (spelled-out names, noise, interruptions); that needs voice
-use.
+use. After the Shortcuts tools were added, the 232-item corpus passed 228
+(`data/intent-evals/2026-11-11/results-1794424314.json`, $1.4764): all six
+Shortcuts items passed, and the two extra misses (`Type standup notes into the
+field`, `Click the blue button`) are run-to-run variance, scoring 4 of 5 and 5
+of 5 with the new tools against 3 of 5 and 2 of 5 without them.
 
 ## November 10 and 11 hardening
 
@@ -268,6 +272,12 @@ value, match rule, and match Boolean.
 - pointer-only navigation lease for reversible foreground actions
 - bounded current-window visual observation through Conn.app
 - semantic or capture-bound activation and a fixed navigation-key vocabulary
+- Apple Shortcuts: list them, and run one by exact name with optional text
+  input after a pointer approval. The daemon runs `/usr/bin/shortcuts` with a
+  plain environment; a run is the turn's one action, closes the action chain,
+  and reports only that it ran plus its output. Added 2026-11-11 at Samay's
+  request, ahead of v1 acceptance, as the first depth layer that avoids
+  per-app click scripts
 
 Menu commands, raw key chords, and submit without a surviving target-bound
 effect return `dispatch_only`. Global window changes and bounded-tree absence

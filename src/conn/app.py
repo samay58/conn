@@ -68,7 +68,8 @@ class ConnApp:
         self.machine = SessionStateMachine(
             tap_threshold_ms=cfg.session.tap_threshold_ms,
             watchdog_timeout_s=cfg.session.watchdog_timeout_s,
-            computer_mutations=harness.computer_mutations)
+            computer_mutations=harness.computer_mutations,
+            local_actions=harness.local_actions)
         self.trace = TraceWriter(cfg.data_dir, self.session_id)
         self.artifacts = ArtifactWriter(cfg.data_dir)
         self.trace.subscribe(lambda e: self.publish({"type": "trace", "event": e}))
@@ -189,7 +190,8 @@ class ConnApp:
         self.machine = SessionStateMachine(
             tap_threshold_ms=self.cfg.session.tap_threshold_ms,
             watchdog_timeout_s=self.cfg.session.watchdog_timeout_s,
-            computer_mutations=self.harness.computer_mutations)
+            computer_mutations=self.harness.computer_mutations,
+            local_actions=self.harness.local_actions)
         self.trace = TraceWriter(self.cfg.data_dir, self.session_id)
         self.trace.subscribe(lambda e: self.publish({"type": "trace", "event": e}))
         self.cost = CostMeter(pricing=self.cfg.pricing, budget=self.cfg.budget)

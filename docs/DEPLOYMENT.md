@@ -107,7 +107,7 @@ build when none can expand SwiftUI macros. Install full Xcode or newer Command
 Line Tools instead of editing around the macro requirement.
 
 Current reference results on the primary Mac (2026-11-11): `./verify.sh`
-passed 867 Python tests, including all 14 harness evals, 289 XCTest cases and
+passed 890 Python tests, including all 14 harness evals, 289 XCTest cases and
 5 Swift Testing cases.
 Counts may grow. Every test and eval must be green on the new Mac.
 

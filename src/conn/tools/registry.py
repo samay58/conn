@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from . import mac, phoenix
+from . import mac, phoenix, shortcuts
 from .ax_input import click, focus_tab, hotkey, menu, scroll, type_text
 from .base import ExecutionContext, ToolError
 from .risk import RiskLevel
@@ -203,6 +203,45 @@ def build_registry() -> dict[str, ToolSpec]:
             computer_mutation=True,
             semantic_operation="clipboard_write",
             good_examples=('{"name": "clipboard_set", "arguments": {"text": "qmd search ..."}}',),
+        ),
+        ToolSpec(
+            name="shortcuts_list",
+            description=(
+                "List the names of Samay's Apple Shortcuts. Call it before "
+                "shortcuts_run unless you already know the exact name."
+            ),
+            parameters=_obj({}, []),
+            risk=RiskLevel.READ,
+            preview=lambda a: "List your Shortcuts",
+            executor=shortcuts.shortcuts_list,
+            timeout_s=15.0,
+            good_examples=('{"name": "shortcuts_list", "arguments": {}}',),
+        ),
+        ToolSpec(
+            name="shortcuts_run",
+            description=(
+                "Run one of Samay's Apple Shortcuts by its exact name, with "
+                "optional text input. Use it when he names a Shortcut or asks "
+                "for something one of his Shortcuts does. Every run waits for "
+                "his approval. A finished run proves only that it ran; report "
+                "that and any output, never effects you cannot see."
+            ),
+            parameters=_obj(
+                {
+                    "name": {"type": "string", "description": "exact Shortcut name from shortcuts_list"},
+                    "input": {"type": "string", "description": "optional text passed to the Shortcut"},
+                },
+                ["name"],
+            ),
+            risk=RiskLevel.ACT_CONFIRM,
+            preview=lambda a: (
+                f"Shortcut: {a.get('name', '?')}"
+                + (f" with {a['input']}" if a.get("input") else "")
+            ),
+            executor=shortcuts.shortcuts_run,
+            timeout_s=45.0,
+            good_examples=('{"name": "shortcuts_run", "arguments": {"name": "Morning Routine"}}',),
+            rejected_examples=('{"name": ""} is refused before any approval chip',),
         ),
         ToolSpec(
             name="wait_for_user",

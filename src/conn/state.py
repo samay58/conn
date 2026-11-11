@@ -134,6 +134,11 @@ class ResponseProvenanceLedger:
 class SessionStateMachine:
     computer_mutations: frozenset[str]
     grounding_reads: frozenset[str] = frozenset({"computer_ax_snapshot"})
+    # State-changing tools that run in the daemon instead of Conn.app (an
+    # approved Shortcut run). They share the one-action-per-response
+    # reservation and, since no effect is verified, close the action chain
+    # for the rest of the turn once they resolve.
+    local_actions: frozenset[str] = frozenset()
     tap_threshold_ms: int = 300
     watchdog_timeout_s: float = 600
     phase: Phase = Phase.IDLE
@@ -234,6 +239,9 @@ class SessionStateMachine:
 
     def _is_computer_mutation(self, name: str) -> bool:
         return name in self.computer_mutations
+
+    def _is_serialized_action(self, name: str) -> bool:
+        return name in self.computer_mutations or name in self.local_actions
 
     def snapshot(self) -> dict:
         action_outcomes = [
@@ -365,8 +373,9 @@ class SessionStateMachine:
             return cmds
         if call.name in self.grounding_reads:
             self._grounding_reads_used += 1
-        if self._is_computer_mutation(call.name):
-            if self._plan_shape(call) in self._failed_shapes:
+        if self._is_serialized_action(call.name):
+            if (self._is_computer_mutation(call.name)
+                    and self._plan_shape(call) in self._failed_shapes):
                 # The same failed plan shape never runs twice in one turn; a
                 # model repeating itself has exhausted its safe options.
                 self._mutation_chain_closed = True
@@ -482,6 +491,8 @@ class SessionStateMachine:
                 self._failed_shapes.add(self._plan_shape(entry.call))
             else:
                 self._mutation_chain_closed = True
+        elif entry.call.name in self.local_actions:
+            self._mutation_chain_closed = True
         entry.status = status
         entry.output = output
         cmds: list[Command] = [SendToolResult(

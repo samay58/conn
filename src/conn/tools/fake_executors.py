@@ -143,6 +143,17 @@ def _select_relative(args: dict, ctx: ExecutionContext) -> dict:
         effect="simulated selection change", data=data)
 
 
+def _shortcuts_list(args: dict, ctx: ExecutionContext) -> dict:
+    names = ["Focus Mode On", "Log Water", "Morning Routine", "Dark Mode", "Start Timer"]
+    return {"count": len(names), "shortcuts": names, "simulated": True}
+
+
+def _shortcuts_run(args: dict, ctx: ExecutionContext) -> dict:
+    name = str(args.get("name", ""))
+    return {"shortcut": name, "status": "finished",
+            "safe_user_message": f"Ran {name}.", "simulated": True}
+
+
 FAKE_EXECUTORS = {
     "computer_get_context": _get_context,
     "computer_screenshot": _screenshot,
@@ -162,4 +173,6 @@ FAKE_EXECUTORS = {
     "app_menu": _menu,
     "computer_create": _create,
     "computer_select_relative": _select_relative,
+    "shortcuts_list": _shortcuts_list,
+    "shortcuts_run": _shortcuts_run,
 }

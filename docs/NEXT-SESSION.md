@@ -47,7 +47,7 @@ when the page oracle matches but Conn has no trustworthy semantic witness.
 Mechanical boundary on 2026-11-11, after the audit fixes in
 `docs/STATE-OF-PLAY.md` ("November 10 and 11 hardening"):
 
-- `./verify.sh` passed: 867 Python tests (all 14 harness evals included),
+- `./verify.sh` passed: 890 Python tests (all 14 harness evals included),
   three intentionally deselected, two dependency warnings; 289 XCTest cases
   and 5 Swift Testing cases
 - three lifecycle tests passed
@@ -58,7 +58,9 @@ Mechanical boundary on 2026-11-11, after the audit fixes in
 The live model is now `gpt-realtime-2.1`. Its intent corpus run passed 224 of
 226, or 99.1 percent, at $1.3756, matching the best `gpt-realtime-2` run with
 the same two misses. Artifact:
-`data/intent-evals/2026-11-11/results-1794420938.json`. The July lab breadth
+`data/intent-evals/2026-11-11/results-1794420938.json`. With the Shortcuts
+tools added, the 232-item corpus passed 228, including all six Shortcuts items
+(`results-1794424314.json`). The July lab breadth
 and release suites above ran on `gpt-realtime-2` and have not been rerun.
 
 The required `$check` pass ran before later Notes witness, Safari history, and

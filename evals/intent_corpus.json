@@ -2706,6 +2706,76 @@
         "slots": {"app": "Linear"}
       },
       "source": "authored"
+    },
+    {
+      "utterance": "Run my Focus Mode On shortcut",
+      "expect": {
+        "tool_any": [
+          "shortcuts_run"
+        ],
+        "slots": {
+          "name": "Focus Mode On"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Run the log water shortcut",
+      "expect": {
+        "tool_any": [
+          "shortcuts_run"
+        ],
+        "slots": {
+          "name": "Log Water"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Use my morning routine shortcut",
+      "expect": {
+        "tool_any": [
+          "shortcuts_run"
+        ],
+        "slots": {
+          "name": "Morning Routine"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Run my dark mode shortcut",
+      "expect": {
+        "tool_any": [
+          "shortcuts_run"
+        ],
+        "slots": {
+          "name": "Dark Mode"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Start my timer shortcut with ten minutes",
+      "expect": {
+        "tool_any": [
+          "shortcuts_run"
+        ],
+        "slots": {
+          "name": "Start Timer",
+          "input": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What shortcuts do I have?",
+      "expect": {
+        "tool_any": [
+          "shortcuts_list"
+        ]
+      },
+      "source": "authored"
     }
   ]
 }

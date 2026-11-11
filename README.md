@@ -79,6 +79,15 @@ scale, and sends one pointer sequence. It needs Screen Recording for Conn.app
 and the navigation grant. The code default is off; this repository's
 `config.toml` turns it on (`[actions] visual_enabled = true`).
 
+Conn can also run your Apple Shortcuts by name ("run my Morning Routine
+shortcut"), with optional text input. Apps publish their own actions to
+Shortcuts and keep them working, so a Shortcut reaches deeper into an app than
+clicking can, without a click script that breaks on the next app update. Every
+run waits for an Approve click, because Conn cannot see what a Shortcut does,
+and Conn reports only that it ran plus any output. A Shortcut gets a plain
+environment, never Conn's API key or bridge token. A run counts as the turn's
+one action. Turn it off with `[shortcuts] enabled = false`.
+
 ## Stable signing
 
 macOS privacy grants bind to code identity. `make-app.sh` uses the persistent
@@ -172,10 +181,10 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ./make-app.sh
 ```
 
-Latest gate (2026-11-11): `./verify.sh` passed 867 Python tests (all 14
+Latest gate (2026-11-11): `./verify.sh` passed 890 Python tests (all 14
 harness-only evals included), 289 XCTest and 5 Swift Testing cases, and the 3
-lifecycle tests passed. The live intent corpus passed 224 of 226 on
-`gpt-realtime-2.1`. Earlier evidence (2026-07-13): the release build passed, a strict Realtime replay ran 1,000 turns
+lifecycle tests passed. The live intent corpus passed 228 of 232 on
+`gpt-realtime-2.1`, including all six Shortcuts requests. Earlier evidence (2026-07-13): the release build passed, a strict Realtime replay ran 1,000 turns
 plus the July 12 failure cassette with zero protocol errors, and real process
 cycles proved 50 graceful quits, 20 crash relaunches, and bounded orphan
 exits. A 1,000-transaction in-memory native-engine stress test recorded zero

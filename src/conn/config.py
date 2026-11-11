@@ -59,6 +59,14 @@ class PhoenixCfg(BaseModel):
     obsidian_vault: str = "phoenix"
 
 
+class ShortcutsCfg(BaseModel):
+    enabled: bool = True
+    # Wait this long for a Shortcut to finish; a longer one keeps running
+    # and is reported as still running, never killed. The registry's 45 s
+    # tool timeout must stay above this plus the list call.
+    run_timeout_s: float = Field(default=20.0, gt=0, le=30)
+
+
 class ScreenshotsCfg(BaseModel):
     keep: bool = False
 
@@ -117,6 +125,7 @@ class Config(BaseModel):
     apps: AppsCfg = AppsCfg()
     browser: BrowserCfg = BrowserCfg()
     phoenix: PhoenixCfg = PhoenixCfg()
+    shortcuts: ShortcutsCfg = ShortcutsCfg()
     screenshots: ScreenshotsCfg = ScreenshotsCfg()
     server: ServerCfg = ServerCfg()
     ax: AxCfg = AxCfg()

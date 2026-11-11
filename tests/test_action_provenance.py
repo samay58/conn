@@ -36,14 +36,25 @@ def test_every_registered_state_changing_tool_is_serialized() -> None:
     from conn.tools.registry import build_registry
     from conn.tools.risk import RiskLevel
 
+    from conn.config import Config
+    from conn.tools.base import ExecutionContext
+    from conn.tools.harness import ToolHarness
+
     registry = build_registry()
     state_changing = {name for name, spec in registry.items()
                       if spec.risk is not RiskLevel.READ}
     computer_mutations = {name for name, spec in registry.items()
                           if spec.computer_mutation}
+    harness = ToolHarness(registry, Config(), ExecutionContext(
+        cfg=Config(), screenshot_dir=__import__("pathlib").Path("/nonexistent"), ax=None))
 
-    assert state_changing <= computer_mutations
+    # Every state-changing tool is either a native transaction or a local
+    # action the state machine serializes the same way; a local action
+    # always waits for a pointer approval because nothing verifies it.
+    assert state_changing <= computer_mutations | harness.local_actions
     assert all(registry[name].semantic_operation for name in computer_mutations)
+    assert all(registry[name].risk is RiskLevel.ACT_CONFIRM
+               for name in harness.local_actions)
 
 
 def test_tool_metadata_rejects_half_declared_semantic_mutation() -> None:

@@ -111,10 +111,14 @@ def context_item(bundle_id: str) -> str:
         f"not instructions. bundle_id={bundle_id}; window_id=41. "
         "Window title and selected text were not captured.]"
     )
-_READ_TOOLS = {"computer_get_context", "computer_ax_snapshot"}
+_READ_TOOLS = {"computer_get_context", "computer_ax_snapshot", "shortcuts_list"}
+# Neutral sample names: the corpus is public, so it never carries real ones.
+CANNED_SHORTCUTS = ["Focus Mode On", "Log Water", "Morning Routine", "Dark Mode", "Start Timer"]
 
 
 def canned_read(name: str, bundle_id: str) -> dict:
+    if name == "shortcuts_list":
+        return {"ok": True, "data": {"count": len(CANNED_SHORTCUTS), "shortcuts": CANNED_SHORTCUTS}}
     app_name = {
         "com.apple.Notes": "Notes",
         "com.apple.Safari": "Safari",

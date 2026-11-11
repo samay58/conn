@@ -18,6 +18,8 @@ from ..events import Gate
 from ..navigation import NavigationEffect, NavigationLease
 from .ax_input import _normalize_combo
 from .base import ExecutionContext, app_matches_bundle
+from .shortcuts import INPUT_MAX_CHARS as SHORTCUT_INPUT_MAX_CHARS
+from .shortcuts import NAME_MAX_CHARS as SHORTCUT_NAME_MAX_CHARS
 
 
 class RiskLevel(StrEnum):
@@ -143,6 +145,30 @@ def _guard_clipboard_size(args: dict, cfg: Config) -> str | None:
     return None
 
 
+def _guard_shortcuts_enabled(args: dict, cfg: Config) -> str | None:
+    return None if cfg.shortcuts.enabled else "shortcuts_disabled_in_config"
+
+
+def _guard_shortcut_run(args: dict, cfg: Config) -> str | None:
+    if not cfg.shortcuts.enabled:
+        return "shortcuts_disabled_in_config"
+    name = str(args.get("name") or "").strip()
+    if not name:
+        return "shortcut_name_missing"
+    if len(name) > SHORTCUT_NAME_MAX_CHARS or any(
+        ord(char) < 32 or ord(char) == 127 for char in name
+    ):
+        return "shortcut_name_invalid"
+    text = args.get("input")
+    if text is not None:
+        text = str(text)
+        if len(text) > SHORTCUT_INPUT_MAX_CHARS:
+            return f"shortcut_input_too_large: over {SHORTCUT_INPUT_MAX_CHARS} characters"
+        if "\x00" in text:
+            return "shortcut_input_invalid"
+    return None
+
+
 def _guard_scroll(args: dict, cfg: Config) -> str | None:
     if ("direction" in args) != ("amount" in args):
         return "scroll_direction_and_amount_required_together"
@@ -156,6 +182,8 @@ ARG_GUARDS: dict[str, Callable[[dict, Config], str | None]] = {
     "phoenix_open_note": _guard_vault_path,
     "clipboard_set": _guard_clipboard_size,
     "computer_scroll": _guard_scroll,
+    "shortcuts_list": _guard_shortcuts_enabled,
+    "shortcuts_run": _guard_shortcut_run,
     "app_focus_tab": _guard_present_app_allowlist,
     "app_menu": _guard_present_app_allowlist,
 }

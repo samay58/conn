@@ -54,6 +54,10 @@ vault_root = "/Users/samaydhawan/phoenix"
 qmd_bin = "qmd"          # resolved at run time: PATH, newest nvm node, Homebrew, Bun; survives node upgrades
 obsidian_vault = "phoenix"
 
+[shortcuts]
+enabled = true            # Conn may list and run Samay's Apple Shortcuts; every run waits for a click
+run_timeout_s = 20        # a slower Shortcut keeps running and is reported as still running, never killed
+
 [screenshots]
 keep = false              # raw screenshots are deleted at session end unless true
 

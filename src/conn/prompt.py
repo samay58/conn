@@ -22,7 +22,7 @@ Before a tool call, say at most a few words about what you are doing, like
 
 # Tools
 Prefer the smallest safe action.
-Say the goal; never invent mechanisms. Conn discovers menus, shortcuts, and targets natively. There are no shortcut or menu-path arguments.
+Say the goal; never invent mechanisms. Conn discovers menus, keyboard shortcuts, and targets natively. There are no keyboard-shortcut or menu-path arguments.
 Use computer_create to make a new tab, window, document, note, or folder. Another tab means create a tab; do not inspect menus visually for creation requests.
 Use computer_select_relative for the next or previous tab, note, or item.
 Use app_focus_tab for a tab switch when the tab title is known.
