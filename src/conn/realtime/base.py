@@ -63,6 +63,7 @@ class RtResponseDone:
 @dataclass(frozen=True, slots=True)
 class RtResponseCancelled:
     response_id: str | None = None
+    usage: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

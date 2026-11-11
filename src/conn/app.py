@@ -642,6 +642,9 @@ class ConnApp:
                 self.trace.log("stale_realtime_event", response_id=response_id,
                                active_response_id=self._response_provenance.active_response_id,
                                event=type(ev).__name__, reason="unbound_response")
+                if isinstance(ev, (RtResponseDone, RtResponseCancelled)):
+                    self._ingest_usage(ev.usage, "stale_response_usage",
+                                       response_id=response_id)
                 return
         match ev:
             case RtSessionReady(session_id=sid):
@@ -683,20 +686,15 @@ class ConnApp:
                 await self.dispatch(ToolProposed(call=call))
             case RtResponseDone(usage=usage, had_tool_calls=had_calls):
                 self._flush_model_transcript(response_id, status="completed")
-                if usage:
-                    turn = self.cost.ingest(usage)
-                    self.trace.log("response_done", usage=usage,
-                                   turn_usd=round(turn.usd, 5),
-                                   spent_usd=round(self.cost.spent_usd, 4))
-                    self.publish({"type": "cost", "receipt": self.cost.receipt()})
-                    self._maybe_warn_budget()
+                self._ingest_usage(usage, "response_done")
                 self.cost.write_receipt_snapshot(self.cfg.data_dir, self.session_id, final=False,
                                                  trace_path=self.trace.path)
                 await self.dispatch(ResponseDone(had_tool_calls=had_calls))
                 if response_id:
                     self._response_provenance.retire(response_id)
                 await self._maybe_drain()
-            case RtResponseCancelled():
+            case RtResponseCancelled(usage=usage):
+                self._ingest_usage(usage, "response_cancelled_usage", response_id=response_id)
                 self._flush_model_transcript(response_id, status="cancelled")
                 await self.dispatch(ResponseCancelled())
                 if response_id:
@@ -791,6 +789,18 @@ class ConnApp:
         self._done_reset = self._loop.call_later(
             self.cfg.session.done_flash_ms / 1000,
             lambda: self.dispatch_soon(ResetTick()))
+
+    def _ingest_usage(self, usage: dict | None, kind: str, **fields) -> None:
+        """Every billed token reaches the meter, including tokens from
+        cancelled and stale responses: the hard cap is only as honest as
+        what it sees."""
+        if not usage:
+            return
+        turn = self.cost.ingest(usage)
+        self.trace.log(kind, usage=usage, turn_usd=round(turn.usd, 5),
+                       spent_usd=round(self.cost.spent_usd, 4), **fields)
+        self.publish({"type": "cost", "receipt": self.cost.receipt()})
+        self._maybe_warn_budget()
 
     def _maybe_warn_budget(self) -> None:
         if not self._warned_budget and self.cost.should_warn():

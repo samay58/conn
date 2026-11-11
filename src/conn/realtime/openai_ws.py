@@ -485,7 +485,10 @@ class OpenAIRealtimeAdapter:
             self._active_response_id = None
         pending = self._pending_calls.pop(response_id, {})
         if status == "cancelled":
-            return [RtResponseCancelled(response_id=response_id)]
+            return [RtResponseCancelled(
+                response_id=response_id,
+                usage=response.get("usage", {}) or {},
+            )]
         if status != "completed":
             return [RtResponseDone(
                 usage=response.get("usage", {}) or {},
