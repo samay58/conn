@@ -16,7 +16,7 @@ class HotkeysCfg(BaseModel):
 
 
 class RealtimeCfg(BaseModel):
-    model: str = "gpt-realtime-2"
+    model: str = "gpt-realtime-2.1"
     voice: str = "marin"
     reasoning_effort: str = "low"
     transcription_language: str = "en"   # ISO 639-1 pin; empty lets short clips decode as any language

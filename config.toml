@@ -5,7 +5,7 @@ ptt = "alt_r"            # daemon-only fallback; installed Conn.app uses its per
 confirm = ["cmd+t", "cmd+w", "cmd+n"]   # tab/window verbs run behind the approval chip; everything else refuses toward app_menu
 
 [realtime]
-model = "gpt-realtime-2"
+model = "gpt-realtime-2.1"
 voice = "marin"
 reasoning_effort = "low"
 transcription_language = "en"   # pins input transcription; short clips stop decoding as random languages

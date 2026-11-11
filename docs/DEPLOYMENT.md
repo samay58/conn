@@ -23,8 +23,8 @@ identity, macOS privacy grants, API key, and local evidence artifacts do not.
 - OpenAI API key for live mode
 - qmd and the Phoenix vault only when vault search is wanted
 
-Screen Recording is not required for semantic control. The visual action lane
-is not implemented.
+Screen Recording is not required for semantic control. The visual action lane,
+which this repository's `config.toml` enables, needs it for Conn.app.
 
 ## Clone and bootstrap
 
@@ -106,9 +106,9 @@ codesign --verify --deep --strict --verbose=2 /Applications/Conn.app
 build when none can expand SwiftUI macros. Install full Xcode or newer Command
 Line Tools instead of editing around the macro requirement.
 
-Current reference results on the primary Mac are 573 Python tests passed with
-2 existing dependency warnings, 14 of 14 evals passed, and 144 Swift tests
-passed. Counts may grow. Every test and eval must be green on the new Mac.
+Current reference results on the primary Mac (2026-11-11): `./verify.sh`
+passed 857 Python tests, including all 14 harness evals, and 285 Swift tests.
+Counts may grow. Every test and eval must be green on the new Mac.
 
 ## Grant privacy permissions
 

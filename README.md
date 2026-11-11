@@ -72,8 +72,12 @@ key-chord tools are policy-gated diagnostics hidden from the model. Semantic
 operations also cover app open/switch, clipboard write, tab focus, scroll,
 non-secure text entry, element press, lazy menu action, and allowlisted key
 chords. Actions with no surviving target-bound effect report dispatch-only.
-Secure fields and denied bundles remain blocked. Visual coordinate control is
-not implemented.
+Secure fields and denied bundles remain blocked. When Accessibility cannot
+reach a target, a bounded visual lane can act instead: Conn.app captures the
+current window, grounds the target in that image, revalidates app, window and
+scale, and sends one pointer sequence. It needs Screen Recording for Conn.app
+and the navigation grant. The code default is off; this repository's
+`config.toml` turns it on (`[actions] visual_enabled = true`).
 
 ## Stable signing
 
@@ -124,8 +128,8 @@ export OPENAI_API_KEY=...
 PYTHONPATH=src .venv/bin/python -m conn
 ```
 
-Defaults are model `gpt-realtime-2`, voice `marin`, low reasoning effort, a
-$1.00 session hard cap, warning at $0.50, and five-minute idle disconnect.
+Defaults are model `gpt-realtime-2.1`, voice `marin`, low reasoning effort, a
+$5.00 session hard cap and a warning at $2.50.
 `--no-audio` runs typed-input mode. `--no-hotkey` skips the global key.
 
 The API key stays daemon-side. It never enters config, the app bridge, the web
@@ -138,8 +142,9 @@ Grant permissions to `/Applications/Conn.app` after the persistent install:
 1. **Microphone** for voice.
 2. **Accessibility** for global push-to-talk and all production semantic
    observation and action.
-3. **Screen Recording** only for the old local screenshot tool. It is not
-   needed by the semantic action engine and no visual action lane is enabled.
+3. **Screen Recording** for the visual action lane (on in this repository's
+   config) and the local screenshot tool. The semantic action engine does not
+   need it.
 
 Production semantic control does not require an Accessibility grant for the
 Python interpreter.
@@ -155,6 +160,7 @@ PYTHONPATH=src .venv/bin/python -m conn --doctor
 
 ```bash
 cd /Users/samaydhawan/conn
+./verify.sh                                                        # the gate: pytest (incl. all 14 harness evals) + swift test
 PYTHONPATH=src .venv/bin/python -m pytest tests -q
 PYTHONPATH=src .venv/bin/python -m pytest tests -m lifecycle -q   # real daemon quit/crash/orphan cycles
 PYTHONPATH=src .venv/bin/python -m conn --eval                    # harness-only
@@ -166,9 +172,9 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 ./make-app.sh
 ```
 
-Latest measured results (2026-07-13): 573 Python tests passed with 2 existing
-dependency warnings, 14 of 14 harness-only evals passed, 144 Swift tests
-passed, the release build passed, a strict Realtime replay ran 1,000 turns
+Latest gate (2026-11-11): `./verify.sh` passed 857 Python tests (all 14
+harness-only evals included) and 285 Swift tests, and the 3 lifecycle tests
+passed. Earlier evidence (2026-07-13): the release build passed, a strict Realtime replay ran 1,000 turns
 plus the July 12 failure cassette with zero protocol errors, and real process
 cycles proved 50 graceful quits, 20 crash relaunches, and bounded orphan
 exits. A 1,000-transaction in-memory native-engine stress test recorded zero

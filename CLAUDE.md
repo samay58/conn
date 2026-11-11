@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Conn is
 
-Push-to-talk voice command surface for the Mac on the OpenAI Realtime API (gpt-realtime-2). Hold Control+Option, speak, release; the daemon takes the smallest safe action, risky actions wait behind a pointer-only approval chip, and every state-changing computer action runs as a verified transaction through the signed Conn.app. Every session leaves a trace and a cost receipt.
+Push-to-talk voice command surface for the Mac on the OpenAI Realtime API (gpt-realtime-2.1). Hold Control+Option, speak, release; the daemon takes the smallest safe action, risky actions wait behind a pointer-only approval chip, and every state-changing computer action runs as a verified transaction through the signed Conn.app. Every session leaves a trace and a cost receipt.
 
 **Reload order for project context**: `docs/STATE-OF-PLAY.md` first (where we are and the measured bars), then `docs/NORTH-STAR.md` (the v1 promise, finish line, and stop rule), `docs/2026-07-07-roadmap.md` (what runs next and the judgment calls already made), `docs/NEXT-SESSION.md` (the next execution block), and the specs in `docs/`; the approved action spec is `docs/2026-07-09-verified-action-engine-spec.md`. `docs/idea-ledger.md` records what is deliberately not being built and the triggers that would change that; check it before proposing new capability.
 
@@ -31,7 +31,7 @@ PYTHONPATH=src .venv/bin/python -m conn                           # live; needs 
 PYTHONPATH=src .venv/bin/python -m conn --no-audio --no-hotkey    # live with typed input only, no mic/speaker/global key
 PYTHONPATH=src .venv/bin/python -m conn --doctor                  # environment + TCC permission checks
 PYTHONPATH=src .venv/bin/python -m conn --eval                    # 14 harness-only evals (scripted adapter; not model quality)
-PYTHONPATH=src .venv/bin/python -m conn --intent-eval 25          # live model intent eval over evals/intent_corpus.json (billed; omit the number for all 219)
+PYTHONPATH=src .venv/bin/python -m conn --intent-eval 25          # live model intent eval over evals/intent_corpus.json (billed; omit the number for all 226)
 PYTHONPATH=src .venv/bin/python -m conn --latency-report          # latency spans + budget pass/fail on the newest trace
 PYTHONPATH=src .venv/bin/python -m conn --action-probe fixture    # installed-app smoke probe (also terminal|safari|chrome|notes|obsidian) → data/action-probes/
 

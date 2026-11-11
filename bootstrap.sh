@@ -95,7 +95,7 @@ Once per machine, by hand (these never travel):
      Screen Recording only if computer_screenshot should see other apps.
   3. Recommended: the "Conn Dev Signing" keychain identity so grants survive
      rebuilds (README, Stable signing).
-  4. Smoke test: hold Right Option, say "what app am I in right now."
+  4. Smoke test: hold Control + Option, say "what app am I in right now."
 EOF
 if [[ $APP_STATE == failed ]]; then
     exit 1

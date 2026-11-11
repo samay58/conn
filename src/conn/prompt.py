@@ -1,5 +1,5 @@
 """System prompt, structured per the Realtime prompting guide's labeled-section
-skeleton. gpt-realtime-2 follows instructions literally, so this stays small
+skeleton. gpt-realtime-2.1 follows instructions literally, so this stays small
 and avoids overlapping absolutes. Tune through traces, not vibes.
 """
 

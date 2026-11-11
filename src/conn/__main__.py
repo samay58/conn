@@ -2,7 +2,7 @@
 
   python -m conn --demo            scripted model, real tools, no credentials
   python -m conn --demo --simulate-tools   zero side effects at all
-  python -m conn                   live gpt-realtime-2 session (needs OPENAI_API_KEY)
+  python -m conn                   live gpt-realtime-2.1 session (needs OPENAI_API_KEY)
   python -m conn --doctor          environment and permission checks
   python -m conn --eval            run the demo eval suite, write trace artifacts
   python -m conn --latency-report [trace.jsonl]   latency spans + budget pass/fail (default: newest trace)
