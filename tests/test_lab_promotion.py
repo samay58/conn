@@ -128,3 +128,21 @@ def test_frozen_incidents_name_the_four_approved_failures() -> None:
         (root / incident.fixture).is_file()
         for incident in incidents
     )
+
+
+@pytest.mark.parametrize("bundle_id", ["com.apple.Safari", "com.apple.finder", "md.obsidian", "com.microsoft.VSCode"])
+def test_promotion_keeps_mixed_case_bundle_ids(bundle_id: str) -> None:
+    packet = candidate_packet(
+        {"sanitized": True, "user_goal": "Open a tab", "app": {"bundle_id": bundle_id}},
+        incident_id="mixed-case",
+    )
+    assert packet.captured_facts.bundle_id == bundle_id
+
+
+@pytest.mark.parametrize("bundle_id", ["/Applications/Safari.app", "Safari", "com.apple.Safari extra", "com..apple"])
+def test_promotion_drops_values_that_are_not_bundle_ids(bundle_id: str) -> None:
+    packet = candidate_packet(
+        {"sanitized": True, "user_goal": "Open a tab", "app": {"bundle_id": bundle_id}},
+        incident_id="not-a-bundle",
+    )
+    assert packet.captured_facts.bundle_id is None

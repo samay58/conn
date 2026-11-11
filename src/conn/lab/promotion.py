@@ -15,6 +15,9 @@ from .models import StrictModel
 
 _INCIDENT_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _IDENTIFIER = re.compile(r"^[a-z][a-z0-9_.-]*$")
+# Reverse-DNS bundle IDs are case-sensitive and mostly mixed case
+# (com.apple.Safari), so they get their own pattern.
+_BUNDLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9][A-Za-z0-9-]*)+$")
 _PRIVATE_GOAL = re.compile(
     r"(?i)(?:/(?:users|volumes|private|tmp)/|"
     r"\b(?:password|passcode|secret|token|api[ _-]?key|clipboard)\b|"
@@ -111,7 +114,7 @@ def candidate_packet(source: dict, *, incident_id: str) -> PromotionPacket:
 
     facts = CapturedFacts(
         user_goal=goal,
-        bundle_id=_identifier(app.get("bundle_id"), 255),
+        bundle_id=_bundle_id(app.get("bundle_id")),
         window_id=_integer(window.get("id"), ceiling=2**63 - 1),
         proposal_tool=_identifier(proposal.get("tool"), 80),
         candidate_count=_integer(observation.get("candidate_count"), ceiling=20),
@@ -216,6 +219,11 @@ def _sanitized_goal(value: object) -> str | None:
 def _identifier(value: object, limit: int) -> str | None:
     text = _text(value, limit)
     return text if text is not None and _IDENTIFIER.fullmatch(text) else None
+
+
+def _bundle_id(value: object) -> str | None:
+    text = _text(value, 255)
+    return text if text is not None and _BUNDLE_ID.fullmatch(text) else None
 
 
 def _integer(value: object, *, ceiling: int) -> int | None:
