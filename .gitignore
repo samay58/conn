@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 .specstory/
 src/conn.egg-info/
+config.local.toml

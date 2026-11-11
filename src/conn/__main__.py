@@ -43,6 +43,7 @@ def main() -> None:
         help="run a bounded hardware action probe",
     )
     parser.add_argument("--latency-report", nargs="?", const="latest", default=None, metavar="TRACE_JSONL", help="print latency spans and budget pass/fail for a trace file (no argument: newest trace)")
+    parser.add_argument("--mcp-tools", action="store_true", help="connect to configured MCP servers, print their exposed tools and exit")
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--no-audio", action="store_true", help="live mode without mic/speaker")
     parser.add_argument("--no-hotkey", action="store_true", help="disable the global hotkey")
@@ -74,6 +75,9 @@ def main() -> None:
 
         print(format_report(run_doctor(cfg)))
         return
+
+    if args.mcp_tools:
+        sys.exit(asyncio.run(_mcp_tools(cfg)))
 
     if args.eval:
         from .evals import run_evals
@@ -117,10 +121,53 @@ def main() -> None:
     asyncio.run(_serve(cfg, args))
 
 
+def _should_start_mcp(cfg, args) -> bool:
+    return bool(not args.demo and cfg.mcp.enabled and cfg.mcp.servers)
+
+
+async def _mcp_tools(cfg) -> int:
+    import json
+
+    from .mcp_client import McpManager
+
+    if not cfg.mcp.servers:
+        print("no MCP servers configured")
+        return 0
+    manager = McpManager(cfg.mcp, data_dir=cfg.data_dir)
+    try:
+        infos = await manager.start()
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    try:
+        for server in cfg.mcp.servers:
+            print(f"{server.name}: {manager.status.get(server.name, 'unknown')}")
+            for info in (i for i in infos if i.server == server.name):
+                kind = server.tools[info.tool].kind
+                schema = json.dumps(info.input_schema, separators=(",", ":"))
+                print(f"  {info.server}.{info.tool} kind={kind} read_only={info.read_only_hint} "
+                      f"destructive={info.destructive_hint} schema={schema}")
+    finally:
+        await manager.stop()
+    return 0
+
+
 async def _serve(cfg, args) -> None:
     registry = build_registry()
     session_shots = cfg.data_dir / "screenshots" / new_id("shots")
     ctx = ExecutionContext(cfg=cfg, screenshot_dir=session_shots, ax=None)
+
+    mcp_manager = None
+    if _should_start_mcp(cfg, args):
+        from .mcp_client import McpManager
+
+        mcp_manager = McpManager(cfg.mcp, data_dir=cfg.data_dir)
+        try:
+            await mcp_manager.start()
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            sys.exit(2)
+        ctx.mcp = mcp_manager
 
     if args.demo:
         from .realtime.fake import FakeRealtimeAdapter
@@ -209,6 +256,8 @@ async def _serve(cfg, args) -> None:
         if audio is not None:
             audio.stop()
         await app.stop()
+        if mcp_manager is not None:
+            await mcp_manager.stop()
 
 
 if __name__ == "__main__":

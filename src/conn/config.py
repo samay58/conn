@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from pathlib import Path
+from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -127,6 +129,48 @@ class PricingCfg(BaseModel):
     image_in: float = 5.00
 
 
+class McpToolCfg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["read", "write"]          # Conn's declaration; plan 015 enforces it
+    alias: str = ""                         # model-facing name; default "<server>_<tool>"
+    description: str = ""                   # model-facing text, written by Samay or Conn
+    preview: str = ""                       # chip text template, e.g. "Capture: {text}"
+    fixed_args: dict[str, Any] = Field(default_factory=dict)  # injected, hidden from the model
+    param_descriptions: dict[str, str] = Field(default_factory=dict)  # Conn's text for each argument
+    timeout_s: float | None = Field(default=None, gt=0, le=60)  # overrides McpCfg.call_timeout_s
+
+
+class McpServerCfg(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str                               # [a-z][a-z0-9]*, used in names and Keychain items
+    command: list[str] = Field(default_factory=list)   # stdio: argv
+    url: str = ""                           # Streamable HTTP endpoint
+    auth: Literal["none", "oauth"] = "none"
+    env: dict[str, str] = Field(default_factory=dict, repr=False)
+    cwd: str = ""
+    withhold_markers: list[str] = Field(default_factory=list)
+    tools: dict[str, McpToolCfg] = Field(default_factory=dict)   # the expose list
+    connect_timeout_s: float | None = Field(default=None, gt=0, le=30)  # overrides McpCfg's; a cold stdio start can need ~8 s
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> "McpServerCfg":
+        if not re.fullmatch(r"[a-z][a-z0-9]{0,23}", self.name):
+            raise ValueError("mcp server name must match ^[a-z][a-z0-9]{0,23}$")
+        if bool(self.command) == bool(self.url):
+            raise ValueError("mcp server needs exactly one of command or url")
+        if self.command and self.auth != "none":
+            raise ValueError("mcp stdio servers cannot use auth")
+        return self
+
+
+class McpCfg(BaseModel):
+    enabled: bool = True
+    max_tools: int = Field(default=14, ge=0, le=24)
+    connect_timeout_s: float = Field(default=3.0, gt=0, le=15)
+    call_timeout_s: float = Field(default=20.0, gt=0, le=60)
+    servers: list[McpServerCfg] = Field(default_factory=list)
+
+
 class Config(BaseModel):
     hotkeys: HotkeysCfg = Field(
         default_factory=HotkeysCfg,
@@ -147,6 +191,7 @@ class Config(BaseModel):
     interactions: InteractionsCfg = InteractionsCfg()
     risk_overrides: dict[str, str] = Field(default_factory=dict)
     pricing: PricingCfg = PricingCfg()
+    mcp: McpCfg = McpCfg()
 
     data_dir: Path = PROJECT_ROOT / "data"
     source_path: Path | None = None
@@ -166,12 +211,27 @@ class Config(BaseModel):
         return None
 
 
+def _deep_merge(base: dict, over: dict) -> dict:
+    """Tables merge key by key; anything else, lists included, is replaced."""
+    merged = dict(base)
+    for key, value in over.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def load_config(path: Path | None = None) -> Config:
     path = path or PROJECT_ROOT / "config.toml"
     raw = {}
     if path.exists():
         with open(path, "rb") as f:
             raw = tomllib.load(f)
+    local = path.with_name("config.local.toml")
+    if local.exists():
+        with open(local, "rb") as f:
+            raw = _deep_merge(raw, tomllib.load(f))
     server_port = os.environ.get("CONN_SERVER_PORT")
     if server_port is not None:
         try:
