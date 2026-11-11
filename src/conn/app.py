@@ -854,6 +854,7 @@ class ConnApp:
             attempt += 1
             try:
                 await self.adapter.connect()
+                self._response_provenance.reset()
                 self._pump_task = asyncio.ensure_future(self._pump())
                 await self.dispatch(WsReconnected())
                 self.trace.log("upstream_reconnected", attempt=attempt)
@@ -882,6 +883,7 @@ class ConnApp:
             await asyncio.shield(reconnect_task)
         if not self.adapter.connected:
             await self.adapter.connect()
+            self._response_provenance.reset()
             self._pump_task = asyncio.ensure_future(self._pump())
             self.trace.log("upstream_reconnected", lazy=True)
 

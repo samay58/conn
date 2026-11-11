@@ -120,6 +120,15 @@ class ResponseProvenanceLedger:
         if self.active_response_id == response_id:
             self.active_response_id = None
 
+    def reset(self) -> None:
+        """A new upstream socket is a new server session: no response
+        requested or created on the old one can ever arrive, so every
+        pending slot and binding from it is void."""
+        self.pending.clear()
+        self.bindings.clear()
+        self.active_response_id = None
+        self.retired_response_ids.clear()
+
 
 @dataclass
 class SessionStateMachine:
