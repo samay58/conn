@@ -1,17 +1,17 @@
 # Conn: state of play
 
-Updated 2026-07-21. Read this first. Use `docs/2026-07-07-roadmap.md`
+Updated 2026-11-11. Read this first. Use `docs/2026-07-07-roadmap.md`
 for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 `docs/NORTH-STAR.md` defines the v1 product promise, finish line, and stop rule.
 
 ## Current verdict
 
 The capable-navigation recovery, Conn Lab, and frozen capability-breadth
-implementation are built. The latest ordinary boundary passed 815 Python
-tests with three intentional deselections and two dependency warnings. The
-full Swift boundary passed 273 XCTest cases and 5 Swift Testing cases. The
-exact-candidate breadth and 20-clone release suites passed. Physical product
-acceptance remains open.
+implementation are built. On 2026-11-11 the gate (`./verify.sh`) passed 865
+Python tests, including all 14 harness evals, with three intentional
+deselections, plus 289 XCTest cases and 5 Swift Testing cases; the three
+lifecycle tests also passed. The exact-candidate breadth and 20-clone release
+suites passed on 2026-07-21. Physical product acceptance remains open.
 
 The breadth gate passed 29 of 29 scenarios. Its 20 core commands and 9
 supporting cases cover every required primitive on at least three structurally
@@ -20,11 +20,36 @@ primitive. All 29 independent oracles matched. Conn v1 is not done because the
 physical daily-use gates remain open. The project has one explicit stop
 condition in `docs/NORTH-STAR.md`.
 
-The stabilized live intent corpus passed 224 of 226 items, or 99.1 percent,
-in `data/intent-evals/2026-07-20/results-1784547543.json`. It cost $1.6300.
-The two retained misses are `Select the following note`, which proposed no
-tool, and `Open Linear`, which proposed browser navigation instead of an app
-launch. Both failures remain in the grader.
+The live model is `gpt-realtime-2.1` (OpenAI, July 2026; same token prices as
+`gpt-realtime-2`). On it the live intent corpus passed 224 of 226 items, or
+99.1 percent, for $1.3756, in
+`data/intent-evals/2026-11-11/results-1794420938.json`. That matches the best
+`gpt-realtime-2` run (224 of 226, $1.6300, 2026-07-20) with the same two
+misses: `Select the following note`, which asks which note instead of
+selecting the next one, and `Open Linear`, which opens linear.app in the
+browser instead of launching an app (Linear is not installed on the primary
+Mac). Both failures remain in the grader. The text-based corpus cannot measure
+2.1's audio gains (spelled-out names, noise, interruptions); that needs voice
+use.
+
+## November 10 and 11 hardening
+
+Twelve defects found by a code audit were fixed with tests that fail on the
+old code. Reliability: a spoken reply now returns the session to idle, so the
+watchdog no longer fails healthy sessions; one bad tool argument can no longer
+stop the realtime event pump; a reconnect clears stale response provenance, so
+the next reply is never dropped as stale; an old socket's end can no longer
+clear the new connection; Stop runs off the app socket, so in-flight action
+results still arrive; and the island shows "Reconnecting" when the daemon
+socket dies. Safety: cancelled and stale responses now count against the
+budget cap; a late approval timeout can no longer overwrite a decided call;
+an ambiguous row-selection error is possibly dispatched and never replans;
+the visual lane needs a real Play/Pause label change before it verifies; and
+plans with no predicates return `dispatch_only` at once. Flexibility: visual
+scrolls land at the grounded point instead of under the cursor, a visual
+"scroll up" now scrolls up, and the launcher signals only the daemon that
+listens on its port. The lab keeps mixed-case bundle IDs such as
+`com.apple.Safari` in promoted scenarios.
 
 The safety kernel is unchanged and still pinned: mutations serialize, raw
 native success cannot produce `Done.`, `possibly_dispatched` never retries,
@@ -442,8 +467,10 @@ suite are complete. V1 still needs physical product acceptance:
 - complete the 30-command product gate across three ordinary work sessions
 
 Visual dispatch is enabled for this candidate behind the existing config kill
-switch. The latest live latency evidence is still the
-July 13 eight-turn session: release-to-first-token p50 898ms and p95 1,724ms.
+switch. The 300-second idle disconnect never fires today, because the
+60-second watchdog tick re-arms it; whether sessions should stay connected or
+close and reconnect lazily is an open product decision. The latest live latency
+evidence is still the July 13 eight-turn session: release-to-first-token p50 898ms and p95 1,724ms.
 The automatic P9 report ran against a harness trace with no PTT spans, so it
 does not replace that live measurement.
 

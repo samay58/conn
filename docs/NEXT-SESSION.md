@@ -1,6 +1,6 @@
 # Next session: physical v1 acceptance
 
-Updated 2026-07-21. Read `docs/STATE-OF-PLAY.md` and
+Updated 2026-11-11. Read `docs/STATE-OF-PLAY.md` and
 `docs/NORTH-STAR.md` first.
 
 ## WHERE WE LEFT OFF
@@ -44,25 +44,22 @@ selection, reordered peers, duplicate collections, or a multi-peer jump cannot
 verify. Safari and Firefox visual activation remain honestly `dispatch_only`
 when the page oracle matches but Conn has no trustworthy semantic witness.
 
-Final mechanical boundary:
+Mechanical boundary on 2026-11-11, after the audit fixes in
+`docs/STATE-OF-PLAY.md` ("November 10 and 11 hardening"):
 
-- 815 Python tests passed, three intentionally deselected, two dependency
-  warnings
+- `./verify.sh` passed: 865 Python tests (all 14 harness evals included),
+  three intentionally deselected, two dependency warnings; 289 XCTest cases
+  and 5 Swift Testing cases
 - three lifecycle tests passed
-- 14 of 14 harness evals passed
-- 273 XCTest cases and 5 Swift Testing cases passed
-- one fresh-clone smoke and its 100-iteration adversarial matrix passed
-- ordinary Python tests left `data/` unchanged at 13,217 files, 161,294,146
-  bytes, digest
-  `a6a92476ec851e517b90891b6c1885ed94ed0ddcf51ab9a41958ce2b92e70409`
 - installed `/Applications/Conn.app` passed strict codesign verification under
   `Conn Dev Signing`; CDHash
-  `57cdc5f871be4c7dd2ef963e874219e6aceb8031`
+  `3b0837242c3ad055d469d8200fe0d218726808d2`
 
-The stabilized live intent corpus remains 224 of 226, or 99.1 percent, at
-$1.6300. Artifact:
-`data/intent-evals/2026-07-20/results-1784547543.json`. Prompt and model-visible
-tool schemas did not change after that run, so no billed rerun was warranted.
+The live model is now `gpt-realtime-2.1`. Its intent corpus run passed 224 of
+226, or 99.1 percent, at $1.3756, matching the best `gpt-realtime-2` run with
+the same two misses. Artifact:
+`data/intent-evals/2026-11-11/results-1794420938.json`. The July lab breadth
+and release suites above ran on `gpt-realtime-2` and have not been rerun.
 
 The required `$check` pass ran before later Notes witness, Safari history, and
 host-isolation hardening. Six validated findings from that review were fixed.
@@ -73,7 +70,15 @@ later lines.
 ## Next execution block
 
 Run physical acceptance on the installed candidate. Do not expand capability
-unless a frozen gate fails.
+unless a frozen gate fails. Two live checks cover the November fixes: kill the
+daemon mid-turn and confirm the island shows "Reconnecting" within a second;
+press Stop during a computer action and confirm Stop returns at once with the
+action's real outcome.
+
+Open decisions for Samay: typing under the navigation grant runs with no
+approval chip; navigation has no per-host rule and chip previews hide the
+payload; the idle disconnect never fires (keep sessions connected, or close
+after five idle minutes and reconnect on the next push-to-talk).
 
 ## Human gates still open
 
