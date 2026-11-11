@@ -320,7 +320,7 @@ async def handle_client(app: ConnApp, msg: dict, *, authenticated_role: str | No
                 ),
             )
         case "stop":
-            await app.on_stop(client_ts_ms=msg.get("client_ts_ms"))
+            app.on_stop_soon(client_ts_ms=msg.get("client_ts_ms"))
         case "override_budget":
             await app.on_budget_override()
         case "new_session":

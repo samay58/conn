@@ -99,6 +99,7 @@ class ConnApp:
         self._turn_context: TurnContext | None = None
         self._tool_tasks: set[asyncio.Task] = set()
         self._approval_tasks: set[asyncio.Task] = set()
+        self._stop_tasks: set[asyncio.Task] = set()
         self._context_task: asyncio.Task | None = None
         self._stopping = False
         self._last_gesture_id: str | None = None
@@ -137,6 +138,10 @@ class ConnApp:
         self.publish({"type": "ax_grants", **grants})
 
     async def stop(self) -> None:
+        # A Stop already in flight finishes first, exactly as it did when the
+        # socket loop ran it inline; its finally would otherwise clear _stopping
+        # in the middle of shutdown.
+        await self._quiesce_stop_tasks()
         self._closing = True
         self._stopping = True
         self.navigation.end_session()
@@ -330,6 +335,19 @@ class ConnApp:
             await self.dispatch(UserStop())
         finally:
             self._stopping = False
+
+    def on_stop_soon(self, client_ts_ms: int | None = None) -> None:
+        """Stop waits for in-flight tools, whose results arrive on the same
+        app socket that delivered Stop; running it inline would hold that
+        socket until the bridge timed out."""
+        if any(not task.done() for task in self._stop_tasks):
+            # A second press while Stop is still waiting: one Stop owns the
+            # _stopping flag, so a parallel one cannot clear it early.
+            self.trace.log("kill_switch_coalesced", client_ts_ms=client_ts_ms)
+            return
+        task = asyncio.create_task(self.on_stop(client_ts_ms=client_ts_ms))
+        self._stop_tasks.add(task)
+        task.add_done_callback(self._stop_tasks.discard)
 
     async def on_budget_override(self) -> None:
         self.cost.overridden = True
@@ -613,6 +631,15 @@ class ConnApp:
         while self._approval_tasks:
             pending = tuple(
                 task for task in self._approval_tasks if not task.done()
+            )
+            if not pending:
+                return
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _quiesce_stop_tasks(self) -> None:
+        while self._stop_tasks:
+            pending = tuple(
+                task for task in self._stop_tasks if not task.done()
             )
             if not pending:
                 return
