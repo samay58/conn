@@ -22,7 +22,7 @@ def run_doctor(cfg: Config) -> list[dict]:
     checks = [
         _deps(), _api_key(cfg), _mic(), _input_devices(cfg), _accessibility(),
         _screencapture(), _input_posting(), _qmd(cfg), _obsidian(cfg),
-        _input_monitoring_note(),
+        _mcp(cfg), _input_monitoring_note(),
     ]
     return checks
 
@@ -193,6 +193,26 @@ def _obsidian(cfg: Config) -> dict:
     except Exception:
         return _result("obsidian_vault", WARN, "Obsidian registry not readable; "
                                                "open_note falls back to the default app")
+
+
+def _mcp(cfg: Config) -> dict:
+    # Config and Keychain presence only; no network, so it cannot prove a token still works.
+    from .mcp_auth import has_tokens
+
+    if not cfg.mcp.servers:
+        return _result("mcp", OK, "no MCP servers configured")
+    parts, status = [], OK
+    for server in cfg.mcp.servers:
+        if server.command:
+            parts.append(f"{server.name}: stdio")
+        elif server.auth != "oauth":
+            parts.append(f"{server.name}: no sign-in needed")
+        elif has_tokens(server.name):
+            parts.append(f"{server.name}: signed in")
+        else:
+            parts.append(f"{server.name}: not signed in; run --mcp-login {server.name}")
+            status = WARN
+    return _result("mcp", status, " | ".join(parts))
 
 
 def _input_monitoring_note() -> dict:

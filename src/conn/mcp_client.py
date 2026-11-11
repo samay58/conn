@@ -21,6 +21,7 @@ from mcp.client.stdio import StdioServerParameters
 from mcp.shared.exceptions import MCPError
 
 from .config import McpCfg, McpServerCfg
+from .mcp_auth import McpLoginRequired
 from .tools.base import ToolError
 
 _JSON_TYPES = {"string", "number", "integer", "boolean", "array", "object", "null"}
@@ -122,6 +123,12 @@ def _stdio_params(server_cfg: McpServerCfg) -> StdioServerParameters:
         env=dict(server_cfg.env) or None, cwd=server_cfg.cwd or None)
 
 
+def _needs_login(error: BaseException) -> bool:
+    if isinstance(error, McpLoginRequired):
+        return True
+    return any(_needs_login(inner) for inner in getattr(error, "exceptions", ()))
+
+
 def _default_factory(server_cfg: McpServerCfg, auth: Any = None):
     if server_cfg.command:
         return Client(_stdio_params(server_cfg))
@@ -210,7 +217,8 @@ class McpManager:
             return
         if conn.error is not None:
             await self._cancel(conn)
-            self._skip(name, type(conn.error).__name__)
+            self._skip(name, "login_required" if _needs_login(conn.error)
+                       else type(conn.error).__name__)
             return
         self.status[name] = "connected"
 

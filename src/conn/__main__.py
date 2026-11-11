@@ -43,6 +43,8 @@ def main() -> None:
         help="run a bounded hardware action probe",
     )
     parser.add_argument("--latency-report", nargs="?", const="latest", default=None, metavar="TRACE_JSONL", help="print latency spans and budget pass/fail for a trace file (no argument: newest trace)")
+    parser.add_argument("--mcp-login", metavar="NAME", help="sign in to a remote MCP server in the browser and exit")
+    parser.add_argument("--mcp-logout", metavar="NAME", help="forget the stored sign-in for an MCP server and exit")
     parser.add_argument("--mcp-tools", action="store_true", help="connect to configured MCP servers, print their exposed tools and exit")
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--no-audio", action="store_true", help="live mode without mic/speaker")
@@ -76,6 +78,8 @@ def main() -> None:
         print(format_report(run_doctor(cfg)))
         return
 
+    if args.mcp_login or args.mcp_logout:
+        sys.exit(_mcp_sign_in(cfg, args))
     if args.mcp_tools:
         sys.exit(asyncio.run(_mcp_tools(cfg)))
 
@@ -125,15 +129,42 @@ def _should_start_mcp(cfg, args) -> bool:
     return bool(not args.demo and cfg.mcp.enabled and cfg.mcp.servers)
 
 
+def _mcp_sign_in(cfg, args) -> int:
+    from .mcp_auth import McpLoginFailed, login, logout
+
+    name = args.mcp_login or args.mcp_logout
+    server = next((s for s in cfg.mcp.servers if s.name == name), None)
+    if server is None or server.auth != "oauth":
+        print(f"{name}: not a configured OAuth MCP server", file=sys.stderr)
+        return 2
+    if args.mcp_logout:
+        logout(name)
+        print(f"{name} signed out")
+        return 0
+    try:
+        names = asyncio.run(login(server))
+    except McpLoginFailed as error:
+        print(f"{name} sign-in failed: {error}")
+        return 1
+    except BaseException as error:  # noqa: BLE001 - OAuth errors can carry server text; print the type only
+        if isinstance(error, KeyboardInterrupt):
+            raise
+        print(f"{name} sign-in failed: {type(error).__name__}")
+        return 1
+    print(f"{name} signed in: {len(names)} tools offered ({', '.join(names)})")
+    return 0
+
+
 async def _mcp_tools(cfg) -> int:
     import json
 
+    from .mcp_auth import daemon_auth
     from .mcp_client import McpManager
 
     if not cfg.mcp.servers:
         print("no MCP servers configured")
         return 0
-    manager = McpManager(cfg.mcp, data_dir=cfg.data_dir)
+    manager = McpManager(cfg.mcp, data_dir=cfg.data_dir, auth_for=daemon_auth)
     try:
         infos = await manager.start()
     except ValueError as error:
@@ -159,9 +190,10 @@ async def _serve(cfg, args) -> None:
 
     mcp_manager = None
     if _should_start_mcp(cfg, args):
+        from .mcp_auth import daemon_auth
         from .mcp_client import McpManager
 
-        mcp_manager = McpManager(cfg.mcp, data_dir=cfg.data_dir)
+        mcp_manager = McpManager(cfg.mcp, data_dir=cfg.data_dir, auth_for=daemon_auth)
         try:
             await mcp_manager.start()
         except ValueError as error:
