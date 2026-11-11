@@ -191,11 +191,19 @@ class TestOverrides:
         call = gate(harness, "clipboard_set", {"text": "hello"})
         assert call.gate is Gate.CONFIRM
 
-    def test_blocked_tools_stay_blocked_even_with_config_override(self):
-        gate_value, reason, preview = gate_for("imaginary_blocked", RiskLevel.BLOCKED, {}, Config(), None)
+    @pytest.mark.parametrize("override", ["auto", "confirm"])
+    def test_blocked_tools_stay_blocked_even_with_config_override(self, override):
+        cfg = Config()
+        cfg.risk_overrides["imaginary_blocked"] = override
+        gate_value, reason, preview = gate_for("imaginary_blocked", RiskLevel.BLOCKED, {}, cfg, None)
         assert gate_value is Gate.BLOCKED
         assert "tool_disabled_in_v0" in (reason or "")
         assert preview is None
+        prepared, prepared_reason, _ = gate_for_prepared(
+            "imaginary_blocked", RiskLevel.BLOCKED, {}, {"preview": "x"}, cfg
+        )
+        assert prepared is Gate.BLOCKED
+        assert "tool_disabled_in_v0" in (prepared_reason or "")
 
     def test_config_can_block_outright(self, harness, cfg):
         cfg.risk_overrides["browser_search"] = "blocked"

@@ -43,11 +43,19 @@ class TestCostMeter:
         expected = (160 * 4.00 + 22 * 24.00 + 160 * 32.00 + 40 * 64.00 + 320 * 0.40) / 1e6
         assert abs(turn.usd - expected) < 1e-9
 
-    def test_cap_trips_on_estimate(self):
+    def test_first_turn_estimate_alone_trips_a_tiny_cap(self):
         meter = make_meter(cap=0.001)
-        assert not meter.would_exceed() or True  # first-turn estimate may trip a tiny cap
+        assert meter.would_exceed()  # $0.03 first-turn estimate is over the cap
+
+    def test_cap_trips_on_estimate_before_spend_reaches_it(self):
+        meter = make_meter(cap=0.035)
+        assert not meter.would_exceed()  # $0.03 first-turn estimate fits
         meter.ingest(USAGE_TURN)
-        assert meter.would_exceed()
+        meter.ingest(USAGE_TURN)
+        assert not meter.would_exceed()  # two turns plus a median third still fit
+        meter.ingest(USAGE_TURN)
+        assert meter.spent_usd < 0.035  # spend alone is under the cap
+        assert meter.would_exceed()  # spend plus the median next turn is not
 
     def test_image_tokens_are_accounted_separately(self):
         meter = make_meter()
