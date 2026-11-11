@@ -26,5 +26,11 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Conn captures push-to-talk audio through its local daemon while you hold the talk key.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Conn reads and updates your TODAY and CAPTURE notes and adds reminders you ask for.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Conn adds a reminder when you ask for one and reads the ones due today.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Conn reads your calendar to answer questions about your meetings and free time.</string>
 </dict>
 </plist>

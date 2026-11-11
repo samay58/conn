@@ -1,0 +1,337 @@
+{
+  "_note": "Neutral sample fixtures for the live intent eval. Same kinds, aliases, descriptions, param_descriptions and previews as the Step 1 config.local.toml sample in plans/018. The Superhuman entries (superhuman_search_threads, superhuman_get_thread) are placeholders until Samay signs in and --mcp-tools shows the real read tools; replace the server tool names, schemas and param_descriptions then. Sample names only (Dana, Priya, Acme); no real people, addresses, accounts or note text.",
+  "servers": [
+    {
+      "name": "phoenix",
+      "tools": {
+        "today": {
+          "kind": "read",
+          "alias": "phoenix_today",
+          "description": "Samay's must-do and should-do lines for today from his TODAY note, with which are done, plus reminders due today.",
+          "input_schema": {
+            "type": "object",
+            "properties": {}
+          },
+          "canned_result": "Must do: 1. Email the landlord (open). 2. Dentist appointment (open). 3. Send Acme invoice (done). Reminders due today: none."
+        },
+        "calendar": {
+          "kind": "read",
+          "alias": "phoenix_calendar",
+          "description": "Samay's calendar events and open stretches for a day or date range. Work events show only as busy.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              }
+            }
+          },
+          "canned_result": "Today: Product sync 15:00-15:30. Busy (work) 11:00-12:00. Open 13:00-15:00 and 16:00-18:00.",
+          "param_descriptions": {
+            "start": "first day, YYYY-MM-DD, default today",
+            "end": "last day, YYYY-MM-DD, at most 13 days after start"
+          }
+        },
+        "people": {
+          "kind": "read",
+          "alias": "phoenix_people",
+          "description": "Who Samay owes a reply across personal email, texts and WhatsApp: name, channel, wait, and the one-line ask. Use first for any reply question.",
+          "input_schema": {
+            "type": "object",
+            "properties": {}
+          },
+          "canned_result": "Dana (email, 2 days): asks about the offsite budget. Priya (text, 5 hours): wants dinner plans. Acme recruiter (email, 1 day): asks for availability."
+        },
+        "thread": {
+          "kind": "read",
+          "alias": "phoenix_thread",
+          "description": "The latest texts or WhatsApp messages with one named person. Only when Samay asks about that person's messages.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "person": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "person"
+            ]
+          },
+          "canned_result": "Priya: Are we still on for Friday? Priya: I can do 7 or 8.",
+          "param_descriptions": {
+            "person": "the person's name as Samay said it",
+            "channel": "text or whatsapp; default text"
+          }
+        },
+        "lookup": {
+          "kind": "read",
+          "alias": "phoenix_lookup",
+          "description": "Weather (optional place) or sports results and schedule (optional team).",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "weather",
+                  "sports"
+                ]
+              },
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "canned_result": "Weather: 54F and clear, rain after 9pm. Sports: the home team won 101 to 96.",
+          "param_descriptions": {
+            "kind": "weather or sports",
+            "query": "optional place or team"
+          }
+        },
+        "capture": {
+          "kind": "write",
+          "alias": "phoenix_capture",
+          "description": "Save one thought, note or log line to Samay's capture inbox. Only when he says capture, note, jot, or log.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "canned_result": "",
+          "preview": "Capture: {text}",
+          "done_message": "Captured.",
+          "timeout_s": 40.0,
+          "param_descriptions": {
+            "text": "the thought exactly as Samay said it"
+          }
+        },
+        "remind": {
+          "kind": "write",
+          "alias": "phoenix_remind",
+          "description": "Add an Apple Reminder with a due time (YYYY-MM-DD HH:MM, local). Only when he asks to be reminded.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "due": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "due"
+            ]
+          },
+          "canned_result": "",
+          "preview": "Remind {due}: {title}",
+          "done_message": "Reminder set.",
+          "timeout_s": 30.0,
+          "param_descriptions": {
+            "title": "what to be reminded of",
+            "due": "local time as YYYY-MM-DD HH:MM; ask if Samay gave no time"
+          }
+        },
+        "strike": {
+          "kind": "write",
+          "alias": "phoenix_strike",
+          "description": "Mark one must-do or should-do line in today's note as done, matched by a few of its words.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "phrase": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "phrase"
+            ]
+          },
+          "canned_result": "",
+          "preview": "Strike in TODAY: {phrase}",
+          "done_message": "Struck.",
+          "timeout_s": 40.0,
+          "param_descriptions": {
+            "phrase": "a few words from the line Samay finished"
+          }
+        }
+      }
+    },
+    {
+      "name": "granola",
+      "tools": {
+        "search_meetings": {
+          "kind": "read",
+          "alias": "",
+          "description": "Find Samay's recorded Granola meetings by person, company, keyword or date.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "participant": {
+                "type": "string"
+              },
+              "from_date": {
+                "type": "string"
+              },
+              "to_date": {
+                "type": "string"
+              }
+            }
+          },
+          "canned_result": "Acme pricing review, yesterday, with Dana. Acme kickoff, last Tuesday, with Priya.",
+          "param_descriptions": {
+            "query": "keywords",
+            "participant": "a person or company name",
+            "from_date": "YYYY-MM-DD",
+            "to_date": "YYYY-MM-DD"
+          }
+        },
+        "search_transcripts": {
+          "kind": "read",
+          "alias": "",
+          "description": "Find what was said in Samay's Granola meeting transcripts, by keywords and optional date range.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "from_date": {
+                "type": "string"
+              },
+              "to_date": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "canned_result": "Pricing review: Dana proposed a flat annual fee. The group agreed to revisit in two weeks.",
+          "param_descriptions": {
+            "query": "words to find in what was said",
+            "from_date": "YYYY-MM-DD",
+            "to_date": "YYYY-MM-DD"
+          }
+        }
+      }
+    },
+    {
+      "name": "wispr",
+      "tools": {
+        "search_meetings": {
+          "kind": "read",
+          "alias": "",
+          "description": "Find Samay's Wispr Flow meeting notes by keyword, person or date.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "from_date": {
+                "type": "string"
+              },
+              "to_date": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "canned_result": "Acme sync, yesterday (id m_100): pricing discussion with Dana.",
+          "param_descriptions": {
+            "query": "keywords or a person's name",
+            "from_date": "YYYY-MM-DD",
+            "to_date": "YYYY-MM-DD"
+          }
+        },
+        "get_meeting": {
+          "kind": "read",
+          "alias": "",
+          "description": "Read one Wispr Flow meeting's notes by id from wispr_search_meetings.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "meeting_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "meeting_id"
+            ]
+          },
+          "canned_result": "Acme sync notes: Dana prefers a flat fee; follow up next week.",
+          "param_descriptions": {
+            "meeting_id": "the id from wispr_search_meetings"
+          }
+        }
+      }
+    },
+    {
+      "name": "superhuman",
+      "tools": {
+        "search_threads": {
+          "kind": "read",
+          "alias": "superhuman_search_threads",
+          "description": "PLACEHOLDER until sign-in. Search Samay's personal email threads by sender, subject or keyword.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "canned_result": "Dana, Re: offsite budget, yesterday: Thanks, sending numbers tomorrow.",
+          "param_descriptions": {
+            "query": "sender, subject or keywords"
+          }
+        },
+        "get_thread": {
+          "kind": "read",
+          "alias": "superhuman_get_thread",
+          "description": "PLACEHOLDER until sign-in. Read one personal email thread by id from superhuman_search_threads.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "thread_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "thread_id"
+            ]
+          },
+          "canned_result": "Dana: Thanks, sending numbers tomorrow. Samay: Sounds good.",
+          "param_descriptions": {
+            "thread_id": "the id from superhuman_search_threads"
+          }
+        }
+      }
+    }
+  ]
+}

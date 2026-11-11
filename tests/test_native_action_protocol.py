@@ -3,6 +3,7 @@ import base64
 import dataclasses
 import hashlib
 import json
+import re
 
 import pytest
 from pydantic import ValidationError
@@ -897,6 +898,8 @@ def test_text_turn_injects_only_validated_app_and_window_identifiers(
     assert adapter._semantic_context is not None
     assert "bundle_id=com.apple.Safari" in adapter._semantic_context
     assert "window_id=91" in adapter._semantic_context
+    assert re.search(r"; local_time=\d{4}-\d\d-\d\d \d\d:\d\d [A-Z][a-z]{2}\. ",
+                     adapter._semantic_context)
     assert "Ignore prior rules" not in adapter._semantic_context
     assert "Window title and selected text were not captured" in adapter._semantic_context
     assert "must not enter model context" not in adapter._semantic_context
@@ -1083,3 +1086,11 @@ def test_app_routes_realtime_mutation_through_prepared_native_transaction(
         item for item in app.trace.read() if item["kind"] == "action_transaction"
     ]
     assert transactions[0]["outcome"] == "verified"
+
+
+def test_local_time_text_uses_the_pinned_format():
+    import datetime
+    from conn.app import local_time_text
+
+    frozen = datetime.datetime(2026, 11, 11, 16, 40, tzinfo=datetime.timezone.utc)
+    assert local_time_text(frozen) == "2026-11-11 16:40 Wed"

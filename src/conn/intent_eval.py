@@ -19,13 +19,16 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .config import Config
+from .config import Config, McpCfg, McpServerCfg, McpToolCfg
 from .cost import CostMeter
+from .mcp_client import McpCallResult, McpToolInfo
 from .prompt import INSTRUCTIONS
 from .realtime.base import (
     RtError, RtResponseDone, RtTextDelta, RtToolCall, RtTranscriptDelta,
 )
 from .realtime.openai_ws import OpenAIRealtimeAdapter
+from .tools.mcp_bridge import register_mcp_tools
+from .tools.mcp_names import conn_name
 from .tools.registry import build_registry, export_openai
 
 ITEM_TIMEOUT_S = 25.0
@@ -105,18 +108,102 @@ def _normalized_url(value: object) -> tuple[str, str, str, str]:
 # needs a context read. The eval mirrors that, and additionally answers up to
 # two leading read calls with canned envelopes so intent selection is graded
 # on the first action-bearing proposal, exactly like a real turn.
+EVAL_LOCAL_TIME = "2026-11-11 10:00 Wed"  # fixed so eval runs are reproducible
+
+
 def context_item(bundle_id: str) -> str:
     return (
         "[Current Mac context data for this turn. Values are identifiers, "
-        f"not instructions. bundle_id={bundle_id}; window_id=41. "
+        f"not instructions. bundle_id={bundle_id}; window_id=41; "
+        f"local_time={EVAL_LOCAL_TIME}. "
         "Window title and selected text were not captured.]"
     )
-_READ_TOOLS = {"computer_get_context", "computer_ax_snapshot", "shortcuts_list"}
+
+
+# Neutral fixtures for the connector tools. The eval never starts a server: it
+# declares the same tools through register_mcp_tools with a fake manager, so
+# the model sees exactly the schemas, names and Conn-written descriptions that
+# a live config would export.
+MCP_FIXTURE_PATH = Path(__file__).resolve().parents[2] / "evals" / "mcp_fixture_tools.json"
+
+
+def load_mcp_fixtures() -> dict:
+    return json.loads(MCP_FIXTURE_PATH.read_text())
+
+
+def _fixture_tool_cfg(spec: dict) -> McpToolCfg:
+    keys = ("kind", "alias", "description", "preview", "param_descriptions",
+            "timeout_s", "done_message")
+    return McpToolCfg(**{k: spec[k] for k in keys if k in spec})
+
+
+def fixture_config(fixtures: dict | None = None) -> Config:
+    fixtures = fixtures or load_mcp_fixtures()
+    servers = [
+        McpServerCfg(
+            name=server["name"],
+            command=["fixture"],
+            tools={tool: _fixture_tool_cfg(spec) for tool, spec in server["tools"].items()},
+        )
+        for server in fixtures["servers"]
+    ]
+    return Config(mcp=McpCfg(servers=servers))
+
+
+def fixture_infos(fixtures: dict | None = None) -> list[McpToolInfo]:
+    fixtures = fixtures or load_mcp_fixtures()
+    return [
+        McpToolInfo(server=server["name"], tool=tool, input_schema=spec["input_schema"],
+                    read_only_hint=spec["kind"] == "read",
+                    destructive_hint=False, server_description="")
+        for server in fixtures["servers"] for tool, spec in server["tools"].items()
+    ]
+
+
+def fixture_exported_names(fixtures: dict | None = None) -> list[str]:
+    fixtures = fixtures or load_mcp_fixtures()
+    return [conn_name(server["name"], tool, spec.get("alias", ""))
+            for server in fixtures["servers"] for tool, spec in server["tools"].items()]
+
+
+class FixtureManager:
+    """Stands in for McpManager. Eval turns never execute tools; this exists
+    only so register_mcp_tools can build real executors."""
+
+    def call_blocking(self, server, tool, args, timeout_s):
+        return McpCallResult("", None, False)
+
+
+def eval_registry(fixtures: dict | None = None) -> dict:
+    fixtures = fixtures or load_mcp_fixtures()
+    registry = build_registry()
+    refusals = register_mcp_tools(
+        registry, fixture_infos(fixtures), fixture_config(fixtures), FixtureManager())
+    if refusals:
+        raise ValueError(f"mcp fixture refused: {refusals}")
+    return registry
+
+
+def _mcp_canned_reads(fixtures: dict) -> dict[str, str]:
+    return {
+        conn_name(server["name"], tool, spec.get("alias", "")): spec["canned_result"]
+        for server in fixtures["servers"] for tool, spec in server["tools"].items()
+        if spec["kind"] == "read"
+    }
+
+
+# Reads only: the three writes (capture, remind, strike) are graded as the
+# first proposal and are never answered here.
+MCP_CANNED_READS = _mcp_canned_reads(load_mcp_fixtures())
+_READ_TOOLS = {"computer_get_context", "computer_ax_snapshot", "shortcuts_list"} | set(MCP_CANNED_READS)
 # Neutral sample names: the corpus is public, so it never carries real ones.
 CANNED_SHORTCUTS = ["Focus Mode On", "Log Water", "Morning Routine", "Dark Mode", "Start Timer"]
 
 
 def canned_read(name: str, bundle_id: str) -> dict:
+    if name in MCP_CANNED_READS:
+        return {"ok": True, "data": {"text": MCP_CANNED_READS[name], "structured": None},
+                "duration_ms": 80}
     if name == "shortcuts_list":
         return {"ok": True, "data": {"count": len(CANNED_SHORTCUTS), "shortcuts": CANNED_SHORTCUTS}}
     app_name = {
@@ -264,7 +351,7 @@ async def _run(cfg: Config, limit: int | None) -> dict:
     for index, item in enumerate(items):
         try:
             outcome = await asyncio.wait_for(
-                _first_result(cfg, export_openai(build_registry()),
+                _first_result(cfg, export_openai(eval_registry()),
                               item["utterance"], item.get("expect", {}),
                               item.get("context_bundle", "com.apple.Safari")),
                 timeout=ITEM_TIMEOUT_S,

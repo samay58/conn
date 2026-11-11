@@ -2776,6 +2776,352 @@
         ]
       },
       "source": "authored"
+    },
+    {
+      "utterance": "What's my next meeting?",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "When is my next meeting?",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's on my calendar today?",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Am I free Thursday afternoon?",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's on my calendar tomorrow?",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's left on my must-do list?",
+      "expect": {
+        "tool_any": [
+          "phoenix_today"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's left on my list for today?",
+      "expect": {
+        "tool_any": [
+          "phoenix_today"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Who do I owe a reply?",
+      "expect": {
+        "tool_any": [
+          "phoenix_people"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Who is waiting on me?",
+      "expect": {
+        "tool_any": [
+          "phoenix_people"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What did Priya last text me?",
+      "expect": {
+        "tool_any": [
+          "phoenix_thread"
+        ],
+        "slots": {
+          "person": "Priya"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Show me my latest WhatsApp messages with Priya.",
+      "expect": {
+        "tool_any": [
+          "phoenix_thread"
+        ],
+        "slots": {
+          "person": "Priya"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Did Dana reply to my email?",
+      "expect": {
+        "tool_any": [
+          "phoenix_people",
+          "superhuman_search_threads"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What did we decide about pricing on yesterday's call?",
+      "expect": {
+        "tool_any": [
+          "granola_search_transcripts",
+          "granola_search_meetings",
+          "wispr_search_meetings"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What did Dana say about the budget in our last meeting?",
+      "expect": {
+        "tool_any": [
+          "granola_search_transcripts",
+          "granola_search_meetings",
+          "wispr_search_meetings"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Find my last meeting with Acme.",
+      "expect": {
+        "tool_any": [
+          "granola_search_meetings",
+          "wispr_search_meetings"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Prep me for my 3 o'clock.",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar",
+          "granola_search_meetings",
+          "phoenix_search"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What do I have on this company?",
+      "expect": {
+        "tool_any": [
+          "phoenix_search",
+          "computer_get_context"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Capture: ask Dana about the offsite budget.",
+      "expect": {
+        "tool_any": [
+          "phoenix_capture"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Jot down call the landlord about the deposit.",
+      "expect": {
+        "tool_any": [
+          "phoenix_capture"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Note to self, Priya recommended a book about pricing.",
+      "expect": {
+        "tool_any": [
+          "phoenix_capture"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Capture that I should remind Dana about the budget.",
+      "expect": {
+        "tool_any": [
+          "phoenix_capture"
+        ],
+        "slots": {
+          "text": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Remind me to call the pharmacy at 5.",
+      "expect": {
+        "tool_any": [
+          "phoenix_remind"
+        ],
+        "slots": {
+          "title": null,
+          "due": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Remind me tomorrow at 9 to send the Acme invoice.",
+      "expect": {
+        "tool_any": [
+          "phoenix_remind"
+        ],
+        "slots": {
+          "title": null,
+          "due": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Remind me to call Dana.",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_max_sentences": 2
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "I'm done with the dentist.",
+      "expect": {
+        "tool_any": [
+          "phoenix_strike"
+        ],
+        "slots": {
+          "phrase": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Mark the landlord email done.",
+      "expect": {
+        "tool_any": [
+          "phoenix_strike"
+        ],
+        "slots": {
+          "phrase": null
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Did the Yankees win?",
+      "expect": {
+        "tool_any": [
+          "phoenix_lookup"
+        ],
+        "slots": {
+          "kind": "sports"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Do I need an umbrella today?",
+      "expect": {
+        "tool_any": [
+          "phoenix_lookup"
+        ],
+        "slots": {
+          "kind": "weather"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "What's the weather in Boston?",
+      "expect": {
+        "tool_any": [
+          "phoenix_lookup"
+        ],
+        "slots": {
+          "kind": "weather"
+        }
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Summarize the latest recruiter email.",
+      "expect": {
+        "tool_any": [
+          "superhuman_search_threads"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Start my deep work block.",
+      "expect": {
+        "tool_any": [
+          "phoenix_calendar",
+          "shortcuts_list",
+          "shortcuts_run"
+        ]
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Move my 3pm to tomorrow.",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_max_sentences": 2
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Send Dana a text saying I'm running late.",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_max_sentences": 2
+      },
+      "source": "authored"
     }
   ]
 }
