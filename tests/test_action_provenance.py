@@ -57,6 +57,36 @@ def test_every_registered_state_changing_tool_is_serialized() -> None:
                for name in harness.local_actions)
 
 
+def test_mcp_tools_keep_the_serialization_invariant() -> None:
+    from pathlib import Path
+
+    from conn.config import Config, McpCfg, McpServerCfg, McpToolCfg
+    from conn.mcp_client import McpToolInfo
+    from conn.tools.base import ExecutionContext
+    from conn.tools.harness import ToolHarness
+    from conn.tools.mcp_bridge import register_mcp_tools
+    from conn.tools.risk import RiskLevel
+
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}, "required": []}
+    cfg = Config(mcp=McpCfg(servers=[McpServerCfg(
+        name="notes", command=["x"],
+        tools={"search": McpToolCfg(kind="read", description="Search."),
+               "capture": McpToolCfg(kind="write", description="Capture.")})]))
+    registry = build_registry()
+    register_mcp_tools(registry, [
+        McpToolInfo("notes", "search", schema, True, False, ""),
+        McpToolInfo("notes", "capture", schema, False, False, ""),
+    ], cfg, object())
+    assert "notes_search" in registry and "notes_capture" in registry
+    state_changing = {n for n, s in registry.items() if s.risk is not RiskLevel.READ}
+    computer_mutations = {n for n, s in registry.items() if s.computer_mutation}
+    harness = ToolHarness(registry, cfg, ExecutionContext(cfg=cfg, screenshot_dir=Path("/nonexistent")))
+    assert "notes_capture" in state_changing
+    assert state_changing <= computer_mutations | harness.local_actions
+    assert all(registry[n].semantic_operation for n in computer_mutations)
+    assert all(registry[n].risk is RiskLevel.ACT_CONFIRM for n in harness.local_actions)
+
+
 def test_tool_metadata_rejects_half_declared_semantic_mutation() -> None:
     from conn.tools.registry import build_registry
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,3 +51,4 @@ class ExecutionContext:
     # the grant lives on Conn.app, not on the spawned python).
     ax_reader: object | None = None
     navigation: object | None = None
+    trace: Callable[..., None] | None = None

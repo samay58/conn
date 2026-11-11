@@ -18,6 +18,7 @@ from ..events import Gate
 from ..navigation import NavigationEffect, NavigationLease
 from .ax_input import _normalize_combo
 from .base import ExecutionContext, app_matches_bundle
+from .mcp_names import conn_name
 from .shortcuts import INPUT_MAX_CHARS as SHORTCUT_INPUT_MAX_CHARS
 from .shortcuts import NAME_MAX_CHARS as SHORTCUT_NAME_MAX_CHARS
 
@@ -189,9 +190,43 @@ ARG_GUARDS: dict[str, Callable[[dict, Config], str | None]] = {
 }
 
 
+MCP_ARG_MAX_CHARS = 4000
+
+
+def mcp_tool_names(cfg: Config) -> dict[str, str]:
+    """Model-facing name of every configured MCP tool -> its declared kind."""
+    return {
+        conn_name(server.name, tool, tool_cfg.alias): tool_cfg.kind
+        for server in cfg.mcp.servers
+        for tool, tool_cfg in server.tools.items()
+    }
+
+
+def _mcp_value_invalid(value) -> bool:
+    if isinstance(value, str):
+        return len(value) > MCP_ARG_MAX_CHARS or "\x00" in value
+    if isinstance(value, dict):
+        return any(_mcp_value_invalid(k) or _mcp_value_invalid(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_mcp_value_invalid(v) for v in value)
+    return False
+
+
+def _guard_mcp(args: dict, cfg: Config) -> str | None:
+    if not cfg.mcp.enabled:
+        return "mcp_disabled_in_config"
+    if _mcp_value_invalid(args):
+        return "mcp_argument_invalid"
+    return None
+
+
 def argument_guard(name: str, args: dict, cfg: Config) -> str | None:
     guard = ARG_GUARDS.get(name)
-    return guard(args, cfg) if guard is not None else None
+    if guard is not None:
+        return guard(args, cfg)
+    if name in mcp_tool_names(cfg):
+        return _guard_mcp(args, cfg)
+    return None
 
 
 def _trusted_roles(cfg: Config, bundle_id: str) -> set[str]:
@@ -309,6 +344,9 @@ def gate_for(
         return gate, None, None
 
     override = cfg.risk_overrides.get(name)
+    # Every MCP write waits for a click; config can block it but never auto-approve it.
+    if override == "auto" and mcp_tool_names(cfg).get(name) == "write":
+        override = "confirm"
     if override in ("auto", "confirm"):
         return Gate(override), None, None
     if override == "blocked":

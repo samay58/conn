@@ -138,6 +138,8 @@ class McpToolCfg(BaseModel):
     fixed_args: dict[str, Any] = Field(default_factory=dict)  # injected, hidden from the model
     param_descriptions: dict[str, str] = Field(default_factory=dict)  # Conn's text for each argument
     timeout_s: float | None = Field(default=None, gt=0, le=60)  # overrides McpCfg.call_timeout_s
+    done_message: str = "Done."             # what Conn says after a verified write
+    max_result_chars: int = Field(default=4000, ge=200, le=12000)
 
 
 class McpServerCfg(BaseModel):

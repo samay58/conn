@@ -195,8 +195,19 @@ async def _serve(cfg, args) -> None:
 
         mcp_manager = McpManager(cfg.mcp, data_dir=cfg.data_dir, auth_for=daemon_auth)
         try:
-            await mcp_manager.start()
+            infos = await mcp_manager.start()
+            # A server that is down keeps its cached tools, so a call says
+            # "unavailable" instead of the tool vanishing.
+            for server in cfg.mcp.servers:
+                if mcp_manager.status.get(server.name, "").startswith("skipped:"):
+                    infos += [i for i in mcp_manager.cached_infos(server.name)
+                              if i.tool in server.tools]
+            from .tools.mcp_bridge import register_mcp_tools
+
+            for name, reason in register_mcp_tools(registry, infos, cfg, mcp_manager):
+                print(f"mcp tool refused: {name}: {reason}", file=sys.stderr)
         except ValueError as error:
+            await mcp_manager.stop()
             print(str(error), file=sys.stderr)
             sys.exit(2)
         ctx.mcp = mcp_manager
@@ -237,6 +248,11 @@ async def _serve(cfg, args) -> None:
 
     harness = ToolHarness(registry, cfg, ctx, executors=executors)
     app = ConnApp(cfg, adapter, harness, audio=audio)
+    if mcp_manager is not None:
+        # app.trace is replaced on a session reset, so look it up each time.
+        ctx.trace = lambda event, **fields: app.trace.log(event, **fields)
+        for event, fields in mcp_manager.drain_events():
+            app.trace.log(event, **fields)
 
     loop = asyncio.get_running_loop()
     if audio is not None:

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -264,12 +266,44 @@ class McpManager:
                 ))
                 exposed += 1
             self._emit("mcp_server_connected", server=name, tools=exposed)
+            self._write_cache(name, [i for i in infos if i.server == name])
 
         if len(infos) > self.cfg.max_tools:
             count = len(infos)
             await self.stop()
             raise ValueError(f"mcp_too_many_tools: {count} exposed, max {self.cfg.max_tools}")
         return infos
+
+    def _cache_path(self, server: str) -> Path | None:
+        if self.data_dir is None:
+            return None
+        return self.data_dir / "mcp" / f"{server}.tools.json"
+
+    def _write_cache(self, server: str, infos: list[McpToolInfo]) -> None:
+        path = self._cache_path(server)
+        if path is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps([dataclasses.asdict(i) for i in infos]))
+        except OSError:
+            pass  # the cache only keeps the tool list stable; losing it is harmless
+
+    def cached_infos(self, server: str) -> list[McpToolInfo]:
+        """Tool list saved the last time this server connected; [] when none."""
+        path = self._cache_path(server)
+        if path is None or not path.exists():
+            return []
+        try:
+            rows = json.loads(path.read_text())
+            return [McpToolInfo(
+                server=server, tool=str(r["tool"]),
+                input_schema=sanitize_schema(r.get("input_schema")),
+                read_only_hint=r.get("read_only_hint"),
+                destructive_hint=r.get("destructive_hint"),
+                server_description="") for r in rows]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return []
 
     def _connected(self, server: str) -> _Conn:
         conn = self._conns.get(server)
