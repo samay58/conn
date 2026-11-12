@@ -138,6 +138,53 @@ enum TokenWriteback {
             // Just under half the button height: at exactly height/2 (a true capsule)
             // the stroke path renders seam ticks at the ends; 10pt reads identically.
             @Published var overrideCornerRadius: CGFloat = \(fmtCG(v.overrideCornerRadius))
+            // island style prototypes (directions A, B, C in IslandGlassStyles.swift).
+            // Production stays classic; the preview picker flips this live. Glass is
+            // static per state: only transform and opacity animate, never blur or
+            // glass parameters.
+            @Published var islandStyle = IslandStyle.\(v.islandStyle.rawValue)
+            @Published var glassMorphSpring = Spring(response: \(fmt(v.glassMorphSpring.response)), dampingRatio: \(fmt(v.glassMorphSpring.dampingRatio)))
+            @Published var glassEnterDuration = \(fmt(v.glassEnterDuration))
+            @Published var glassRimOpacity = \(fmt(v.glassRimOpacity))
+            @Published var glassInnerLightOpacity = \(fmt(v.glassInnerLightOpacity))
+            @Published var glassSmokeOpacity = \(fmt(v.glassSmokeOpacity))
+            // deep lilac: the accent on light glass, where #C3B1E1 washes out.
+            @Published var glassAccentDeepRGB = \(fmtColor(v.glassAccentDeepRGB))
+            let glassRimWidth: CGFloat = 1.5
+            let glassFusedCornerRadius: CGFloat = 20
+            let glassFusedWidth: CGFloat = 340
+            let glassCapsuleHeight: CGFloat = 40
+            let glassCardCornerRadius: CGFloat = 24
+            let glassCardWidth: CGFloat = 356
+            let glassNotchGap: CGFloat = 8
+            let glassEarWidth: CGFloat = 104
+            let glassPillCornerRadius: CGFloat = 12
+            let glassButtonHeight: CGFloat = 28
+            // cards (the island detail surface, src/conn/cards.py): a card that
+            // does not persist retires after cardLinger, a settled reply after the
+            // shorter cardSettledLinger.
+            @Published var cardLinger = \(fmt(v.cardLinger))
+            @Published var cardSettledLinger = \(fmt(v.cardSettledLinger))
+            @Published var cardFadeDuration = \(fmt(v.cardFadeDuration))
+            let cardGap: CGFloat = 8
+            let cardCornerRadius: CGFloat = 16
+            let cardPadding: CGFloat = 14
+            // icon identity (macos/icon/conn-icon.svg), the palette style d is built
+            // on: ink background, deep pill, electric lime (eyes, live, listening),
+            // lilac (voice, rim tint), hot pink (voice end, approve, attention), and a
+            // white rim highlight fading to a lilac lower edge.
+            @Published var iconInkTopRGB = \(fmtColor(v.iconInkTopRGB))
+            @Published var iconInkBottomRGB = \(fmtColor(v.iconInkBottomRGB))
+            @Published var iconPillTopRGB = \(fmtColor(v.iconPillTopRGB))
+            @Published var iconPillBottomRGB = \(fmtColor(v.iconPillBottomRGB))
+            @Published var iconLimeRGB = \(fmtColor(v.iconLimeRGB))
+            @Published var iconLilacRGB = \(fmtColor(v.iconLilacRGB))
+            @Published var iconPinkRGB = \(fmtColor(v.iconPinkRGB))
+            @Published var iconRimTopOpacity = \(fmt(v.iconRimTopOpacity))
+            @Published var iconRimMidOpacity = \(fmt(v.iconRimMidOpacity))
+            @Published var iconRimLilacOpacity = \(fmt(v.iconRimLilacOpacity))
+            // style d: the done wink, one eye closing on an ease-out.
+            @Published var characterWinkDuration = \(fmt(v.characterWinkDuration))
         }
 
         // The static names every view reads. Forwarding, not storage: the values
@@ -205,6 +252,43 @@ enum TokenWriteback {
             static var toolChipPaddingH: CGFloat { current.toolChipPaddingH }
             static var toolChipBgOpacity: Double { current.toolChipBgOpacity }
             static var overrideCornerRadius: CGFloat { current.overrideCornerRadius }
+            // island style prototypes
+            static var islandStyle: IslandStyle { current.islandStyle }
+            static var glassMorphSpring: Spring { current.glassMorphSpring }
+            static var glassEnterDuration: Double { current.glassEnterDuration }
+            static var glassRimOpacity: Double { current.glassRimOpacity }
+            static var glassInnerLightOpacity: Double { current.glassInnerLightOpacity }
+            static var glassSmokeOpacity: Double { current.glassSmokeOpacity }
+            static var glassAccentDeep: Color { current.glassAccentDeepRGB.color }
+            static var glassRimWidth: CGFloat { current.glassRimWidth }
+            static var glassFusedCornerRadius: CGFloat { current.glassFusedCornerRadius }
+            static var glassFusedWidth: CGFloat { current.glassFusedWidth }
+            static var glassCapsuleHeight: CGFloat { current.glassCapsuleHeight }
+            static var glassCardCornerRadius: CGFloat { current.glassCardCornerRadius }
+            static var glassCardWidth: CGFloat { current.glassCardWidth }
+            static var glassNotchGap: CGFloat { current.glassNotchGap }
+            static var glassEarWidth: CGFloat { current.glassEarWidth }
+            static var glassPillCornerRadius: CGFloat { current.glassPillCornerRadius }
+            static var glassButtonHeight: CGFloat { current.glassButtonHeight }
+            // cards
+            static var cardLinger: Double { current.cardLinger }
+            static var cardSettledLinger: Double { current.cardSettledLinger }
+            static var cardFadeDuration: Double { current.cardFadeDuration }
+            static var cardGap: CGFloat { current.cardGap }
+            static var cardCornerRadius: CGFloat { current.cardCornerRadius }
+            static var cardPadding: CGFloat { current.cardPadding }
+            // icon identity
+            static var iconInkTop: Color { current.iconInkTopRGB.color }
+            static var iconInkBottom: Color { current.iconInkBottomRGB.color }
+            static var iconPillTop: Color { current.iconPillTopRGB.color }
+            static var iconPillBottom: Color { current.iconPillBottomRGB.color }
+            static var iconLime: Color { current.iconLimeRGB.color }
+            static var iconLilac: Color { current.iconLilacRGB.color }
+            static var iconPink: Color { current.iconPinkRGB.color }
+            static var iconRimTopOpacity: Double { current.iconRimTopOpacity }
+            static var iconRimMidOpacity: Double { current.iconRimMidOpacity }
+            static var iconRimLilacOpacity: Double { current.iconRimLilacOpacity }
+            static var characterWinkDuration: Double { current.characterWinkDuration }
         }
 
         """
@@ -260,6 +344,30 @@ enum TokenWriteback {
         row("toolChipPaddingH", "State vocabulary / acting", fmtCG(old.toolChipPaddingH), fmtCG(new.toolChipPaddingH))
         row("toolChipBgOpacity", "State vocabulary / acting", fmt(old.toolChipBgOpacity), fmt(new.toolChipBgOpacity))
         row("overrideCornerRadius", "State vocabulary / budget_hold", fmtCG(old.overrideCornerRadius), fmtCG(new.overrideCornerRadius))
+        row("islandStyle", "Island style prototypes", old.islandStyle.rawValue, new.islandStyle.rawValue)
+        row("glassMorphSpring.response", "Island style prototypes",
+            fmt(old.glassMorphSpring.response), fmt(new.glassMorphSpring.response))
+        row("glassMorphSpring.dampingRatio", "Island style prototypes",
+            fmt(old.glassMorphSpring.dampingRatio), fmt(new.glassMorphSpring.dampingRatio))
+        row("glassEnterDuration", "Island style prototypes", fmt(old.glassEnterDuration), fmt(new.glassEnterDuration))
+        row("glassRimOpacity", "Island style prototypes", fmt(old.glassRimOpacity), fmt(new.glassRimOpacity))
+        row("glassInnerLightOpacity", "Island style prototypes", fmt(old.glassInnerLightOpacity), fmt(new.glassInnerLightOpacity))
+        row("glassSmokeOpacity", "Island style prototypes", fmt(old.glassSmokeOpacity), fmt(new.glassSmokeOpacity))
+        row("glass.accentDeep", "Island style prototypes", hex(old.glassAccentDeepRGB), hex(new.glassAccentDeepRGB))
+        row("cardLinger", "Cards", fmt(old.cardLinger), fmt(new.cardLinger))
+        row("cardSettledLinger", "Cards", fmt(old.cardSettledLinger), fmt(new.cardSettledLinger))
+        row("cardFadeDuration", "Cards", fmt(old.cardFadeDuration), fmt(new.cardFadeDuration))
+        row("iconInkTop", "Icon identity", hex(old.iconInkTopRGB), hex(new.iconInkTopRGB))
+        row("iconInkBottom", "Icon identity", hex(old.iconInkBottomRGB), hex(new.iconInkBottomRGB))
+        row("iconPillTop", "Icon identity", hex(old.iconPillTopRGB), hex(new.iconPillTopRGB))
+        row("iconPillBottom", "Icon identity", hex(old.iconPillBottomRGB), hex(new.iconPillBottomRGB))
+        row("iconLime", "Icon identity", hex(old.iconLimeRGB), hex(new.iconLimeRGB))
+        row("iconLilac", "Icon identity", hex(old.iconLilacRGB), hex(new.iconLilacRGB))
+        row("iconPink", "Icon identity", hex(old.iconPinkRGB), hex(new.iconPinkRGB))
+        row("iconRimTopOpacity", "Icon identity", fmt(old.iconRimTopOpacity), fmt(new.iconRimTopOpacity))
+        row("iconRimMidOpacity", "Icon identity", fmt(old.iconRimMidOpacity), fmt(new.iconRimMidOpacity))
+        row("iconRimLilacOpacity", "Icon identity", fmt(old.iconRimLilacOpacity), fmt(new.iconRimLilacOpacity))
+        row("characterWinkDuration", "Icon identity", fmt(old.characterWinkDuration), fmt(new.characterWinkDuration))
 
         if lines.isEmpty { return "spec-table diff: no tuned values differ from the compiled defaults" }
         return "spec-table diff (paste back into docs/2026-07-05-ux-craft-spec.md):\n" + lines.joined(separator: "\n")

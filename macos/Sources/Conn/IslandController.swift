@@ -17,6 +17,7 @@ final class IslandController: ConnSurface {
     private var collapseTimer: Timer?
     private var orderOutTimer: Timer?
     private var isCollapsing = false
+    private var chipOpen = false
 
     init(state: AppState, client: DaemonClient, geometry: IslandGeometry) {
         self.state = state
@@ -70,6 +71,45 @@ final class IslandController: ConnSurface {
                 }
             }
             .store(in: &subscriptions)
+
+        // Cards: a card arriving summons the island (even after the turn
+        // ended); its measured height grows the panel; a card leaving lets a
+        // finished turn collapse, which phase-driven collapses wait for while
+        // a card is on screen.
+        state.$card
+            .map { $0?.id }
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] id in self?.cardChanged(present: id != nil) }
+            .store(in: &subscriptions)
+        reveal.$cardHeight
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                guard let self, self.panel.isVisible, !self.isCollapsing else { return }
+                self.summon(chipOpen: self.chipOpen)
+            }
+            .store(in: &subscriptions)
+    }
+
+    private var cardHeight: CGFloat {
+        state.card == nil ? 0 : reveal.cardHeight
+    }
+
+    private func cardChanged(present: Bool) {
+        if present {
+            summon(chipOpen: chipOpen)
+        } else if ["idle", "done", "failed"].contains(state.phase) {
+            collapse()
+        } else if panel.isVisible {
+            summon(chipOpen: chipOpen)
+        }
+    }
+
+    // Phase-driven collapses hold while a card is showing; the card's own
+    // retire (or its close button) releases them through cardChanged.
+    private func collapseUnlessCard() {
+        guard state.card == nil else { return }
+        collapse()
     }
 
     func summon(chipOpen: Bool = false) {
@@ -77,7 +117,8 @@ final class IslandController: ConnSurface {
         orderOutTimer?.invalidate()
         orderOutTimer = nil
         let wasHidden = !panel.isVisible
-        let target = geometry.expandedFrame(chipOpen: chipOpen)
+        self.chipOpen = chipOpen
+        let target = geometry.expandedFrame(chipOpen: chipOpen, cardHeight: cardHeight)
         reveal.collapsedScale = geometry.collapsedScale(chipOpen: chipOpen)
         if !wasHidden && !isCollapsing && panel.frame != target {
             // Mid-session frame change: the chip row opening or closing. The
@@ -130,7 +171,7 @@ final class IslandController: ConnSurface {
     func apply(phase: String) {
         switch phase {
         case "idle":
-            collapse()
+            collapseUnlessCard()
         case "awaiting_approval":
             summon(chipOpen: true)
         case "done":
@@ -149,7 +190,7 @@ final class IslandController: ConnSurface {
     private func scheduleCollapse(after delay: TimeInterval) {
         cancelScheduledCollapse()
         collapseTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.collapse() }
+            Task { @MainActor in self?.collapseUnlessCard() }
         }
     }
 

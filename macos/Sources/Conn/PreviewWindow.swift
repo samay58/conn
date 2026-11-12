@@ -3,11 +3,13 @@ import SwiftUI
 
 // `Conn --preview`: the canonical IslandView rendered against a fake AppState
 // per state, for design iteration. No daemon, no interference with a live
-// session. The cycler steps through all eleven reviewable states (nine phases
-// plus toast and chip open); Replay and Collapse drive the same reveal tokens
-// IslandController uses live. `Conn --preview --shoot <dir>` writes one PNG
-// per state headlessly from an offscreen window, so appearance animations and
-// the breath timeline settle before capture.
+// session. The cycler steps through every reviewable state (nine phases plus
+// toast, chips, and the card states); Replay and Collapse drive the same
+// reveal tokens IslandController uses live. The style picker flips every
+// sample between classic and the prototype directions (IslandGlassStyles
+// .swift), and Morph keeps one island on stage so stepping through states
+// shows the transitions between them. `Conn --preview --shoot <dir>` writes
+// <style>-<state>.png for every style and state headlessly.
 
 @MainActor
 enum PreviewRunner {
@@ -22,12 +24,13 @@ enum PreviewRunner {
         }
 
         let samples = PreviewSample.makeAll()
-        startLevelTimer(samples: samples)
+        let mirror = PreviewSample.mirror()
+        startLevelTimer(samples: samples + [mirror])
 
-        let hosting = NSHostingView(rootView: IslandPreviewRoot(samples: samples))
+        let hosting = NSHostingView(rootView: IslandPreviewRoot(samples: samples, mirror: mirror))
         hosting.sizingOptions = [.preferredContentSize]
 
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1140, height: 690),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 760),
                               styleMask: [.titled, .closable],
                               backing: .buffered, defer: false)
         window.title = "Conn island preview"
@@ -35,7 +38,7 @@ enum PreviewRunner {
         window.appearance = NSAppearance(named: .aqua)
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
-            window.setFrameOrigin(NSPoint(x: f.maxX - 1200, y: f.minY + 40))
+            window.setFrameOrigin(NSPoint(x: f.maxX - 1300, y: f.minY + 40))
         }
         window.orderFrontRegardless()
         app.run()
@@ -56,54 +59,52 @@ enum PreviewRunner {
         }
     }
 
-    // Renders each state in an offscreen window, lets the run loop settle so
-    // onAppear fades and the breath timeline produce a real frame, then
-    // captures a 2x bitmap.
+    // Renders every style and state. Each state is first hosted in an
+    // offscreen window so onAppear fades and the timelines run, and so the
+    // glass renderer is warm; the PNG itself comes from ImageRenderer, because
+    // cacheDisplay drops Liquid Glass (it draws only the plain layer tree).
     private static func shoot(to dir: String) {
         let dirURL = URL(fileURLWithPath: dir, isDirectory: true)
         try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
 
         let samples = PreviewSample.makeAll()
+        let restore = DesignTokens.current.islandStyle
+        defer { DesignTokens.current.islandStyle = restore }
         var written = 0
-        for sample in samples {
-            sample.state.level = sample.animatedLevel(from: 0.55)
+        for style in IslandStyle.allCases {
+            DesignTokens.current.islandStyle = style
+            for sample in samples {
+                sample.state.level = sample.animatedLevel(from: 0.55)
+                let stage = PreviewStage(sample: sample, crosshair: false)
 
-            let size = NSSize(width: 500, height: 240)
-            let hosting = NSHostingView(
-                rootView: PreviewStage(sample: sample, crosshair: false))
-            hosting.frame = NSRect(origin: .zero, size: size)
+                let size = PreviewStage.size
+                let hosting = NSHostingView(rootView: stage)
+                hosting.frame = NSRect(origin: .zero, size: size)
+                let window = NSWindow(
+                    contentRect: NSRect(x: -3000, y: -3000, width: size.width, height: size.height),
+                    styleMask: [.borderless], backing: .buffered, defer: false)
+                window.contentView = hosting
+                window.orderFrontRegardless()
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.35))
 
-            let window = NSWindow(
-                contentRect: NSRect(x: -3000, y: -3000, width: size.width, height: size.height),
-                styleMask: [.borderless], backing: .buffered, defer: false)
-            window.contentView = hosting
-            window.orderFrontRegardless()
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.35))
+                let renderer = ImageRenderer(content: stage.environment(\.colorScheme, .light))
+                renderer.scale = 2
+                let image = renderer.cgImage
+                window.contentView = nil
+                window.orderOut(nil)
 
-            guard let rep = NSBitmapImageRep(
-                bitmapDataPlanes: nil,
-                pixelsWide: Int(size.width) * 2, pixelsHigh: Int(size.height) * 2,
-                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)
-            else {
-                print("shoot: could not allocate bitmap for \(sample.id)")
-                continue
+                let fileURL = dirURL.appendingPathComponent("\(style.rawValue)-\(sample.id).png")
+                guard let image,
+                      let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]),
+                      (try? png.write(to: fileURL)) != nil else {
+                    print("shoot: could not write \(fileURL.path)")
+                    continue
+                }
+                written += 1
+                print("wrote \(fileURL.path)")
             }
-            rep.size = size
-            hosting.cacheDisplay(in: hosting.bounds, to: rep)
-            window.contentView = nil
-            window.orderOut(nil)
-
-            let fileURL = dirURL.appendingPathComponent("\(sample.id).png")
-            guard let png = rep.representation(using: .png, properties: [:]),
-                  (try? png.write(to: fileURL)) != nil else {
-                print("shoot: could not write \(fileURL.path)")
-                continue
-            }
-            written += 1
-            print("wrote \(fileURL.path)")
         }
-        print("\(written)/\(samples.count) states written")
+        print("\(written)/\(samples.count * IslandStyle.allCases.count) states written")
     }
 }
 
@@ -116,11 +117,13 @@ final class PreviewSample: Identifiable {
     let reveal = IslandReveal()
     let client: DaemonClient
 
-    private init(id: String, title: String, note: String, state: AppState) {
+    private init(id: String, title: String, note: String, state: AppState, card: IslandCard?) {
         self.id = id
         self.title = title
         self.note = note
         self.state = state
+        // Sample cards hold still: no retire timer in the preview.
+        if let card { state.setCard(card, retires: false) }
         // Never connected: send() is a no-op without a socket, so the chip's
         // buttons and ui_ack are inert in the preview.
         self.client = DaemonClient(state: state)
@@ -134,6 +137,58 @@ final class PreviewSample: Identifiable {
         default: return 0
         }
     }
+
+    // The morph stage's single island: the selected sample's state is copied
+    // into it inside an animation, so the island transitions instead of
+    // being replaced.
+    static func mirror() -> PreviewSample {
+        sample("mirror", "Morph", "one island stepping through states", phase: "listening") { _ in }
+    }
+
+    func adopt(_ other: PreviewSample) {
+        let o = other.state
+        state.phase = o.phase
+        state.connected = o.connected
+        state.live = o.live
+        state.userLine = o.userLine
+        state.modelLine = o.modelLine
+        state.chips = o.chips
+        state.spentUSD = o.spentUSD
+        state.toast = o.toast
+        state.lastActionOutcome = o.lastActionOutcome
+        state.axWarning = o.axWarning
+        if let card = o.card {
+            state.setCard(card, retires: false)
+        } else {
+            state.clearCard()
+        }
+    }
+
+    // The card samples use the daemon's exact wire shapes (src/conn/cards.py).
+    private static let draftText = "Hey Alex, the address is 418 Hayes Street, apartment 3B. "
+        + "The buzzer is broken, so text me when you're outside and I'll come down."
+
+    private static func reply(_ state: String, title: String) -> IslandCard? {
+        IslandCard(wire: [
+            "id": "reply:alex", "kind": "reply", "title": title,
+            "subtitle": "Alex · Messages", "body": draftText, "state": state,
+            "persist": state == "draft" || state == "approve",
+        ])
+    }
+
+    private static let owedList = IslandCard(wire: [
+        "id": "list:people", "kind": "list", "title": "You owe replies",
+        "subtitle": "3 people",
+        "rows": [
+            ["title": "Dana", "detail": "Email · 2d",
+             "note": "Can you confirm Thursday's review time?"],
+            ["title": "Priya", "detail": "Messages · 5h",
+             "note": "Still in for dinner on Saturday?"],
+            ["title": "Sam", "detail": "WhatsApp · 1d",
+             "note": "Needs your sign-off on the launch notes"],
+        ],
+        "persist": false,
+    ])
 
     static func makeAll() -> [PreviewSample] {
         [
@@ -235,6 +290,41 @@ final class PreviewSample: Identifiable {
                                   status: "proposed")]
                 $0.spentUSD = 0.029
             },
+            sample("reply_draft", "Card: reply draft",
+                   "a persisting draft card with a close button",
+                   phase: "speaking", card: reply("draft", title: "Draft")) {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "Here's a draft for Alex."
+                $0.spentUSD = 0.041
+            },
+            sample("reply_approve", "Card: reply to send",
+                   "the full body above the existing Deny and Approve chip",
+                   phase: "awaiting_approval", card: reply("approve", title: "Send this?")) {
+                $0.connected = true
+                $0.live = true
+                $0.chips = [Chip(id: "c5", name: "messages_send",
+                                  preview: "Text Alex: the address and buzzer",
+                                  status: "proposed")]
+                $0.spentUSD = 0.043
+            },
+            sample("reply_sent", "Card: reply sent",
+                   "a settled reply, fading after the short linger",
+                   phase: "done", card: reply("sent", title: "Sent")) {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "Sent."
+                $0.lastActionOutcome = "verified"
+                $0.spentUSD = 0.046
+            },
+            sample("list", "Card: replies owed",
+                   "a list card that retires on the next push-to-talk",
+                   phase: "speaking", card: owedList) {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "Three people are waiting on you."
+                $0.spentUSD = 0.038
+            },
         ]
     }
 
@@ -243,51 +333,135 @@ final class PreviewSample: Identifiable {
         _ title: String,
         _ note: String,
         phase: String? = nil,
+        card: IslandCard? = nil,
         configure: (AppState) -> Void
     ) -> PreviewSample {
         let state = AppState()
         state.phase = phase ?? id
         configure(state)
-        return PreviewSample(id: id, title: title, note: note, state: state)
+        return PreviewSample(id: id, title: title, note: note, state: state, card: card)
     }
 }
 
-// One state rendered on the stage backdrop: the canonical IslandView at its
-// live proportions, or the idle placeholder. The crosshair marks the stage
-// center for the optical-alignment check (the waveform must center on it).
+// One state rendered on a stand-in desktop: wallpaper, a window, the menu
+// bar, and the notch, so glass has something real to refract and every
+// direction is judged against the same scene. Classic keeps its live width;
+// every style sizes its own height inside the stage.
 @MainActor
 struct PreviewStage: View {
     let sample: PreviewSample
     var crosshair: Bool
 
+    static let size = NSSize(width: 560, height: 360)
     private static let notchInset: CGFloat = 30
-
-    private var chipOpen: Bool {
-        sample.state.phase == "awaiting_approval" && sample.state.pendingChip != nil
-    }
+    private static let notchWidth: CGFloat = 200
 
     var body: some View {
         ZStack(alignment: .top) {
-            PreviewBackdropColor()
+            PreviewDesktop(notchWidth: Self.notchWidth, notchHeight: Self.notchInset)
             if sample.state.phase == "idle" {
-                IdlePreview()
-                    .frame(maxHeight: .infinity)
+                Text("Idle means no Conn window.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 18)
+            } else if DesignTokens.islandStyle == .classic {
+                island
+                    .frame(width: Self.notchWidth + 2 * DesignTokens.islandGrowWidth)
             } else {
-                IslandView(
-                    state: sample.state,
-                    client: sample.client,
-                    topInset: Self.notchInset,
-                    reveal: sample.reveal)
-                .frame(width: 316,
-                       height: Self.notchInset + DesignTokens.islandContentHeight
-                           + (chipOpen ? DesignTokens.chipRowHeight : 0))
+                island
             }
             if crosshair {
                 CrosshairOverlay()
             }
         }
-        .frame(width: 500, height: 240)
+        .frame(width: Self.size.width, height: Self.size.height)
         .clipped()
+    }
+
+    private var island: IslandView {
+        IslandView(
+            state: sample.state,
+            client: sample.client,
+            topInset: Self.notchInset,
+            reveal: sample.reveal,
+            notchWidth: Self.notchWidth)
+    }
+}
+
+// A quiet stand-in desktop. The wallpaper is two muted tones so refraction
+// and tint read without the backdrop competing; the window gives the glass
+// hard edges and text to bend.
+private struct PreviewDesktop: View {
+    let notchWidth: CGFloat
+    let notchHeight: CGFloat
+
+    private static let lights = [Color(red: 1, green: 0.37, blue: 0.34),
+                                 Color(red: 1, green: 0.74, blue: 0.18),
+                                 Color(red: 0.16, green: 0.79, blue: 0.25)]
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [Color(red: 0.78, green: 0.66, blue: 0.56),
+                         Color(red: 0.42, green: 0.50, blue: 0.62)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+            documentWindow
+                .offset(x: 70, y: 58)
+            menuBar
+            UnevenRoundedRectangle(
+                topLeadingRadius: 0, bottomLeadingRadius: 9,
+                bottomTrailingRadius: 9, topTrailingRadius: 0, style: .continuous)
+                .fill(Color.black)
+                .frame(width: notchWidth, height: notchHeight)
+        }
+    }
+
+    private var menuBar: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "apple.logo")
+            Text("Finder").fontWeight(.semibold)
+            Text("File")
+            Text("Edit")
+            Spacer()
+            Text("Thu Nov 12  9:41 AM").monospacedDigit()
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(Color.black.opacity(0.82))
+        .padding(.horizontal, 14)
+        .frame(height: notchHeight)
+        .background(Color.white.opacity(0.42))
+    }
+
+    private var documentWindow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                ForEach(0..<Self.lights.count, id: \.self) { i in
+                    Circle().fill(Self.lights[i]).frame(width: 11, height: 11)
+                }
+                Spacer()
+                Text("Launch notes")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.black.opacity(0.7))
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            VStack(alignment: .leading, spacing: 9) {
+                Text("Launch notes, week of November 16")
+                    .font(.system(size: 17, weight: .bold))
+                Text("Ship the onboarding rewrite behind the flag on Tuesday. Pricing page copy needs one more pass before it goes live.")
+                Text("Open questions: the migration window, who owns support macros, and whether the beta list gets the email first.")
+                Text("Owners: rollout, notes, support.")
+            }
+            .font(.system(size: 13))
+            .foregroundStyle(Color.black.opacity(0.78))
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            Spacer(minLength: 0)
+        }
+        .frame(width: 400, height: 320)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white))
     }
 }
 
@@ -310,13 +484,16 @@ private struct CrosshairOverlay: View {
 @MainActor
 private struct IslandPreviewRoot: View {
     let samples: [PreviewSample]
+    let mirror: PreviewSample
     @State private var index = 1
     @State private var crosshair = false
+    @State private var morph = false
     // Observing the token store re-renders the staged island on every
     // inspector edit, so palette and personality changes land live.
     @ObservedObject private var tokens = DesignTokens.current
 
     private var selected: PreviewSample { samples[index] }
+    private var staged: PreviewSample { morph ? mirror : selected }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -326,8 +503,8 @@ private struct IslandPreviewRoot: View {
                 stateList
                 InspectorView(
                     tokens: tokens,
-                    replay: { selected.reveal.token &+= 1 },
-                    collapse: { selected.reveal.collapseToken &+= 1 })
+                    replay: { staged.reveal.token &+= 1 },
+                    collapse: { staged.reveal.collapseToken &+= 1 })
             }
         }
         .padding(28)
@@ -350,15 +527,30 @@ private struct IslandPreviewRoot: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 8) {
-            Toggle("Crosshair", isOn: $crosshair)
-                .toggleStyle(.checkbox)
-            Button("Previous") { move(-1) }
-            Button("Replay") { selected.reveal.token &+= 1 }
-            Button("Collapse") { selected.reveal.collapseToken &+= 1 }
-            Button("Next") { move(1) }
+        VStack(alignment: .trailing, spacing: 8) {
+            Picker("Style", selection: $tokens.islandStyle) {
+                ForEach(IslandStyle.allCases) { style in
+                    Text(style.title).tag(style)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 420)
+            HStack(spacing: 8) {
+                Toggle("Morph", isOn: $morph)
+                    .toggleStyle(.checkbox)
+                    .onChange(of: morph) { _, on in
+                        if on { mirror.adopt(selected) }
+                    }
+                Toggle("Crosshair", isOn: $crosshair)
+                    .toggleStyle(.checkbox)
+                Button("Previous") { move(-1) }
+                Button("Replay") { staged.reveal.token &+= 1 }
+                Button("Collapse") { staged.reveal.collapseToken &+= 1 }
+                Button("Next") { move(1) }
+            }
+            .buttonStyle(.bordered)
         }
-        .buttonStyle(.bordered)
     }
 
     private var mainStage: some View {
@@ -370,11 +562,11 @@ private struct IslandPreviewRoot: View {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
                     )
-                PreviewStage(sample: selected, crosshair: crosshair)
+                PreviewStage(sample: staged, crosshair: crosshair)
                     .padding(.top, 10)
-                    .id(selected.id)
+                    .id(morph ? "mirror" : selected.id + tokens.islandStyle.rawValue)
             }
-            .frame(width: 520, height: 300)
+            .frame(width: 580, height: 380)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(selected.title)
@@ -392,7 +584,7 @@ private struct IslandPreviewRoot: View {
             ForEach(samples.indices, id: \.self) { sampleIndex in
                 let sample = samples[sampleIndex]
                 Button {
-                    index = sampleIndex
+                    select(sampleIndex)
                 } label: {
                     HStack(spacing: 10) {
                         PreviewDot(state: sample.state)
@@ -419,21 +611,17 @@ private struct IslandPreviewRoot: View {
     }
 
     private func move(_ delta: Int) {
-        index = (index + delta + samples.count) % samples.count
+        select((index + delta + samples.count) % samples.count)
     }
-}
 
-private struct IdlePreview: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.88))
-                .frame(width: 172, height: 28)
-            Text("Idle means no Conn window.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.black.opacity(0.50))
+    // With Morph on, the one staged island adopts the new state inside the
+    // morph spring, so the transition plays instead of a cut.
+    private func select(_ next: Int) {
+        index = next
+        guard morph else { return }
+        withAnimation(.spring(DesignTokens.glassMorphSpring)) {
+            mirror.adopt(samples[next])
         }
-        .frame(width: 390, height: 132)
     }
 }
 

@@ -10,6 +10,69 @@ struct Chip: Identifiable, Equatable {
     var ok: Bool { status == "verified" || status == "completed" }
 }
 
+// The island's detail surface (daemon src/conn/cards.py): a list of rows or
+// the full text of a reply. One card shows at a time; a card with the same id
+// is a revision of the one on screen ("reply:alex" moves draft -> approve ->
+// sent) and replaces it in place. Approval never lives here: a reply card in
+// state "approve" only shows the body, and the decision stays on the chip.
+struct IslandCard: Identifiable, Equatable {
+    enum Kind: String { case list, reply }
+
+    struct Row: Equatable {
+        let title: String
+        let detail: String
+        let note: String
+    }
+
+    // The daemon caps rows at the same number; the island enforces it too.
+    static let maxRows = 8
+
+    let id: String
+    let kind: Kind
+    let title: String
+    let subtitle: String
+    let rows: [Row]
+    let body: String
+    let state: String
+    let persist: Bool
+
+    init(id: String, kind: Kind, title: String, subtitle: String = "",
+         rows: [Row] = [], body: String = "", state: String = "", persist: Bool = false) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.subtitle = subtitle
+        self.rows = Array(rows.prefix(Self.maxRows))
+        self.body = body
+        self.state = state
+        self.persist = persist
+    }
+
+    // nil for anything malformed: a card is a convenience, never an error.
+    init?(wire: [String: Any]) {
+        guard let id = wire["id"] as? String, !id.isEmpty,
+              let kind = (wire["kind"] as? String).flatMap(Kind.init(rawValue:)),
+              let title = wire["title"] as? String else { return nil }
+        let rows = (wire["rows"] as? [[String: Any]] ?? []).map {
+            Row(title: $0["title"] as? String ?? "",
+                detail: $0["detail"] as? String ?? "",
+                note: $0["note"] as? String ?? "")
+        }
+        self.init(id: id, kind: kind, title: title,
+                  subtitle: wire["subtitle"] as? String ?? "",
+                  rows: rows,
+                  body: wire["body"] as? String ?? "",
+                  state: wire["state"] as? String ?? "",
+                  persist: wire["persist"] as? Bool ?? false)
+    }
+
+    // A reply that has already gone (or definitively not): it reads for a
+    // short linger, then fades.
+    var isSettledReply: Bool {
+        kind == .reply && ["sent", "unconfirmed", "held"].contains(state)
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     @Published var phase = "idle"
@@ -29,6 +92,11 @@ final class AppState: ObservableObject {
     @Published var navigationSuspended = false
     @Published var navigationGeneration = 0
     @Published var navigationGuidance = ""
+    @Published private(set) var card: IslandCard?
+    // Bumped on every card change so a retire timer armed for an earlier
+    // card can never clear its replacement.
+    private var cardRevision = 0
+    private var cardRetireTask: Task<Void, Never>?
 
     var pendingChip: Chip? { chips.first(where: \.pending) }
     var actionVerified: Bool { lastActionOutcome == "verified" }
@@ -80,10 +148,12 @@ final class AppState: ObservableObject {
             let newPhase = msg["phase"] as? String ?? phase
             if newPhase == "listening", phase != "listening" {
                 // Turn start: stale lines from the last turn never linger
-                // behind the new gesture.
+                // behind the new gesture. A card that does not persist
+                // retires with them.
                 userLine = ""
                 modelLine = ""
                 toast = nil
+                if let card, !card.persist { clearCard() }
             }
             phase = newPhase
             connected = msg["connected"] as? Bool ?? connected
@@ -118,6 +188,13 @@ final class AppState: ObservableObject {
         case "receipt":
             if let r = msg["receipt"] as? [String: Any],
                let usd = r["estimated_usd"] as? Double { spentUSD = usd }
+        case "card":
+            if let payload = msg["card"] as? [String: Any],
+               let next = IslandCard(wire: payload) {
+                setCard(next)
+            }
+        case "card_clear":
+            clearCard()
         case "toast":
             toast = msg["text"] as? String
         case "reject_input":
@@ -130,6 +207,43 @@ final class AppState: ObservableObject {
                 pythonAx: msg["python_ax"] as? String)
         default:
             break
+        }
+    }
+
+    // `retires: false` is for the preview, whose sample cards must hold
+    // still; every daemon card arms its retire rule.
+    func setCard(_ next: IslandCard, retires: Bool = true) {
+        card = next
+        cardRevision &+= 1
+        cardRetireTask?.cancel()
+        cardRetireTask = nil
+        if retires { scheduleCardRetire() }
+    }
+
+    func clearCard() {
+        cardRetireTask?.cancel()
+        cardRetireTask = nil
+        cardRevision &+= 1
+        card = nil
+    }
+
+    // The close button on a card: Swift-local, no daemon message.
+    func dismissCard() {
+        clearCard()
+    }
+
+    // Persisting cards stay until replaced, cleared, or closed. The rest
+    // linger for a token-defined time; a settled reply for a shorter one.
+    private func scheduleCardRetire() {
+        cardRetireTask?.cancel()
+        cardRetireTask = nil
+        guard let card, !card.persist else { return }
+        let linger = card.isSettledReply ? DesignTokens.cardSettledLinger : DesignTokens.cardLinger
+        let revision = cardRevision
+        cardRetireTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(linger))
+            guard !Task.isCancelled, let self, self.cardRevision == revision else { return }
+            self.clearCard()
         }
     }
 
@@ -151,6 +265,8 @@ final class AppState: ObservableObject {
         modelLine = ""
         toast = nil
         level = 0
+        // A card may describe a send whose chip just died with the socket.
+        clearCard()
         clearNavigationState()
     }
 

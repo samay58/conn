@@ -11,6 +11,13 @@ import SwiftUI
 struct IslandChipView: View {
     let chip: Chip
     let client: DaemonClient
+    // Prototype directions restyle the buttons only; the decision path below
+    // (first click wins, approve settles then sends, deny sends at once) is
+    // shared by every style.
+    var style: IslandStyle = .classic
+    // Centered under a centered preview (A and D with no card); otherwise
+    // right-aligned, Mac dialog order.
+    var centered = false
 
     @State private var buttonsVisible = false
     @State private var decision: Decision?
@@ -22,17 +29,41 @@ struct IslandChipView: View {
     // characters, so "Remind tomorrow 9 AM: Call the vet" read "Remind tomorro…"
     // and the click approved words nobody could see.
     var body: some View {
-        HStack(spacing: 12) {
-            denyButton
-            approveButton
-        }
+        buttonRow
         .opacity(buttonsVisible ? 1 : 0)
-        .frame(maxWidth: 280)
         .onAppear {
             client.sendUiAck(moment: "chip")
             withAnimation(.easeOut(duration: DesignTokens.chipOpenDuration)
                 .delay(DesignTokens.chipButtonsFadeDelay)) {
                 buttonsVisible = true
+            }
+        }
+    }
+
+    @ViewBuilder private var buttonRow: some View {
+        if style == .classic {
+            HStack(spacing: 12) {
+                denyButton
+                approveButton
+            }
+            .frame(maxWidth: 280)
+        } else {
+            HStack(spacing: 8) {
+                if !centered { Spacer(minLength: 0) }
+                Button {
+                    decide(.denied)
+                } label: {
+                    GlassButtonLabel(title: "Deny", role: .secondary, ink: style.ink,
+                                     settled: decision == .denied)
+                }
+                .buttonStyle(.plain)
+                Button {
+                    decide(.approved)
+                } label: {
+                    GlassButtonLabel(title: "Approve", role: .primary, ink: style.ink,
+                                     settled: decision == .approved)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

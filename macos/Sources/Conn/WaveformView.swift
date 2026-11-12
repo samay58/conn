@@ -11,6 +11,9 @@ import SwiftUI
 struct IslandWaveform: View {
     var level: Double
     var phase: String
+    // The prototype glass styles draw on light glass, where the on-black
+    // tints wash out; nil keeps the phase tint below.
+    var tintOverride: Color? = nil
 
     // Increments once per timeline tick; the motion-policy test asserts it
     // stays static in every non-active phase.
@@ -27,6 +30,7 @@ struct IslandWaveform: View {
     }
 
     private var tint: Color {
+        if let tintOverride { return tintOverride }
         switch phase {
         case "listening": return DesignTokens.islandAccent
         case "speaking": return DesignTokens.islandText

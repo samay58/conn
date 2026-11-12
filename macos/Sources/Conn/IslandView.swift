@@ -16,6 +16,9 @@ final class IslandReveal: ObservableObject {
     // IslandController updates it on every summon (the chip frame is taller,
     // so its collapsed scale differs); nil falls back to the view's default.
     var collapsedScale: (x: CGFloat, y: CGFloat)?
+    // The card tile's measured height, written by IslandView and read by
+    // IslandController to grow the panel below the island. 0 with no card.
+    @Published var cardHeight: CGFloat = 0
 }
 
 @MainActor
@@ -25,6 +28,10 @@ struct IslandView: View {
     var topInset: CGFloat = 32
     var collapsedScale: (x: CGFloat, y: CGFloat) = (0.6, 0.35)
     @ObservedObject var reveal: IslandReveal
+    // Prototype directions (IslandGlassStyles.swift). Production passes
+    // neither, reads the token, and the token defaults to classic.
+    var notchWidth: CGFloat = 0
+    var styleOverride: IslandStyle? = nil
 
     @State private var shakeOffset: CGFloat = 0
     @State private var shapeScaleX: CGFloat = 1
@@ -44,6 +51,43 @@ struct IslandView: View {
     }
 
     var body: some View {
+        let style = styleOverride ?? DesignTokens.islandStyle
+        if style == .classic {
+            classicBody
+        } else {
+            IslandGlassSurface(
+                style: style, state: state, client: client,
+                topInset: topInset, notchWidth: notchWidth,
+                reveal: reveal)
+        }
+    }
+
+    // The island at its fixed height, then the card (if any) as a second
+    // black tile below it. The card takes its ideal height and reports it, so
+    // the panel grows to fit it rather than squeezing it.
+    private var classicBody: some View {
+        VStack(spacing: DesignTokens.cardGap) {
+            classicIsland
+                .frame(height: topInset + DesignTokens.islandContentHeight
+                           + (chipShowing ? DesignTokens.chipRowHeight : 0))
+            if let card = state.card {
+                ClassicCardTile(card: card, onClose: { state.dismissCard() })
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        reveal.cardHeight = height
+                    }
+                    .opacity(contentOpacity)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(.easeOut(duration: DesignTokens.cardFadeDuration), value: state.card?.id)
+        .onChange(of: state.card == nil) { _, gone in
+            if gone { reveal.cardHeight = 0 }
+        }
+    }
+
+    private var classicIsland: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: topInset)
             belowNotch
@@ -377,6 +421,9 @@ private struct IslandBreath: ViewModifier {
 // static at full opacity.
 struct ThinkingEllipsis: View {
     var phase: String
+    // nil keeps the signature lilac; the light-glass prototype passes a
+    // deeper tone of the same hue.
+    var tint: Color? = nil
 
     // Increments once per timeline tick; the motion-policy test asserts it
     // stays static in every phase but thinking.
@@ -398,7 +445,7 @@ struct ThinkingEllipsis: View {
             }
         }
         .font(.system(size: 11, weight: .medium))
-        .foregroundStyle(DesignTokens.islandAccent)
+        .foregroundStyle(tint ?? DesignTokens.islandAccent)
     }
 
     private func dots(at t: Double, ticked: Bool) -> some View {

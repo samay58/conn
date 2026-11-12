@@ -37,13 +37,21 @@ struct IslandGeometry {
     // Island top edge stays flush to the screen edge; the shape grows downward
     // out of the notch. Height is the notch depth plus the content lane, so all
     // readable content lives below the physical notch and never clips into it.
-    func expandedFrame(chipOpen: Bool) -> CGRect {
+    // A card hangs below the island as its own tile, so a card height (the
+    // tile as measured by IslandView) adds the gap and the tile. The summon
+    // scale below ignores it: the morph scales the island, not the card.
+    func expandedFrame(chipOpen: Bool, cardHeight: CGFloat = 0) -> CGRect {
         var frame = notchRect.insetBy(dx: -DesignTokens.islandGrowWidth, dy: 0)
         frame.size.height = notchRect.height + DesignTokens.islandContentHeight
         frame.origin.y = screenFrame.maxY - frame.height
         if chipOpen {
             frame.size.height += DesignTokens.chipRowHeight
             frame.origin.y -= DesignTokens.chipRowHeight
+        }
+        if cardHeight > 0 {
+            let extra = DesignTokens.cardGap + cardHeight
+            frame.size.height += extra
+            frame.origin.y -= extra
         }
         return frame
     }
