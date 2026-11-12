@@ -25,7 +25,7 @@ enum IslandStyle: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .classic: return "Classic"
-        case .d: return "D  Character"
+        case .d: return "Character"
         }
     }
 

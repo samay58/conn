@@ -6,8 +6,10 @@ import SwiftUI
 // session. The cycler steps through every reviewable state (nine phases plus
 // toast, chips, and the card states); Replay and Collapse drive the same
 // reveal tokens IslandController uses live. The style picker flips every
-// sample between classic and D, Character (IslandGlassStyles.swift), and Morph keeps one island on stage so stepping through states
-// shows the transitions between them. `Conn --preview --shoot <dir>` writes
+// sample between Classic and Character (IslandGlassStyles.swift), and Morph
+// keeps one island on stage so stepping through states
+// shows the transitions between them. `--state <id>` opens on one state.
+// `Conn --preview --shoot <dir>` writes
 // <style>-<state>.png for classic and d in every state headlessly, plus
 // floating-<state>.png: the non-notch fallback panel's Character pill.
 
@@ -27,20 +29,37 @@ enum PreviewRunner {
         let mirror = PreviewSample.mirror()
         startLevelTimer(samples: samples + [mirror])
 
-        let hosting = NSHostingView(rootView: IslandPreviewRoot(samples: samples, mirror: mirror))
-        hosting.sizingOptions = [.preferredContentSize]
+        // `--state <id>` opens on that state, for example `--state reply_long`.
+        var initial = "listening"
+        if let flag = args.firstIndex(of: "--state"), flag + 1 < args.count,
+           samples.contains(where: { $0.id == args[flag + 1] }) {
+            initial = args[flag + 1]
+        }
+        let hosting = NSHostingView(rootView: IslandPreviewRoot(samples: samples, mirror: mirror,
+                                                                selection: initial))
 
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 760),
-                              styleMask: [.titled, .closable],
+        // A fixed default size that fits the screen; the window resizes and
+        // the stage scales with it. The title bar is transparent so the
+        // preview's own top bar sits in its place.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1400, height: 880),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
-        window.title = "Conn island preview"
+        window.title = "Island preview"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
         window.contentView = hosting
+        window.contentMinSize = NSSize(width: 1180, height: 680)
         window.appearance = NSAppearance(named: .aqua)
         if let screen = NSScreen.main {
-            let f = screen.visibleFrame
-            window.setFrameOrigin(NSPoint(x: f.maxX - 1300, y: f.minY + 40))
+            let visible = screen.visibleFrame.insetBy(dx: 24, dy: 24)
+            var frame = window.frame
+            frame.size.width = min(frame.width, visible.width)
+            frame.size.height = min(frame.height, visible.height)
+            frame.origin = NSPoint(x: visible.midX - frame.width / 2, y: visible.midY - frame.height / 2)
+            window.setFrame(frame, display: false)
         }
-        window.orderFrontRegardless()
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
         app.run()
     }
 
@@ -245,7 +264,7 @@ final class PreviewSample: Identifiable {
                                   status: "running")]
                 $0.spentUSD = 0.021
             },
-            sample("awaiting_approval", "Awaiting approval",
+            sample("awaiting_approval", "Approval, no chip yet",
                    "approval treatment before the ledger lands (defensive render)") {
                 $0.connected = true
                 $0.live = true
@@ -281,7 +300,7 @@ final class PreviewSample: Identifiable {
                 $0.modelLine = "Still thinking."
                 $0.spentUSD = 0.044
             },
-            sample("chip", "Chip open", "live Deny and Approve inside the island",
+            sample("chip", "Approval chip", "live Deny and Approve inside the island",
                    phase: "awaiting_approval") {
                 $0.connected = true
                 $0.live = true
@@ -301,7 +320,7 @@ final class PreviewSample: Identifiable {
                                   status: "running")]
                 $0.spentUSD = 0.018
             },
-            sample("chip_capture", "Chip (longest preview)",
+            sample("chip_capture", "Longest preview",
                    "a preview at the daemon's full budget",
                    phase: "awaiting_approval") {
                 $0.connected = true
@@ -311,7 +330,7 @@ final class PreviewSample: Identifiable {
                                   status: "proposed")]
                 $0.spentUSD = 0.029
             },
-            sample("chip_connector", "Chip (connector write)",
+            sample("chip_connector", "Connector write",
                    "the longest common write preview at the daemon's budget",
                    phase: "awaiting_approval") {
                 $0.connected = true
@@ -322,7 +341,7 @@ final class PreviewSample: Identifiable {
                                   status: "proposed")]
                 $0.spentUSD = 0.029
             },
-            sample("reply_draft", "Card: reply draft",
+            sample("reply_draft", "Reply draft",
                    "a persisting draft card with a close button",
                    phase: "speaking", card: reply("draft", title: "Draft")) {
                 $0.connected = true
@@ -330,7 +349,7 @@ final class PreviewSample: Identifiable {
                 $0.modelLine = "Here's a draft for Sam."
                 $0.spentUSD = 0.041
             },
-            sample("reply_approve", "Card: reply to send",
+            sample("reply_approve", "Reply to send",
                    "the full body above the existing Deny and Approve chip",
                    phase: "awaiting_approval", card: reply("approve", title: "Send this?")) {
                 $0.connected = true
@@ -340,7 +359,7 @@ final class PreviewSample: Identifiable {
                                   status: "proposed")]
                 $0.spentUSD = 0.043
             },
-            sample("reply_sent", "Card: reply sent",
+            sample("reply_sent", "Reply sent",
                    "a settled reply, fading after the short linger",
                    phase: "done", card: reply("sent", title: "Sent")) {
                 $0.connected = true
@@ -349,7 +368,7 @@ final class PreviewSample: Identifiable {
                 $0.lastActionOutcome = "verified"
                 $0.spentUSD = 0.046
             },
-            sample("reply_long", "Card: long reply to send",
+            sample("reply_long", "Long reply to send",
                    "a long body scrolls inside the card; Approve stays put",
                    phase: "awaiting_approval",
                    card: reply("approve", title: "Send this?", body: longText)) {
@@ -360,7 +379,7 @@ final class PreviewSample: Identifiable {
                                   status: "proposed")]
                 $0.spentUSD = 0.047
             },
-            sample("reply_held", "Card: reply not sent",
+            sample("reply_held", "Reply not sent",
                    "a refused or denied send says so and stays long enough to read",
                    phase: "done", card: reply("held", title: "Not sent")) {
                 $0.connected = true
@@ -369,7 +388,7 @@ final class PreviewSample: Identifiable {
                 $0.lastActionOutcome = "blocked"
                 $0.spentUSD = 0.044
             },
-            sample("list_today", "Card: today",
+            sample("list_today", "Today list",
                    "a task list: title left, kind right, no note line",
                    phase: "speaking", card: todayList) {
                 $0.connected = true
@@ -377,7 +396,7 @@ final class PreviewSample: Identifiable {
                 $0.modelLine = "Four things are open today."
                 $0.spentUSD = 0.036
             },
-            sample("list", "Card: replies owed",
+            sample("list", "Replies owed",
                    "a list card that retires on the next push-to-talk",
                    phase: "speaking", card: owedList) {
                 $0.connected = true
@@ -414,7 +433,8 @@ struct PreviewStage: View {
     // The non-notch fallback: the pill floats under the menu bar.
     var floating = false
 
-    static let size = NSSize(width: 560, height: 360)
+    // Tall enough for the longest card with Approve below it.
+    static let size = NSSize(width: 560, height: 470)
     private static let notchInset: CGFloat = 30
     private static let notchWidth: CGFloat = 200
 
@@ -552,147 +572,260 @@ private struct CrosshairOverlay: View {
     }
 }
 
+// The three sections of the state list, in the order a turn moves through
+// them: the island's own phases, then approvals, then the cards.
+enum PreviewGroup: String, CaseIterable, Identifiable {
+    case phases = "Phases"
+    case approvals = "Approvals"
+    case cards = "Cards"
+    var id: String { rawValue }
+}
+
+extension PreviewSample {
+    var group: PreviewGroup {
+        if id.hasPrefix("reply_") || id.hasPrefix("list_") || id == "list" { return .cards }
+        if id.hasPrefix("chip") || id == "awaiting_approval" { return .approvals }
+        return .phases
+    }
+}
+
+// The window: a top bar, the state list, the stage, and the inspector.
+// Arrow keys move through the list because it is a native selectable List;
+// no key handling is registered here.
 @MainActor
 private struct IslandPreviewRoot: View {
     let samples: [PreviewSample]
     let mirror: PreviewSample
-    @State private var index = 1
-    @State private var crosshair = false
+    @State var selection: String?
+    @State private var guides = false
     @State private var morph = false
+    @State private var fit = true
     // Observing the token store re-renders the staged island on every
     // inspector edit, so palette and personality changes land live.
     @ObservedObject private var tokens = DesignTokens.current
 
+    private var index: Int { samples.firstIndex { $0.id == selection } ?? 0 }
     private var selected: PreviewSample { samples[index] }
     private var staged: PreviewSample { morph ? mirror : selected }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            header
-            HStack(alignment: .top, spacing: 24) {
-                mainStage
+        VStack(spacing: 0) {
+            PreviewTopBar(
+                position: "\(index + 1) of \(samples.count)",
+                style: $tokens.islandStyle,
+                morph: $morph, guides: $guides, fit: $fit,
+                previous: { move(-1) }, next: { move(1) },
+                replay: { staged.reveal.token &+= 1 },
+                collapse: { staged.reveal.collapseToken &+= 1 })
+            Divider()
+            HStack(spacing: 0) {
                 stateList
-                InspectorView(
-                    tokens: tokens,
-                    replay: { staged.reveal.token &+= 1 },
-                    collapse: { staged.reveal.collapseToken &+= 1 })
+                    .frame(width: 236)
+                Divider()
+                PreviewCanvas(sample: selected, staged: staged, guides: guides, fit: fit,
+                              stageID: morph ? "mirror" : selected.id + tokens.islandStyle.rawValue)
+                Divider()
+                InspectorView(tokens: tokens)
+                    .frame(width: 372)
             }
         }
-        .padding(28)
-        .background(PreviewBackdropColor())
-    }
-
-    private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Conn island preview")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
-                Text("The canonical IslandView against a fake state per phase. Replay drives the live reveal tokens.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
-            }
-            Spacer()
-            controls
+        .ignoresSafeArea(.container, edges: .top)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: morph) { _, on in
+            if on { mirror.adopt(selected) }
         }
-    }
-
-    private var controls: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            Picker("Style", selection: $tokens.islandStyle) {
-                ForEach(IslandStyle.allCases) { style in
-                    Text(style.title).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 420)
-            HStack(spacing: 8) {
-                Toggle("Morph", isOn: $morph)
-                    .toggleStyle(.checkbox)
-                    .onChange(of: morph) { _, on in
-                        if on { mirror.adopt(selected) }
-                    }
-                Toggle("Crosshair", isOn: $crosshair)
-                    .toggleStyle(.checkbox)
-                Button("Previous") { move(-1) }
-                Button("Replay") { staged.reveal.token &+= 1 }
-                Button("Collapse") { staged.reveal.collapseToken &+= 1 }
-                Button("Next") { move(1) }
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    private var mainStage: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ZStack(alignment: .top) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.white.opacity(0.70))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-                PreviewStage(sample: staged, crosshair: crosshair)
-                    .padding(.top, 10)
-                    .id(morph ? "mirror" : selected.id + tokens.islandStyle.rawValue)
-            }
-            .frame(width: 580, height: 380)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(selected.title)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
-                Text(selected.note)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
+        .onChange(of: selection) { _, next in
+            guard morph, let next, let sample = samples.first(where: { $0.id == next }) else { return }
+            // With Morph on, the one staged island adopts the new state
+            // inside the morph spring, so the transition plays instead of a cut.
+            withAnimation(.spring(DesignTokens.glassMorphSpring)) {
+                mirror.adopt(sample)
             }
         }
     }
 
     private var stateList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(samples.indices, id: \.self) { sampleIndex in
-                let sample = samples[sampleIndex]
-                Button {
-                    select(sampleIndex)
-                } label: {
-                    HStack(spacing: 10) {
-                        PreviewDot(state: sample.state)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(sample.title)
-                                .font(.system(size: 12.5, weight: .medium))
-                            Text(sample.state.stateLabel)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color(red: 0.46, green: 0.43, blue: 0.38))
-                        }
-                        Spacer()
+        List(selection: $selection) {
+            ForEach(PreviewGroup.allCases) { group in
+                Section(group.rawValue) {
+                    ForEach(samples.filter { $0.group == group }) { sample in
+                        PreviewRow(sample: sample)
+                            .tag(sample.id)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(sampleIndex == index ? Color.black.opacity(0.08) : Color.white.opacity(0.38))
-                    )
                 }
-                .buttonStyle(.plain)
             }
         }
-        .frame(width: 230)
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
     }
 
     private func move(_ delta: Int) {
-        select((index + delta + samples.count) % samples.count)
+        selection = samples[(index + delta + samples.count) % samples.count].id
+    }
+}
+
+// The bar across the top. It sits in the title bar's space, so it leaves
+// room on the left for the window buttons.
+private struct PreviewTopBar: View {
+    let position: String
+    @Binding var style: IslandStyle
+    @Binding var morph: Bool
+    @Binding var guides: Bool
+    @Binding var fit: Bool
+    var previous: () -> Void
+    var next: () -> Void
+    var replay: () -> Void
+    var collapse: () -> Void
+
+    private static let windowButtonsWidth: CGFloat = 76
+
+    var body: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Island preview")
+                    .font(.headline)
+                Text(position)
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            stepper
+            Spacer(minLength: 16)
+            Picker("Style", selection: $style) {
+                ForEach(IslandStyle.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Island style")
+            Spacer(minLength: 16)
+            HStack(spacing: 6) {
+                Button(action: replay) { Label("Replay", systemImage: "play.fill") }
+                    .help("Play the summon again")
+                Button(action: collapse) { Label("Collapse", systemImage: "arrow.down.right.and.arrow.up.left") }
+                    .help("Play the collapse")
+            }
+            Divider().frame(height: 18)
+            HStack(spacing: 6) {
+                Toggle(isOn: $morph) { Label("Morph", systemImage: "wand.and.rays") }
+                    .help("Keep one island on stage and animate between states")
+                Toggle(isOn: $guides) { Label("Guides", systemImage: "plus.viewfinder") }
+                    .help("Show center lines")
+                Toggle(isOn: $fit) { Label("Fit", systemImage: "arrow.up.left.and.arrow.down.right") }
+                    .help("Scale the stage to the window; off shows actual size")
+            }
+            .toggleStyle(.button)
+        }
+        .labelStyle(.titleAndIcon)
+        .buttonStyle(.accessoryBar)
+        .padding(.leading, Self.windowButtonsWidth)
+        .padding(.trailing, 14)
+        .frame(height: 52)
     }
 
-    // With Morph on, the one staged island adopts the new state inside the
-    // morph spring, so the transition plays instead of a cut.
-    private func select(_ next: Int) {
-        index = next
-        guard morph else { return }
-        withAnimation(.spring(DesignTokens.glassMorphSpring)) {
-            mirror.adopt(samples[next])
+    private var stepper: some View {
+        ControlGroup {
+            Button(action: previous) { Image(systemName: "chevron.left") }
+                .help("Previous state")
+            Button(action: next) { Image(systemName: "chevron.right") }
+                .help("Next state")
         }
+        .fixedSize()
+    }
+}
+
+private struct PreviewRow: View {
+    let sample: PreviewSample
+
+    var body: some View {
+        HStack(spacing: 9) {
+            PreviewDot(state: sample.state)
+            Text(sample.title)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// The stage on a neutral canvas, scaled to fit unless Fit is off, with the
+// selected state's name and what to look for underneath.
+@MainActor
+private struct PreviewCanvas: View {
+    let sample: PreviewSample
+    let staged: PreviewSample
+    let guides: Bool
+    let fit: Bool
+    let stageID: String
+
+    private static let margin: CGFloat = 40
+    private static let captionHeight: CGFloat = 76
+    private static let maxScale: CGFloat = 2
+    private static let corner: CGFloat = 12
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = scale(for: proxy.size)
+            VStack(spacing: 18) {
+                PreviewStage(sample: staged, crosshair: guides)
+                    .id(stageID)
+                    .clipShape(RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
+                    .scaleEffect(scale)
+                    .frame(width: PreviewStage.size.width * scale,
+                           height: PreviewStage.size.height * scale)
+                    .background(
+                        RoundedRectangle(cornerRadius: Self.corner * scale, style: .continuous)
+                            .fill(Color.black)
+                            .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+                            .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+                            .shadow(color: .black.opacity(0.10), radius: 28, y: 14))
+                caption
+                    .frame(width: max(PreviewStage.size.width * scale, 360), alignment: .leading)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .onAppear { shownScale = scale }
+            .onChange(of: scale) { _, next in shownScale = next }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.primary.opacity(0.035))
+    }
+
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(sample.title)
+                    .font(.title3.weight(.semibold))
+                if sample.state.stateLabel != sample.title {
+                    Text(sample.state.stateLabel)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.primary.opacity(0.06)))
+                }
+                Spacer()
+                Text(scaleLabel)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+            Text(sample.note.prefix(1).capitalized + sample.note.dropFirst() + ".")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .frame(height: Self.captionHeight, alignment: .top)
+    }
+
+    @State private var shownScale: CGFloat = 1
+    private var scaleLabel: String {
+        shownScale == 1 ? "Actual size" : "Scaled to \(Int((shownScale * 100).rounded()))%"
+    }
+
+    private func scale(for size: CGSize) -> CGFloat {
+        guard fit else { return 1 }
+        let width = (size.width - 2 * Self.margin) / PreviewStage.size.width
+        let height = (size.height - 2 * Self.margin - Self.captionHeight) / PreviewStage.size.height
+        return max(0.5, min(Self.maxScale, width, height))
     }
 }
 
@@ -706,20 +839,16 @@ private struct PreviewDot: View {
     }
 
     private var color: Color {
+        // A refused or denied send ends in "done" but is not a success.
+        if state.lastActionOutcome == "blocked" { return DesignTokens.islandRed }
         switch state.phase {
-        case "idle": return Color.black.opacity(0.30)
+        case "idle": return Color(nsColor: .tertiaryLabelColor)
         case "listening": return DesignTokens.islandAccent
         case "awaiting_approval": return DesignTokens.islandAmber
         case "done": return DesignTokens.islandGreen
         case "failed": return DesignTokens.islandRed
         case "budget_hold": return DesignTokens.islandGold
-        default: return DesignTokens.islandTextSecondary
+        default: return Color(nsColor: .secondaryLabelColor)
         }
-    }
-}
-
-private struct PreviewBackdropColor: View {
-    var body: some View {
-        Color(red: 0.96, green: 0.95, blue: 0.92)
     }
 }

@@ -1,97 +1,101 @@
 import AppKit
 import SwiftUI
 
-// The tuning playground inspector (packet I12). Every raw motion,
-// personality, and palette token renders as a slider or color well beside
-// the preview; derived values recompute live and display read-only. Replay
-// drives the same reveal tokens IslandController uses. Write Back
-// regenerates DesignTokens.swift on disk from the template (raw literals
-// only; the derived block is verbatim) and prints the spec-table diff to
-// stdout for manual paste-back.
+// The tuning inspector beside the preview stage. Every raw motion,
+// personality, and palette token renders as a slider or color well; derived
+// values recompute live and display read-only. "Write to source" regenerates
+// DesignTokens.swift on disk from the template (raw literals only; the
+// derived block is verbatim) and prints the spec-table diff to stdout for
+// manual paste-back.
 
 struct InspectorView: View {
     @ObservedObject var tokens: DesignTokenStore
-    var replay: () -> Void
-    var collapse: () -> Void
 
     @State private var writeBackNote: String?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                actions
-                section("Summon and collapse") {
-                    slider("summon response", spring(\.summonSpring, \.response), 0.1...0.6)
-                    slider("summon damping", spring(\.summonSpring, \.dampingRatio), 0.3...1.0)
-                    slider("collapse response", spring(\.collapseSpring, \.response), 0.1...0.6)
-                    slider("collapse damping", spring(\.collapseSpring, \.dampingRatio), 0.3...1.0)
-                    slider("content stagger", $tokens.contentStaggerDelay, 0.0...0.3)
+            VStack(alignment: .leading, spacing: 20) {
+                group("Summon and collapse") {
+                    slider("Summon response", spring(\.summonSpring, \.response), 0.1...0.6, unit: "s")
+                    slider("Summon damping", spring(\.summonSpring, \.dampingRatio), 0.3...1.0)
+                    slider("Collapse response", spring(\.collapseSpring, \.response), 0.1...0.6, unit: "s")
+                    slider("Collapse damping", spring(\.collapseSpring, \.dampingRatio), 0.3...1.0)
+                    slider("Content stagger", $tokens.contentStaggerDelay, 0.0...0.3, unit: "s")
                 }
-                section("Personality") {
-                    slider("aliveness", $tokens.aliveness, 0.0...1.0)
-                    slider("breath amplitude", $tokens.breathAmplitude, 0.0...0.05)
-                    slider("breath period", $tokens.breathPeriod, 1.0...6.0)
-                    slider("height overshoot", $tokens.squashHeightOvershoot, 0.0...0.12)
-                    slider("width overshoot", $tokens.squashWidthOvershoot, 0.0...0.12)
-                    slider("width lead ms", $tokens.squashWidthLeadMs, 0.0...120.0)
-                    slider("exhale contraction", $tokens.exhaleContraction, 0.0...0.08)
-                    slider("exhale duration", $tokens.exhaleDuration, 0.1...0.6)
+                group("Personality") {
+                    slider("Aliveness", $tokens.aliveness, 0.0...1.0)
+                    slider("Breath amplitude", $tokens.breathAmplitude, 0.0...0.05)
+                    slider("Breath period", $tokens.breathPeriod, 1.0...6.0, unit: "s")
+                    slider("Height overshoot", $tokens.squashHeightOvershoot, 0.0...0.12)
+                    slider("Width overshoot", $tokens.squashWidthOvershoot, 0.0...0.12)
+                    slider("Width lead", $tokens.squashWidthLeadMs, 0.0...120.0, unit: "ms")
+                    slider("Exhale contraction", $tokens.exhaleContraction, 0.0...0.08)
+                    slider("Exhale duration", $tokens.exhaleDuration, 0.1...0.6, unit: "s")
+                } footer: {
+                    derivedFooter
                 }
-                section("Derived (read-only)") {
-                    derived("width lead", TokenWriteback.fmt(tokens.squashWidthLead) + "s")
-                    derived("width spring damping", TokenWriteback.fmt(tokens.summonWidthSpring.dampingRatio))
-                    derived("height spring damping", TokenWriteback.fmt(tokens.summonHeightSpring.dampingRatio))
+                group("Beats") {
+                    slider("Chip open", $tokens.chipOpenDuration, 0.05...0.4, unit: "s")
+                    slider("Chip buttons fade", $tokens.chipButtonsFadeDelay, 0.0...0.3, unit: "s")
+                    slider("Chip confirm settle", $tokens.chipConfirmSettleDuration, 0.0...0.4, unit: "s")
+                    slider("State word crossfade", $tokens.stateWordCrossfade, 0.05...0.4, unit: "s")
+                    slider("Done settle", $tokens.doneSettleDuration, 0.1...0.8, unit: "s")
+                    slider("Done collapse delay", $tokens.doneCollapseDelay, 0.2...2.5, unit: "s")
+                    slider("Failed collapse delay", $tokens.failedCollapseDelay, 0.5...6.0, unit: "s")
+                    slider("Refusal pulse", $tokens.refusalPulseDuration, 0.1...0.6, unit: "s")
+                    slider("Belay snap", $tokens.belaySnapDuration, 0.05...0.4, unit: "s")
+                    slider("Toast duration", $tokens.toastDuration, 1.0...6.0, unit: "s")
+                    slider("Ellipsis period", $tokens.thinkingEllipsisPeriod, 0.4...3.0, unit: "s")
+                    slider("Dot opacity floor", $tokens.thinkingDotOpacityFloor, 0.0...0.8)
                 }
-                section("Beats") {
-                    slider("chip open", $tokens.chipOpenDuration, 0.05...0.4)
-                    slider("chip buttons fade", $tokens.chipButtonsFadeDelay, 0.0...0.3)
-                    slider("chip confirm settle", $tokens.chipConfirmSettleDuration, 0.0...0.4)
-                    slider("state word crossfade", $tokens.stateWordCrossfade, 0.05...0.4)
-                    slider("done settle", $tokens.doneSettleDuration, 0.1...0.8)
-                    slider("done collapse delay", $tokens.doneCollapseDelay, 0.2...2.5)
-                    slider("failed collapse delay", $tokens.failedCollapseDelay, 0.5...6.0)
-                    slider("refusal pulse", $tokens.refusalPulseDuration, 0.1...0.6)
-                    slider("belay snap", $tokens.belaySnapDuration, 0.05...0.4)
-                    slider("toast duration", $tokens.toastDuration, 1.0...6.0)
-                    slider("ellipsis period", $tokens.thinkingEllipsisPeriod, 0.4...3.0)
-                    slider("dot opacity floor", $tokens.thinkingDotOpacityFloor, 0.0...0.8)
+                group("Palette") {
+                    slider("Text opacity", $tokens.islandTextOpacity, 0.5...1.0)
+                    slider("Secondary opacity", $tokens.islandTextSecondaryOpacity, 0.2...1.0)
+                    colorWell("Accent", \.islandAccentRGB)
+                    colorWell("Amber", \.islandAmberRGB)
+                    colorWell("Green", \.islandGreenRGB)
+                    colorWell("Red", \.islandRedRGB)
+                    colorWell("Gold", \.islandGoldRGB)
                 }
-                section("Palette") {
-                    slider("text opacity", $tokens.islandTextOpacity, 0.5...1.0)
-                    slider("secondary opacity", $tokens.islandTextSecondaryOpacity, 0.2...1.0)
-                    colorWell("accent (lilac)", \.islandAccentRGB)
-                    colorWell("amber", \.islandAmberRGB)
-                    colorWell("green", \.islandGreenRGB)
-                    colorWell("red", \.islandRedRGB)
-                    colorWell("gold", \.islandGoldRGB)
-                }
-                section("Tool capsule and override") {
-                    slider("capsule height", cg($tokens.toolChipHeight), 14.0...30.0)
-                    slider("capsule padding", cg($tokens.toolChipPaddingH), 4.0...16.0)
-                    slider("capsule bg opacity", $tokens.toolChipBgOpacity, 0.02...0.3)
-                    slider("override radius", cg($tokens.overrideCornerRadius), 4.0...11.0)
-                }
-                if let note = writeBackNote {
-                    Text(note)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
+                group("Tool capsule and override") {
+                    slider("Capsule height", cg($tokens.toolChipHeight), 14.0...30.0, unit: "pt")
+                    slider("Capsule padding", cg($tokens.toolChipPaddingH), 4.0...16.0, unit: "pt")
+                    slider("Capsule fill", $tokens.toolChipBgOpacity, 0.02...0.3)
+                    slider("Override radius", cg($tokens.overrideCornerRadius), 4.0...11.0, unit: "pt")
                 }
             }
             .padding(16)
         }
-        .frame(width: 300)
-        .background(Color.white.opacity(0.38))
+        .controlSize(.small)
+        .safeAreaInset(edge: .bottom, spacing: 0) { writeBar }
     }
 
-    // MARK: actions
+    // MARK: write back
 
-    private var actions: some View {
-        HStack(spacing: 8) {
-            Button("Replay", action: replay)
-            Button("Collapse", action: collapse)
-            Button("Write Back", action: writeBack)
+    private var writeBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            HStack {
+                if let note = writeBackNote {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                } else {
+                    Text("Changes apply live and reset on quit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button("Write to source", action: writeBack)
+                    .help("Save these values into DesignTokens.swift")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .buttonStyle(.bordered)
+        .background(.bar)
     }
 
     private func writeBack() {
@@ -99,12 +103,25 @@ struct InspectorView: View {
         let path = DesignTokens.sourceFilePath
         do {
             try text.write(toFile: path, atomically: true, encoding: .utf8)
-            writeBackNote = "wrote \(path)"
+            writeBackNote = "Saved to \((path as NSString).lastPathComponent)"
         } catch {
-            writeBackNote = "write failed: \(error.localizedDescription)"
+            writeBackNote = "Could not save: \(error.localizedDescription)"
         }
         print("write-back: \(writeBackNote ?? "")")
         print(TokenWriteback.specTableDiff(from: DesignTokenStore(), to: tokens))
+    }
+
+    private var derivedFooter: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Derived: width lead \(Self.short(tokens.squashWidthLead)) s, "
+                 + "width damping \(Self.short(tokens.summonWidthSpring.dampingRatio)), "
+                 + "height damping \(Self.short(tokens.summonHeightSpring.dampingRatio))")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: bindings
@@ -144,57 +161,74 @@ struct InspectorView: View {
 
     // MARK: rows
 
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    // A titled group of rows on one rounded panel.
+    private func group<Content: View>(_ title: String,
+                                      @ViewBuilder content: () -> Content) -> some View {
+        group(title, content: content) { EmptyView() }
+    }
+
+    private func group<Content: View, Footer: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder footer: () -> Footer
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
-            content()
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 4)
+            VStack(spacing: 0) {
+                content()
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: Self.rowHeight)
+            }
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: Self.panelRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.panelRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.07)))
+            footer()
+                .padding(.horizontal, 4)
         }
     }
 
-    private func slider(_ label: String, _ value: Binding<Double>, _ range: ClosedRange<Double>) -> some View {
-        HStack(spacing: 8) {
+    private static let rowHeight: CGFloat = 30
+    private static let panelRadius: CGFloat = 8
+
+
+    private static func short(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...3)))
+    }
+
+    private func slider(_ label: String, _ value: Binding<Double>, _ range: ClosedRange<Double>,
+                        unit: String? = nil) -> some View {
+        HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
-                .frame(width: 118, alignment: .leading)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Slider(value: value, in: range)
-            Text(TokenWriteback.fmt(value.wrappedValue))
-                .font(.system(size: 11))
+                .frame(width: Self.sliderWidth)
+            Text(Self.short(value.wrappedValue) + (unit.map { " \($0)" } ?? ""))
                 .monospacedDigit()
-                .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
-                .frame(width: 44, alignment: .trailing)
+                .foregroundStyle(.secondary)
+                .frame(width: Self.valueWidth, alignment: .trailing)
         }
     }
 
-    private func derived(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
-                .frame(width: 118, alignment: .leading)
-            Spacer()
-            Text(value)
-                .font(.system(size: 11))
-                .monospacedDigit()
-                .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
-        }
-    }
+    private static let sliderWidth: CGFloat = 112
+    private static let valueWidth: CGFloat = 50
 
     private func colorWell(_ label: String, _ kp: ReferenceWritableKeyPath<DesignTokenStore, PaletteColor>) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(red: 0.36, green: 0.34, blue: 0.30))
-                .frame(width: 118, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(TokenWriteback.hex(tokens[keyPath: kp]))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
             ColorPicker("", selection: colorBinding(kp), supportsOpacity: false)
                 .labelsHidden()
-            Spacer()
-            Text(TokenWriteback.hex(tokens[keyPath: kp]))
-                .font(.system(size: 11))
-                .monospacedDigit()
-                .foregroundStyle(Color(red: 0.12, green: 0.11, blue: 0.10))
         }
     }
 }
