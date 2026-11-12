@@ -114,7 +114,10 @@ struct IslandView: View {
                     .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(DesignTokens.islandGreen)
             }
-            if state.toast == nil, state.phase == "thinking" {
+            if state.toast == nil, state.phase == "awaiting_approval",
+               let chip = state.pendingChip {
+                approvalPreview(chip.preview)
+            } else if state.toast == nil, state.phase == "thinking" {
                 ThinkingEllipsis(phase: state.phase)
             } else if state.toast == nil, state.phase == "acting",
                       let label = runningToolLabel {
@@ -166,6 +169,23 @@ struct IslandView: View {
         .buttonStyle(.plain)
     }
 
+    // What the click approves, on the full-width caption line: the amber dot
+    // marks it as waiting on the user, the words stay primary-white to read.
+    private func approvalPreview(_ preview: String) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(DesignTokens.islandAmber)
+                .frame(width: 5, height: 5)
+            Text(preview)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(DesignTokens.islandText)
+                .lineLimit(1)
+                // The daemon budgets previews to fit whole; if this ever
+                // fires it clips the end, never mid-word in the middle.
+                .truncationMode(.tail)
+        }
+    }
+
     // The running tool as a quiet capsule, in place of the caption line.
     private func toolCapsule(_ label: String) -> some View {
         Text(label)
@@ -195,7 +215,8 @@ struct IslandView: View {
     }
 
     private var showsCost: Bool {
-        state.spentUSD > 0 && !primaryIsSpeech && state.toast == nil
+        // An approval preview gets the whole line; spend shows again after the click.
+        state.spentUSD > 0 && !primaryIsSpeech && state.toast == nil && !chipShowing
     }
 
     // MARK: colors

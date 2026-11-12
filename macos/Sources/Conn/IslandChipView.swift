@@ -17,26 +17,16 @@ struct IslandChipView: View {
 
     private enum Decision { case approved, denied }
 
+    // The preview itself renders on the caption line above (IslandView), which
+    // has the island's full width: beside the buttons it had about 15
+    // characters, so "Remind tomorrow 9 AM: Call the vet" read "Remind tomorro…"
+    // and the click approved words nobody could see.
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(DesignTokens.islandAmber)
-                .frame(width: 5, height: 5)
-            Text(chip.preview)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(DesignTokens.islandText)
-                .lineLimit(1)
-                // The daemon budgets previews to fit whole; if this ever
-                // fires it clips the end, never mid-word in the middle.
-                .truncationMode(.tail)
-            Spacer(minLength: 12)
-            HStack(spacing: 12) {
-                denyButton
-                approveButton
-            }
-            .layoutPriority(1)
-            .opacity(buttonsVisible ? 1 : 0)
+        HStack(spacing: 12) {
+            denyButton
+            approveButton
         }
+        .opacity(buttonsVisible ? 1 : 0)
         .frame(maxWidth: 280)
         .onAppear {
             client.sendUiAck(moment: "chip")

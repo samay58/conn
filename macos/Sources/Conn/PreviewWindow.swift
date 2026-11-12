@@ -204,6 +204,37 @@ final class PreviewSample: Identifiable {
                                   status: "proposed")]
                 $0.spentUSD = 0.034
             },
+            sample("acting_connector", "Acting (connector)",
+                   "a connector read shows its preview, not its tool name",
+                   phase: "acting") {
+                $0.connected = true
+                $0.live = true
+                $0.chips = [Chip(id: "c2", name: "phoenix_today",
+                                  preview: "Checking today",
+                                  status: "running")]
+                $0.spentUSD = 0.018
+            },
+            sample("chip_capture", "Chip (longest preview)",
+                   "a preview at the daemon's full budget",
+                   phase: "awaiting_approval") {
+                $0.connected = true
+                $0.live = true
+                $0.chips = [Chip(id: "c4", name: "phoenix_capture",
+                                  preview: "Capture: ask Dana about the Acme deck…",
+                                  status: "proposed")]
+                $0.spentUSD = 0.029
+            },
+            sample("chip_connector", "Chip (connector write)",
+                   "the longest common write preview at the daemon's budget",
+                   phase: "awaiting_approval") {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "I'll remind you tomorrow at 9."
+                $0.chips = [Chip(id: "c3", name: "phoenix_remind",
+                                  preview: "Remind tomorrow 9 AM: Call the vet",
+                                  status: "proposed")]
+                $0.spentUSD = 0.029
+            },
         ]
     }
 

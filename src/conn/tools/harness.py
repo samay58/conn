@@ -40,7 +40,9 @@ from ..observations import (
 from .registry import ToolSpec, computer_mutation_names
 from .risk import RiskLevel, argument_guard, gate_for, gate_for_prepared
 
-PREVIEW_BUDGET = 32
+# The approval preview has the island's full caption line (280 pt at 12.5 pt
+# medium): 38 characters fit with margin in the rendered preview states.
+PREVIEW_BUDGET = 38
 
 
 def clamp_preview(text: str, budget: int = PREVIEW_BUDGET) -> str:
