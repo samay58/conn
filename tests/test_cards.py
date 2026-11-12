@@ -64,7 +64,7 @@ def test_calendar_and_thread_cards():
 def test_draft_card_persists_and_text_payload_parses():
     payload = json.dumps({"person": "Dana", "channel": "text", "draft": "Friday works, 7?"})
     card = cards.build("draft", {"person": "Dana"}, ok({"text": payload}))
-    assert card["id"] == "reply:dana" and card["state"] == "draft" and card["persist"] is True
+    assert card["id"] == "reply" and card["state"] == "draft" and card["persist"] is True
     assert card["body"] == "Friday works, 7?" and card["subtitle"] == "Dana · Messages"
 
 
@@ -76,6 +76,12 @@ def test_unknown_or_failed_results_give_no_card():
     assert cards.build("people", {}, "not json") is None
     assert cards.build("nope", {}, ok({"structured": PEOPLE})) is None
     assert cards.build("draft", {}, ok({"text": "plain prose, not json"})) is None
+
+
+def test_send_card_replaces_the_draft_whatever_name_the_model_uses():
+    draft = cards.build("draft", {"person": "Dana"}, ok({"structured": {"person": "Dana Reyes", "draft": "Hi"}}))
+    send = cards.send_card({"person": "Dana", "text": "Hi"}, "approve")
+    assert draft["id"] == send["id"] == "reply"
 
 
 def test_send_card_shows_the_whole_text():

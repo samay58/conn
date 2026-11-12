@@ -11,7 +11,7 @@ message content, and traces keep lengths and outcomes, not bodies.
 
 Wire shape, published as {"type": "card", "card": {...}}:
   id        stable per subject, so a revision replaces the card in place
-            ("reply:dana" moves from draft to approve to sent)
+            (the one "reply" card moves from draft to approve to sent)
   kind      "list" or "reply"
   title     one line
   subtitle  optional second line (recipient and channel, a count)
@@ -170,7 +170,9 @@ def _thread(data: dict, args: dict) -> dict | None:
 def _reply(person: str, channel: str, body: str, state: str) -> dict:
     titles = {"draft": "Draft", "approve": "Send this?", "sent": "Sent",
               "unconfirmed": "Sent, not confirmed", "held": "Not sent"}
-    return {"id": f"reply:{_slug(person)}", "kind": "reply", "title": titles[state],
+    # One reply is in flight at a time. A fixed id lets the send card replace the
+    # draft even when the model names the person differently ("Dana" vs "Dana Reyes").
+    return {"id": "reply", "kind": "reply", "title": titles[state],
             "subtitle": " · ".join(x for x in (_s(person, 80), _channel(channel)) if x),
             "body": _s(body, _BODY_CAP), "state": state, "persist": state in ("draft", "approve")}
 
