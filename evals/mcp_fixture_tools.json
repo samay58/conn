@@ -218,7 +218,7 @@
           "preview": "Text {person}: {text}",
           "card": "send",
           "done_message": "Sent.",
-          "timeout_s": 40.0,
+          "timeout_s": 60.0,
           "input_schema": {
             "type": "object",
             "properties": {
