@@ -223,11 +223,12 @@ async def _serve(cfg, args) -> None:
         if not cfg.api_key:
             print("OPENAI_API_KEY is not set. Run with --demo, or export the key.", file=sys.stderr)
             sys.exit(2)
-        from .prompt import INSTRUCTIONS
+        from .prompt import instructions_for
         from .realtime.openai_ws import OpenAIRealtimeAdapter
 
         executors = None
-        adapter = OpenAIRealtimeAdapter(cfg, export_openai(registry), INSTRUCTIONS)
+        tools = export_openai(registry)
+        adapter = OpenAIRealtimeAdapter(cfg, tools, instructions_for(tools))
         audio = None
         if not args.no_audio:
             try:

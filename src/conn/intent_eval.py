@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 from .config import Config, McpCfg, McpServerCfg, McpToolCfg
 from .cost import CostMeter
 from .mcp_client import McpCallResult, McpToolInfo
-from .prompt import INSTRUCTIONS
+from .prompt import instructions_for
 from .realtime.base import (
     RtError, RtResponseDone, RtTextDelta, RtToolCall, RtTranscriptDelta,
 )
@@ -254,7 +254,7 @@ MAX_READ_HOPS = 2
 async def _first_result(cfg: Config, tools: list[dict],
                         utterance: str, expect: dict,
                         bundle_id: str = "com.apple.Safari") -> dict:
-    adapter = OpenAIRealtimeAdapter(cfg, tools, INSTRUCTIONS)
+    adapter = OpenAIRealtimeAdapter(cfg, tools, instructions_for(tools))
     await adapter.connect()
     events: asyncio.Queue = asyncio.Queue()
 

@@ -3,7 +3,7 @@ skeleton. gpt-realtime-2.1 follows instructions literally, so this stays small
 and avoids overlapping absolutes. Tune through traces, not vibes.
 """
 
-INSTRUCTIONS = """\
+BASE_INSTRUCTIONS = """\
 # Role and Objective
 You are Conn, a voice command surface for Samay's Mac. You take the conn: you
 execute small, precise computer actions through tools. You are not a chat
@@ -63,18 +63,69 @@ and tell the user what safely happened.
 While a call is pending or waiting for approval, say it is waiting and nothing
 more. Never turn ok=false into completion language.
 
-# Your day, people and meetings
-For who Samay owes a reply, use phoenix_people first. Search mail only when he names a specific email or person and the list does not settle it.
-For what was said or decided in a meeting, search both Granola and Wispr.
-Never capture, remind or strike unless he asked for exactly that.
-After a write, say only its safe_user_message.
-If a tool says a service is unavailable, say "<Service> isn't connected right now." If a result was withheld, say so in one sentence.
-Say times plainly ("3", "half past 4"), never as timestamps.
-
-# Unclear audio
+{connectors}# Unclear audio
 If the audio was unclear or silent, call wait_for_user. Do not guess a command.
 
 # Cost discipline
 Keep spoken replies under two sentences. Use the effort the task needs and no
 more.
 """
+
+
+_PHOENIX_WRITES = ("phoenix_capture", "phoenix_remind", "phoenix_strike")
+
+
+def connector_section(tool_names) -> str:
+    """The connector rules, one line per connector tool family in `tool_names`.
+    Pass connector names only: native tools such as phoenix_search share a prefix.
+
+    A rule that names a tool the model cannot call invites a refusal or a made-up
+    answer, so a line appears only when its tools do. With no connector tools the
+    prompt is byte-identical to the one the original 232 eval items were measured on.
+    """
+    names = set(tool_names)
+
+    def has(prefix: str) -> bool:
+        return any(n.startswith(prefix) for n in names)
+
+    meeting_sources = [label for prefix, label in (("granola_", "Granola"), ("wispr_", "Wispr"))
+                       if has(prefix)]
+    lines = []
+    people, mail = "phoenix_people" in names, has("superhuman_")
+    if people and mail:
+        lines.append("For who Samay owes a reply, use phoenix_people first. Search mail only when"
+                     " he names a specific email or person and the list does not settle it.")
+    elif people:
+        lines.append("For who Samay owes a reply, use phoenix_people first.")
+    elif mail:
+        lines.append("Search mail only when he names a specific email or person.")
+    if len(meeting_sources) == 2:
+        lines.append("For what was said or decided in a meeting, search both Granola and Wispr.")
+    elif meeting_sources:
+        lines.append(f"For what was said or decided in a meeting, search {meeting_sources[0]}.")
+    if any(w in names for w in _PHOENIX_WRITES):
+        lines.append("Never capture, remind or strike unless he asked for exactly that.")
+        lines.append("After a write, say only its safe_user_message.")
+    if not names:
+        return ""
+    lines.append('If a tool says a service is unavailable, say "<Service> isn\'t connected right now."'
+                 " If a result was withheld, say so in one sentence.")
+    lines.append('Say times plainly ("3", "half past 4"), never as timestamps.')
+    return "# Your day, people and meetings\n" + "\n".join(lines) + "\n\n"
+
+
+def instructions_for(tools) -> str:
+    """Instructions for a session that exports `tools` (OpenAI tool dicts or names)."""
+    from .tools.registry import build_registry
+
+    native = set(build_registry())
+    names = [t["name"] if isinstance(t, dict) else t for t in tools]
+    connectors = [n for n in names if n not in native]
+    return BASE_INSTRUCTIONS.replace("{connectors}", connector_section(connectors))
+
+
+# Every rule, as if every connector were present. Tests and docs read this.
+INSTRUCTIONS = instructions_for([
+    "phoenix_people", "phoenix_capture", "superhuman_search_threads",
+    "granola_search_meetings", "wispr_search_meetings",
+])

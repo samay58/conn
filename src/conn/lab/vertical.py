@@ -1073,14 +1073,11 @@ def build_vertical_app(
     )
     harness = ToolHarness(registry, cfg, context)
     if model_mode == "live":
-        from conn.prompt import INSTRUCTIONS
+        from conn.prompt import instructions_for
         from conn.realtime.openai_ws import OpenAIRealtimeAdapter
 
-        adapter = OpenAIRealtimeAdapter(
-            cfg,
-            export_openai(registry),
-            INSTRUCTIONS,
-        )
+        tools = export_openai(registry)
+        adapter = OpenAIRealtimeAdapter(cfg, tools, instructions_for(tools))
     elif scenario == "control":
         adapter = GroundedLabAdapter()
     elif scenario in {"calendar_today", "calendar_next"}:
