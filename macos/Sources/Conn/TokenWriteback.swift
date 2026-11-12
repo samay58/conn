@@ -161,12 +161,19 @@ enum TokenWriteback {
             let glassEarWidth: CGFloat = 104
             let glassPillCornerRadius: CGFloat = 12
             let glassButtonHeight: CGFloat = 28
+            // Deny and Approve take clicks this far past their drawn edge; half
+            // the gap between them, so the two areas never overlap.
+            let glassButtonHitOutset: CGFloat = 4
             // cards (the island detail surface, src/conn/cards.py): a card that
-            // does not persist retires after cardLinger, a settled reply after the
+            // does not persist retires after cardLinger, a verified send after the
             // shorter cardSettledLinger.
             @Published var cardLinger = \(fmt(v.cardLinger))
             @Published var cardSettledLinger = \(fmt(v.cardSettledLinger))
             @Published var cardFadeDuration = \(fmt(v.cardFadeDuration))
+            // Each row buys a list card more reading time on top of cardLinger.
+            var cardLingerPerRow = 2.0
+            // A reply body taller than this scrolls, so Approve stays on screen.
+            let cardBodyMaxHeight: CGFloat = 220
             let cardGap: CGFloat = 8
             let cardCornerRadius: CGFloat = 16
             let cardPadding: CGFloat = 14
@@ -374,10 +381,13 @@ enum TokenWriteback {
             static var glassEarWidth: CGFloat { current.glassEarWidth }
             static var glassPillCornerRadius: CGFloat { current.glassPillCornerRadius }
             static var glassButtonHeight: CGFloat { current.glassButtonHeight }
+            static var glassButtonHitOutset: CGFloat { current.glassButtonHitOutset }
             // cards
             static var cardLinger: Double { current.cardLinger }
             static var cardSettledLinger: Double { current.cardSettledLinger }
             static var cardFadeDuration: Double { current.cardFadeDuration }
+            static var cardLingerPerRow: Double { current.cardLingerPerRow }
+            static var cardBodyMaxHeight: CGFloat { current.cardBodyMaxHeight }
             static var cardGap: CGFloat { current.cardGap }
             static var cardCornerRadius: CGFloat { current.cardCornerRadius }
             static var cardPadding: CGFloat { current.cardPadding }

@@ -43,6 +43,13 @@ def _s(value: Any, cap: int = _TEXT_CAP) -> str:
     return text if len(text) <= cap else text[: cap - 1].rstrip() + "…"
 
 
+def _body(value: Any) -> str:
+    """A message body: line breaks kept, since the card shows the text that goes out."""
+    lines = [re.sub(r"[^\S\n]+", " ", line).strip() for line in str(value or "").strip().splitlines()]
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+    return text if len(text) <= _BODY_CAP else text[: _BODY_CAP - 1].rstrip() + "…"
+
+
 def _row(title: Any, detail: Any = "", note: Any = "") -> dict:
     return {"title": _s(title, 80), "detail": _s(detail, 60), "note": _s(note)}
 
@@ -174,7 +181,7 @@ def _reply(person: str, channel: str, body: str, state: str) -> dict:
     # draft even when the model names the person differently ("Dana" vs "Dana Reyes").
     return {"id": "reply", "kind": "reply", "title": titles[state],
             "subtitle": " · ".join(x for x in (_s(person, 80), _channel(channel)) if x),
-            "body": _s(body, _BODY_CAP), "state": state, "persist": state in ("draft", "approve")}
+            "body": _body(body), "state": state, "persist": state in ("draft", "approve")}
 
 
 def _draft(data: dict, args: dict) -> dict | None:

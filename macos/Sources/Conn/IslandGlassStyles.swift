@@ -311,7 +311,7 @@ struct GlassButtonLabel: View {
             .padding(.horizontal, role == .quiet ? 6 : 14)
             .frame(height: DesignTokens.glassButtonHeight)
             .background(Capsule(style: .continuous).fill(fill))
-            .contentShape(Capsule(style: .continuous))
+            .contentShape(Rectangle().inset(by: -DesignTokens.glassButtonHitOutset))
     }
 
     private var foreground: Color {
@@ -426,18 +426,21 @@ struct ApprovalPreview: View {
 
 // One card's content, styled by ink: a header (list title and count, or the
 // reply's recipient line and state word), then rows or the reply body. The
-// close button shows on persisting cards except a reply waiting on the chip,
-// where closing would read as a decision it is not.
+// close button shows on every card except a reply waiting on the chip, where
+// closing would read as a decision it is not.
 struct IslandCardContent: View {
     let card: IslandCard
     let ink: IslandInk
-    var monograms = false
     var wellBody = false
     var onClose: (() -> Void)?
 
     private var showsClose: Bool {
-        card.persist && card.state != "approve" && onClose != nil
+        card.state != "approve" && onClose != nil
     }
+
+    // The reply text's laid-out height, measured so a long message scrolls
+    // inside the card instead of pushing Approve off the screen.
+    @State private var bodyHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: card.kind == .reply ? 10 : 4) {
@@ -479,6 +482,7 @@ struct IslandCardContent: View {
                                                              - DesignTokens.characterCloseHitSize) / 2))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Close")
                 .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 4 }
             }
         }
@@ -495,17 +499,29 @@ struct IslandCardContent: View {
     }
 
     private var replyBody: some View {
+        Group {
+            if bodyHeight > DesignTokens.cardBodyMaxHeight {
+                ScrollView(.vertical) { replyText }
+                    .frame(height: DesignTokens.cardBodyMaxHeight)
+            } else {
+                replyText
+            }
+        }
+        .padding(wellBody ? 12 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.cardCornerRadius - 4, style: .continuous)
+                .fill(wellBody ? ink.well : Color.clear))
+        .opacity(card.isSettledReply ? 0.6 : 1)
+    }
+
+    private var replyText: some View {
         Text(card.body)
             .font(.system(size: 13))
             .lineSpacing(2.5)
             .foregroundStyle(ink.primary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(wellBody ? 12 : 0)
-            .background(
-                RoundedRectangle(cornerRadius: DesignTokens.cardCornerRadius - 4, style: .continuous)
-                    .fill(wellBody ? ink.well : Color.clear))
-            .opacity(card.isSettledReply ? 0.6 : 1)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bodyHeight = $0 }
     }
 
     private var rows: some View {
@@ -513,36 +529,28 @@ struct IslandCardContent: View {
             ForEach(Array(card.rows.enumerated()), id: \.offset) { index, row in
                 if index > 0 {
                     Hairline(color: ink.hairline)
-                        .padding(.leading, monograms ? 38 : 0)
                 }
-                HStack(alignment: .center, spacing: 12) {
-                    if monograms {
-                        Text(String(row.title.prefix(1)))
-                            .font(.system(size: 12, weight: .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(row.title)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(ink.primary)
-                            .frame(width: 26, height: 26)
-                            .background(Circle().fill(ink.well))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(row.detail)
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(ink.secondary)
+                            .lineLimit(1)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(row.title)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(ink.primary)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text(row.detail)
-                                .font(.system(size: 11, weight: .medium))
-                                .monospacedDigit()
-                                .foregroundStyle(ink.secondary)
-                                .lineLimit(1)
-                        }
-                        if !row.note.isEmpty {
-                            Text(row.note)
-                                .font(.system(size: 12))
-                                .foregroundStyle(ink.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
+                    if !row.note.isEmpty {
+                        Text(row.note)
+                            .font(.system(size: 12))
+                            .foregroundStyle(ink.secondary)
+                            // A thread's note is the message itself; give it room.
+                            .lineLimit(card.id.hasPrefix("thread:") ? 3 : 1)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.vertical, 7)
@@ -885,7 +893,7 @@ struct FloatingIsland: View {
                         ApprovalPreview(preview: chip.preview, ink: ink)
                     }
                     if let card = state.card {
-                        IslandCardContent(card: card, ink: ink, monograms: true, wellBody: true,
+                        IslandCardContent(card: card, ink: ink, wellBody: true,
                                           onClose: { state.dismissCard() })
                     }
                     if let chip = readout.pendingChip {
@@ -1094,8 +1102,7 @@ struct PillCardIsland: View {
                     ApprovalPreview(preview: chip.preview, ink: ink)
                 }
                 if let card = state.card {
-                    IslandCardContent(card: card, ink: ink, monograms: true,
-                                      onClose: { state.dismissCard() })
+                    IslandCardContent(card: card, ink: ink, onClose: { state.dismissCard() })
                 }
                 if let chip = readout.pendingChip {
                     IslandChipView(chip: chip, client: client, style: .c)
@@ -1196,7 +1203,7 @@ struct CharacterIsland: View {
             }
             if let card = state.card {
                 Hairline(color: ink.hairline)
-                IslandCardContent(card: card, ink: ink, monograms: true, wellBody: true,
+                IslandCardContent(card: card, ink: ink, wellBody: true,
                                   onClose: { state.dismissCard() })
                     .transition(.opacity)
             }

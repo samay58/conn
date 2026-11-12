@@ -91,6 +91,11 @@ def test_send_card_shows_the_whole_text():
     assert cards.send_card({"person": "Dana"}, "approve") is None
 
 
+def test_send_card_keeps_line_breaks():
+    card = cards.send_card({"person": "Dana", "text": "Hi  Dana,\n\n\n\nFriday works.\n7 at the usual place?  "}, "approve")
+    assert card["body"] == "Hi Dana,\n\nFriday works.\n7 at the usual place?"
+
+
 def _app_with_send_tool(tmp_path, ctx):
     cfg = Config()
     cfg.data_dir = tmp_path / "data"

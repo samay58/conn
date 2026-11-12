@@ -66,10 +66,17 @@ struct IslandCard: Identifiable, Equatable {
                   persist: wire["persist"] as? Bool ?? false)
     }
 
-    // A reply that has already gone (or definitively not): it reads for a
-    // short linger, then fades.
+    // A reply that has already gone (or definitively not).
     var isSettledReply: Bool {
         kind == .reply && ["sent", "unconfirmed", "held"].contains(state)
+    }
+
+    // How long a card that does not persist stays up. A verified send only
+    // needs a glance; "not sent" and "not confirmed" are news and get read;
+    // a list earns time per row.
+    var linger: Double {
+        if kind == .reply, state == "sent" { return DesignTokens.cardSettledLinger }
+        return DesignTokens.cardLinger + DesignTokens.cardLingerPerRow * Double(rows.count)
     }
 }
 
@@ -240,12 +247,12 @@ final class AppState: ObservableObject {
     }
 
     // Persisting cards stay until replaced, cleared, or closed. The rest
-    // linger for a token-defined time; a settled reply for a shorter one.
+    // retire after IslandCard.linger.
     private func scheduleCardRetire() {
         cardRetireTask?.cancel()
         cardRetireTask = nil
         guard let card, !card.persist else { return }
-        let linger = card.isSettledReply ? DesignTokens.cardSettledLinger : DesignTokens.cardLinger
+        let linger = card.linger
         let revision = cardRevision
         cardRetireTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(linger))

@@ -178,16 +178,39 @@ final class PreviewSample: Identifiable {
     private static let draftText = "Hey Sam, the address is 12 Example Street, apartment 4. "
         + "The buzzer is broken, so text me when you're outside and I'll come down."
 
-    private static func reply(_ state: String, title: String) -> IslandCard? {
+    // Long enough to scroll: the body must never push Approve off the screen.
+    private static let longText = "Hey Sam,\n\nThanks for sending the launch notes over. "
+        + "Three things before Friday.\n\nFirst, the pricing page copy still says monthly "
+        + "where the plan is annual, so that needs one more pass. Second, the migration "
+        + "window: I would rather take Sunday night than Saturday, because support is "
+        + "thin on Saturday and a rollback would land on one person. Third, the beta list "
+        + "should get the email a day before everyone else, not the same morning.\n\n"
+        + "If all three work for you I can sign off tonight. Otherwise call me after "
+        + "four and we can sort it out in ten minutes.\n\nThe address for Friday is 12 "
+        + "Example Street, apartment 4. The buzzer is broken, so text me when you are "
+        + "outside and I will come down."
+
+    private static func reply(_ state: String, title: String, body: String? = nil) -> IslandCard? {
         IslandCard(wire: [
             "id": "reply", "kind": "reply", "title": title,
-            "subtitle": "Sam · Messages", "body": draftText, "state": state,
+            "subtitle": "Sam · Messages", "body": body ?? draftText, "state": state,
             "persist": state == "draft" || state == "approve",
         ])
     }
 
+    private static let todayList = IslandCard(wire: [
+        "id": "list:today", "kind": "list", "title": "Today", "subtitle": "4 open",
+        "rows": [
+            ["title": "Email the landlord", "detail": "Must do", "note": ""],
+            ["title": "Send the Acme invoice", "detail": "Must do", "note": ""],
+            ["title": "Read the launch memo", "detail": "Should do", "note": ""],
+            ["title": "Dentist", "detail": "Reminder 14:00", "note": ""],
+        ],
+        "persist": false,
+    ])
+
     private static let owedList = IslandCard(wire: [
-        "id": "list:people", "kind": "list", "title": "You owe replies",
+        "id": "list:people", "kind": "list", "title": "Waiting on you",
         "subtitle": "3 people",
         "rows": [
             ["title": "Dana", "detail": "Email · 2d",
@@ -326,6 +349,34 @@ final class PreviewSample: Identifiable {
                 $0.modelLine = "Sent."
                 $0.lastActionOutcome = "verified"
                 $0.spentUSD = 0.046
+            },
+            sample("reply_long", "Card: long reply to send",
+                   "a long body scrolls inside the card; Approve stays put",
+                   phase: "awaiting_approval",
+                   card: reply("approve", title: "Send this?", body: longText)) {
+                $0.connected = true
+                $0.live = true
+                $0.chips = [Chip(id: "c6", name: "messages_send",
+                                  preview: "Text Sam: launch notes sign-off",
+                                  status: "proposed")]
+                $0.spentUSD = 0.047
+            },
+            sample("reply_held", "Card: reply not sent",
+                   "a refused or denied send says so and stays long enough to read",
+                   phase: "done", card: reply("held", title: "Not sent")) {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "Not sent."
+                $0.lastActionOutcome = "blocked"
+                $0.spentUSD = 0.044
+            },
+            sample("list_today", "Card: today",
+                   "a task list: title left, kind right, no note line",
+                   phase: "speaking", card: todayList) {
+                $0.connected = true
+                $0.live = true
+                $0.modelLine = "Four things are open today."
+                $0.spentUSD = 0.036
             },
             sample("list", "Card: replies owed",
                    "a list card that retires on the next push-to-talk",

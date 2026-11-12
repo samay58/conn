@@ -4,8 +4,9 @@ import XCTest
 // The card rules from the daemon's wire contract (src/conn/cards.py): a
 // "card" message shows a card, the same id replaces it in place, card_clear
 // removes it, a non-persisting card retires on the next push-to-talk or after
-// cardLinger, a settled reply after the shorter cardSettledLinger, and a
-// persisting card stays until replaced, cleared, or closed locally.
+// cardLinger (plus reading time per row), a verified send after the shorter
+// cardSettledLinger, and a persisting card stays until replaced, cleared, or
+// closed locally.
 @MainActor
 final class IslandCardTests: XCTestCase {
     private func cardMessage(_ id: String, kind: String = "list", state: String = "",
@@ -28,10 +29,11 @@ final class IslandCardTests: XCTestCase {
     // process state, so restore on exit.
     private func withLingers(_ linger: Double, settled: Double, _ body: () async throws -> Void) async rethrows {
         let store = DesignTokens.current
-        let old = (store.cardLinger, store.cardSettledLinger)
+        let old = (store.cardLinger, store.cardSettledLinger, store.cardLingerPerRow)
         store.cardLinger = linger
         store.cardSettledLinger = settled
-        defer { (store.cardLinger, store.cardSettledLinger) = old }
+        store.cardLingerPerRow = 0
+        defer { (store.cardLinger, store.cardSettledLinger, store.cardLingerPerRow) = old }
         try await body()
     }
 
@@ -123,9 +125,29 @@ final class IslandCardTests: XCTestCase {
             state.apply(cardMessage("reply", kind: "reply", state: "sent", persist: false))
             XCTAssertTrue(state.card?.isSettledReply ?? false)
             await spin(0.25)
-            XCTAssertNil(state.card, "sent, unconfirmed and held fade after the short linger")
+            XCTAssertNil(state.card, "a verified send fades after the short linger")
         }
     }
+
+    func testAFailedSendStaysLongEnoughToRead() async {
+        await withLingers(5, settled: 0.05) {
+            for outcome in ["held", "unconfirmed"] {
+                let state = AppState()
+                state.apply(cardMessage("reply", kind: "reply", state: outcome, persist: false))
+                await spin(0.25)
+                XCTAssertEqual(state.card?.state, outcome, "not sent and not confirmed are news, not a glance")
+            }
+        }
+    }
+
+    func testAListEarnsReadingTimePerRow() {
+        let state = AppState()
+        state.apply(cardMessage("list:people", rows: 2))
+        let short = state.card?.linger ?? 0
+        state.apply(cardMessage("list:people", rows: 8))
+        XCTAssertGreaterThan(state.card?.linger ?? 0, short)
+    }
+
 
     func testAReplacedCardKeepsItsOwnTimer() async {
         await withLingers(0.15, settled: 0.15) {
