@@ -1,12 +1,13 @@
 #!/bin/zsh
-# Rebuilds macos/AppIcon.icns from icon/conn-icon.svg using macOS's own SVG
-# renderer (Quick Look), sips and iconutil. make-app.sh copies the result.
+# Rebuilds macos/AppIcon.icns from icon/conn-icon.svg using AppKit's SVG
+# renderer (render-svg.swift keeps transparency; Quick Look painted the
+# corners white), sips and iconutil. make-app.sh copies the result.
 set -euo pipefail
 cd "$(dirname "$0")"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-qlmanage -t -s 1024 -o "$work" conn-icon.svg >/dev/null 2>&1
-master="$work/conn-icon.svg.png"
+master="$work/conn-icon.png"
+swift render-svg.swift conn-icon.svg "$master" 1024
 [[ -s $master ]] || { echo "render failed" >&2; exit 1; }
 set_dir="$work/AppIcon.iconset"
 mkdir "$set_dir"
