@@ -82,49 +82,38 @@ approval chip; navigation has no per-host rule and chip previews hide the
 payload; the idle disconnect never fires (keep sessions connected, or close
 after five idle minutes and reconnect on the next push-to-talk).
 
-## Connectors: the live steps (with Samay at the Mini)
+## November 12 work: live checks still open
 
-Built and merged on 2026-11-11: the MCP client, gates, sign-in, eval fixtures
-and the Phoenix side's local server. The private wiring plan is
-`plans/018-wire-connectors-and-measure.md` (gitignored). `config.local.toml`
-exists with `[mcp] enabled = false`. What is left:
+`docs/STATE-OF-PLAY.md` ("November 12") says what was built. The connectors
+are signed in and on, the intent eval passed its gate (271 of 276, $2.35), and
+the gate `./verify.sh` passes. None of the following has been seen on a real
+desktop yet. Each needs Samay at the Mac with the current build installed
+(`cd macos && ./make-app.sh install`, then reopen Conn).
 
-1. `python -m conn --mcp-login granola`, then `wispr`, then `superhuman`, one
-   browser sign-in each. Then `--mcp-tools`, pick Superhuman's two read tools,
-   and pin the personal account with `fixed_args` (no pinnable argument is a
-   stop).
-2. Run the protected-meeting check from the plan, so work meetings come back
-   withheld.
-3. Approve up to $5 for the live intent eval. The gate is: the original 232
-   items score at least 226, and the connector items score at least 90%.
-4. `cd macos && ./make-app.sh install` (adds the Notes, Reminders and Calendar
-   usage strings), set `enabled = true`, reopen Conn.app, approve the macOS
-   prompts, and say the 16 commands in `plans/VOICE-CONNECTORS.md`.
-   The first Reminders read asks macOS for Conn's Reminders access; until it
-   is approved, reads fall back to AppleScript and take 9 to 20 seconds.
-5. While saying them, check the island: a slow read shows its plain label
-   ("Searching Granola") after 0.25 s and a fast one shows none; a write's
-   whole preview ("Remind tomorrow 9 AM: Call the vet") sits above Deny and
-   Approve; a write that cannot be confirmed reads "Sent, not confirmed".
+1. The island: the glass rim picks up the real desktop; a click just outside
+   the pill reaches the window under it; cards arrive and leave without
+   clipping; a long reply scrolls inside its card and Approve stays visible
+   (`Conn --preview` shows one as "Card: long reply to send").
+2. The voice line: the noise gate and gain suit his microphone, and the line
+   stays in step with Conn's voice.
+3. Native actions: "go to techmeme.com" in Safari says done; "close the first
+   two tabs" asks, then closes exactly those; "zoom out" works in Safari,
+   Obsidian and Notes; opening an Obsidian note by name says done.
+4. Replies: "who do I owe a reply?" shows the list; "reply to" a person shows
+   a draft; "make it shorter" replaces it; "send it" shows the whole text above
+   Approve; Approve sends and the card says Sent; Deny says Not sent and the
+   draft stays on the Catch-Up list. One WhatsApp send to a person he picks.
+5. Failure: quit the daemon mid-turn and the island says Reconnecting within a
+   second; press Stop during an action and it returns at once with the real
+   outcome.
 
-Added on 2026-11-12, untested live: reads send structured results without
-the duplicate text (Phoenix reads 55 to 65 percent smaller), and the
-connector prompt section appears only when connector tools are exported.
-One candidate for the eval run: skip the spoken preamble before Phoenix
-reads, which now answer in 0.1 to 0.3 seconds. Measure it before keeping it.
+Read each session afterwards with `python -m conn --cost-report` and
+`--latency-report`.
 
-## Added on 2026-11-12 (second half), live checks pending
-
-- Cost per command: every turn now leaves a `turn_cost` trace event (lengths and dollars, never the words), the receipt has `per_command` and `by_category`, and `--cost-report [trace | --days N]` prints them. The first trial cost $0.031 per command; spoken audio was 37.5 percent of it.
-- Cards: connector tools name a card template in config. Lists (who is waiting, today, calendar, a thread) and reply drafts show on a card under the island; Conn speaks one sentence. A send shows its whole text on the card while the chip waits for Approve, then settles as sent, sent-not-confirmed or not sent from the real result.
-- Replies: `phoenix_draft_reply` drafts in Samay's voice from the live thread; `phoenix_send_text` sends through Messages or WhatsApp after Approve and reads the message back from the app's own store. WhatsApp is pressed only when the open chat is that person's and its message box holds exactly the approved text; the press goes through accessibility, never a keystroke. A refusal before sending says "not sent".
-- Native: Obsidian note opens and Safari page loads now have witnesses; `computer_zoom` (no approval) and `computer_close_tabs` (approval, never the last tab) are new.
-- Island: style D (the icon's character) is being refined to become the default; classic stays selectable. New app icon.
-
-- Voice and tone: cedar with a light British accent; crisp, with an occasional dry aside built from a concrete detail of the result, never on failures, approvals or sends. Live intent eval on the new prompt: 268 of 276 at $2.42 (`data/intent-evals/2026-11-12/results-1794498661.json`); the original 232 scored 228, the new connector items 40 of 44. Misses worth a prompt pass: "summarize the latest recruiter email" (the mail rule wants a named person) and "I'm done with the dentist" (strike rule too strict).
-- Waveform: driven by real speech through `WaveformEngine` (ripple from the center, noise gate, soft knee, breathing silence, its own thinking glide, eye blinks on pauses, reduced motion respected); `Conn --playtest-waveform` renders filmstrips from a wav.
-
-Live checks still open: Safari address read on a real page, Safari tab close buttons, zoom menu names in Safari, Obsidian and Notes, the WhatsApp send end to end, the D island on a real desktop, mic gain and voice sync for the waveform, and whether the island's shadow swallows clicks just outside it.
+Open decisions for Samay: move the WhatsApp Send press from the Phoenix server
+into Conn.app's verified transaction; tighten the Safari page witness from
+"same site" to "same page"; and the three from the block above (typing under
+the navigation grant, per-host navigation rules, the idle disconnect).
 
 ## Human gates still open
 

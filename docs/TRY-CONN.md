@@ -9,7 +9,7 @@ This page has two parts: using Conn on the Mac where it is already installed, an
 Conn is installed at /Applications/Conn.app and starts from the menu bar. The island at the top of the screen shows what it heard, what it is doing and what it said.
 
 1. Hold Control and Option, speak, then let go.
-2. Conn answers in one short sentence. Lists, threads and drafts show on a card under the island.
+2. Conn answers in one short sentence. Lists, threads and drafts show on a card under the island. A card closes by itself, on your next command, or when you click its ×.
 3. When a card or chip shows Deny and Approve, click one. Nothing waits on the keyboard, and nothing sends without a click.
 4. Done means Conn saw the result. "Sent, not confirmed" means it went out but Conn could not check. "Did not run" means nothing happened.
 
@@ -66,5 +66,5 @@ This takes about 20 minutes. You need macOS 14 or newer, Xcode or the Command Li
 
 1. The island says Reconnecting: Conn restarts its background process by itself. If it stays, quit Conn from the menu bar and open it again.
 2. A service "isn't connected right now": run its `--mcp-login` again.
-3. Conn can't find a person: it matches names from your messages. Say the name the way it appears there.
+3. Conn can't find a person: it matches whole words of the names in your messages. "Dana" finds Dana Reyes; "Dan" does not. If two people share the name, say the full name.
 4. Something looked wrong: every session leaves a record in `~/conn/data/traces/`. From `~/conn`, `PYTHONPATH=src .venv/bin/python -m conn --cost-report` and `--latency-report` read the newest one.

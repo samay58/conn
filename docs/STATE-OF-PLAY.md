@@ -1,6 +1,6 @@
 # Conn: state of play
 
-Updated 2026-11-11. Read this first. Use `docs/2026-07-07-roadmap.md`
+Updated 2026-11-12. Read this first. Use `docs/2026-07-07-roadmap.md`
 for remaining work and `docs/NEXT-SESSION.md` for the next execution block.
 `docs/NORTH-STAR.md` defines the v1 product promise, finish line, and stop rule.
 
@@ -35,6 +35,55 @@ use. After the Shortcuts tools were added, the 232-item corpus passed 228
 Shortcuts items passed, and the two extra misses (`Type standup notes into the
 field`, `Click the blue button`) are run-to-run variance, scoring 4 of 5 and 5
 of 5 with the new tools against 3 of 5 and 2 of 5 without them.
+
+## November 12: connectors live, cards, replies, a face and a voice
+
+Conn now reads Samay's day and messages through connectors and can send a
+reply. This work is built and tested but has not had its live desktop checks;
+they are listed in `docs/NEXT-SESSION.md`.
+
+- Connectors are signed in and on: the Phoenix voice server (today, calendar,
+  who is waiting, a thread, capture, remind, strike, draft a reply, send a
+  text), Granola (meetings) and Superhuman (mail, pinned to one personal
+  account). Results that mention the work domain are withheld before the model
+  sees them. Wispr stays off because its results cannot be filtered that way.
+- Cards: Conn says one sentence and shows lists, threads and drafts on a card
+  under the island. A send shows its whole text while Deny and Approve wait,
+  then settles as sent, sent-not-confirmed or not sent from the real result.
+  Cards reach the signed app only. Their content, a card tool's result and its
+  chip preview are traced as lengths, never words.
+- Replies: a draft comes from a stronger text model reading the live thread.
+  A send goes through Messages, or WhatsApp by pressing its Send button through
+  accessibility only when the open chat is that person's and the box holds
+  exactly the approved text. Both read the message back from the app's own
+  store, and a send that may have gone out is never retried. A spoken name
+  matches whole words of a contact's name, so "Sam" never resolves to Samir.
+  The name is resolved after the Approve click, not before; showing the
+  resolved person on the card first is open. The WhatsApp press
+  runs in the Phoenix server, not inside Conn.app's verified transaction; moving
+  it there is open.
+- Native actions: Obsidian note opens and Safari page loads have witnesses;
+  page zoom runs without approval; closing tabs needs approval and never closes
+  the last tab. The Safari witness accepts any new address on the same site, so
+  a redirect to a sign-in page on that site still counts as loaded.
+- The island's live style is the app icon's character: a black pill with a
+  glass rim, lime eyes and a voice line driven by real speech. Classic stays in
+  the menu. The three rejected prototypes are deleted.
+- Voice: cedar, crisp, with an occasional dry aside. Never on failures,
+  approvals or sends.
+- Cost: every turn leaves a `turn_cost` event and `--cost-report` prints cost
+  per command. The first measured session averaged $0.031 a command; spoken
+  audio was 37.5 percent of it.
+
+Measured on 2026-11-12: `./verify.sh` passed 1,074 Python tests, 327 XCTest
+cases and 36 Swift Testing cases, and the four lifecycle tests passed. The live
+intent corpus, now 276 items, passed 271 for $2.35
+(`data/intent-evals/2026-11-12/results-1794499605.json`). The original 232
+items scored 228 against a bar of 226, and the 44 connector and reply items
+scored 43 against a bar of 90 percent. The five misses: `Open a new Safari
+window` (opened Safari instead), `Select the following note` and `Open Linear`
+(both long-standing), `Press cancel` (a transport timeout), and `Mark the
+landlord email done` (searched mail instead of striking the task).
 
 ## November 10 and 11 hardening
 
@@ -483,6 +532,7 @@ uncertainty, not a false verified result.
 Conn Lab implementation, capability breadth, and the exact-candidate release
 suite are complete. V1 still needs physical product acceptance:
 
+- run the November 12 live checks in `docs/NEXT-SESSION.md`
 - relaunch the installed candidate if an older Conn process is running
 - run the physical microphone acoustic barge-in check
 - run `docs/MANUAL-TESTING.md`

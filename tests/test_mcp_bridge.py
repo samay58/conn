@@ -172,8 +172,8 @@ def test_read_result_shape_and_cap():
 
 
 def test_withhold_marker_drops_whole_result():
-    mgr = FakeManager(McpCallResult("mail from Alice@Every.to about plans", None, False))
-    cfg, registry, _, _ = build({"search": tool_cfg()}, [info()], mgr, markers=["@every.to"])
+    mgr = FakeManager(McpCallResult("mail from Alice@Work.Example about plans", None, False))
+    cfg, registry, _, _ = build({"search": tool_cfg()}, [info()], mgr, markers=["@work.example"])
     ctx, events = ctx_for(cfg)
     out = run(registry, "notes_search", {"query": "q"}, cfg, ctx)
     assert out == {"withheld": True, "safe_user_message": WITHHELD_MESSAGE}
@@ -181,8 +181,8 @@ def test_withhold_marker_drops_whole_result():
 
 
 def test_withhold_applies_to_error_results_too():
-    mgr = FakeManager(McpCallResult("boom bob@every.to", None, True))
-    cfg, registry, _, _ = build({"search": tool_cfg()}, [info()], mgr, markers=["@every.to"])
+    mgr = FakeManager(McpCallResult("boom bob@work.example", None, True))
+    cfg, registry, _, _ = build({"search": tool_cfg()}, [info()], mgr, markers=["@work.example"])
     out = run(registry, "notes_search", {"query": "q"}, cfg)
     assert out["withheld"] is True
 
@@ -214,9 +214,9 @@ def test_unverified_write_is_an_error_never_done(structured):
 
 
 def test_withheld_write_result_is_never_done():
-    mgr = FakeManager(McpCallResult("x@every.to", {"verified": True}, False))
+    mgr = FakeManager(McpCallResult("x@work.example", {"verified": True}, False))
     cfg, registry, _, _ = build({"capture": tool_cfg(**WRITE_CFG)}, [info(**WRITE_INFO)], mgr,
-                                markers=["@every.to"])
+                                markers=["@work.example"])
     with pytest.raises(ToolError, match="mcp_write_unconfirmed"):
         run(registry, "notes_capture", {"text": "hi"}, cfg)
 
@@ -413,7 +413,7 @@ def test_reads_carry_no_action_outcome():
 ])
 def test_refused_before_dispatch_says_not_sent_in_conns_words(reason, text):
     structured = {"verified": False, "sent": False, "reason": reason,
-                  "safe_detail": "server prose bob@every.to"}
+                  "safe_detail": "server prose bob@work.example"}
     mgr = FakeManager(McpCallResult("server prose", structured, False))
     cfg, registry, _, _ = build({"capture": tool_cfg(**WRITE_CFG)}, [info(**WRITE_INFO)], mgr)
     with pytest.raises(ToolError) as e:
