@@ -90,6 +90,17 @@ def _hits_marker(markers: list[str], text: str, structured) -> bool:
     return any(m.lower() in haystack for m in markers)
 
 
+# What Conn says when a write server refuses before sending anything.
+_NOT_SENT = {
+    "ambiguous": "More than one person matches that name, so nothing was sent.",
+    "not_found": "I couldn't find them in your messages, so nothing was sent.",
+    "already_sent": "You already sent them that recently, so I didn't send it again.",
+    "unavailable": "That service can't be reached right now, so nothing was sent.",
+    "bad_input": "That message can't be sent as worded, so nothing was sent.",
+    "": "Nothing was sent.",
+}
+
+
 def _make_executor(server: str, tool: str, tool_cfg, server_cfg, cfg: Config,
                    manager, exported: frozenset[str]):
     is_write = tool_cfg.kind == "write"
@@ -120,8 +131,14 @@ def _make_executor(server: str, tool: str, tool_cfg, server_cfg, cfg: Config,
             raise ToolError("mcp_tool_error: the service returned an error")
 
         if is_write:
-            if result.structured is not None and result.structured.get("verified") is True:
+            structured = result.structured or {}
+            if structured.get("verified") is True:
                 return {"status": "verified", "safe_user_message": tool_cfg.done_message}
+            if structured.get("sent") is False:
+                # The server refused before dispatch. Only a fixed reason code
+                # crosses; the server's own wording never reaches the model.
+                reason = str(structured.get("reason") or "")
+                raise ToolError(f"mcp_write_not_sent: {_NOT_SENT.get(reason, _NOT_SENT[''])}")
             raise ToolError("mcp_write_unconfirmed: I sent that but couldn't confirm it landed.")
 
         # The MCP spec has a server repeat its structured result as JSON text, so sending

@@ -404,3 +404,19 @@ def test_connector_write_that_never_left_conn_still_reads_did_not_run():
 def test_reads_carry_no_action_outcome():
     done = _harness_finish(McpCallResult("", {"status": "verified"}, False))("notes_search", ARGS)
     assert done.ok and done.action_outcome is None
+
+
+@pytest.mark.parametrize("reason,text", [
+    ("ambiguous", "More than one person matches that name, so nothing was sent."),
+    ("already_sent", "You already sent them that recently, so I didn't send it again."),
+    ("weird-code", "Nothing was sent."),
+])
+def test_refused_before_dispatch_says_not_sent_in_conns_words(reason, text):
+    structured = {"verified": False, "sent": False, "reason": reason,
+                  "safe_detail": "server prose bob@every.to"}
+    mgr = FakeManager(McpCallResult("server prose", structured, False))
+    cfg, registry, _, _ = build({"capture": tool_cfg(**WRITE_CFG)}, [info(**WRITE_INFO)], mgr)
+    with pytest.raises(ToolError) as e:
+        run(registry, "notes_capture", {"text": "hi"}, cfg)
+    assert str(e.value) == f"mcp_write_not_sent: {text}"
+    assert "server prose" not in str(e.value)

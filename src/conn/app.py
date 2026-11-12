@@ -672,7 +672,8 @@ class ConnApp:
         error = str(envelope.get("error") or "") if isinstance(envelope, dict) else ""
         if isinstance(envelope, dict) and envelope.get("ok") is True:
             state = "sent"
-        elif error.startswith(("denied_by_user", "approval_timeout")) or error.startswith("mcp_server_unavailable"):
+        elif error.startswith(("denied_by_user", "approval_timeout",
+                                   "mcp_server_unavailable", "mcp_write_not_sent")):
             state = "held"   # nothing was sent
         else:
             state = "unconfirmed"   # it may have gone out; never claim "Not sent"

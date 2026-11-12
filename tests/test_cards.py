@@ -119,6 +119,7 @@ def test_send_card_settles_from_the_real_result(tmp_path, ctx):
         (json.dumps({"ok": False, "error": "denied_by_user"}), "held"),
         (json.dumps({"ok": False, "error": "approval_timeout"}), "held"),
         (json.dumps({"ok": False, "error": "mcp_server_unavailable: phoenix"}), "held"),
+        (json.dumps({"ok": False, "error": "mcp_write_not_sent: Nothing was sent."}), "held"),
         (json.dumps({"ok": False, "error": "mcp_write_unknown: no answer"}), "unconfirmed"),
         (json.dumps({"ok": False, "error": "timeout after 22.0s"}), "unconfirmed"),
     ]
