@@ -5,10 +5,10 @@
       <stop offset="0" stop-color="#2B2640"/><stop offset="1" stop-color="#121018"/>
     </linearGradient>
     <radialGradient id="halo" cx="512" cy="420" r="380" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#D08CFF" stop-opacity="0.45"/><stop offset="1" stop-color="#D08CFF" stop-opacity="0"/>
+      <stop offset="0" stop-color="#D08CFF" stop-opacity="0.38"/><stop offset="0.7" stop-color="#D08CFF" stop-opacity="0.06"/><stop offset="1" stop-color="#D08CFF" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.08"/><stop offset="1" stop-color="#D08CFF" stop-opacity="0.6"/>
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/><stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.15"/><stop offset="1" stop-color="#D08CFF" stop-opacity="0.95"/>
     </linearGradient>
     <linearGradient id="pill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#26232F"/><stop offset="1" stop-color="#050507"/>
@@ -19,15 +19,16 @@
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#halo)"/>
+  <rect x="102" y="102" width="820" height="820" rx="184" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="4"/>
   <!-- the pill hangs from the top like the island -->
   <rect x="214" y="300" width="596" height="250" rx="125" fill="url(#pill)"/>
-  <rect x="214" y="300" width="596" height="250" rx="125" fill="none" stroke="url(#rim)" stroke-width="8"/>
+  <rect x="214" y="300" width="596" height="250" rx="125" fill="none" stroke="url(#rim)" stroke-width="10"/>
   <path d="M290 330 Q 512 300 734 330" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="10" stroke-linecap="round"/>
   <!-- eyes: one open, one mid-wink -->
   <rect x="384" y="368" width="64" height="112" rx="32" fill="#DBFF3D"/>
   <circle cx="404" cy="396" r="12" fill="#FFFFFF" fill-opacity="0.9"/>
-  <path d="M580 430 Q 612 398 644 430" fill="none" stroke="#DBFF3D" stroke-width="26" stroke-linecap="round"/>
+  <path d="M580 430 Q 612 398 644 430" fill="none" stroke="#DBFF3D" stroke-width="32" stroke-linecap="round"/>
   <!-- voice line as a smile -->
   <path d="M300 690 C 340 690 352 640 384 640 C 420 640 424 744 462 744 C 500 744 500 600 540 600 C 580 600 580 760 620 760 C 656 760 668 676 700 676 C 712 676 718 684 724 690"
-        fill="none" stroke="url(#wave)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+        fill="none" stroke="url(#wave)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
