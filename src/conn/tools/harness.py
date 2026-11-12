@@ -15,6 +15,7 @@ import time
 
 from ..config import Config
 from ..actions import (
+    ActionOutcome,
     ActionReceipt,
     ambiguous_receipt,
     blocked_receipt,
@@ -39,6 +40,9 @@ from ..observations import (
 )
 from .registry import ToolSpec, computer_mutation_names
 from .risk import RiskLevel, argument_guard, gate_for, gate_for_prepared
+
+# Local-action errors raised after the request left Conn (tools/mcp_bridge.py).
+_SENT_UNCONFIRMED = ("mcp_write_unknown", "mcp_write_unconfirmed")
 
 # The approval preview has the island's full caption line (280 pt at 12.5 pt
 # medium): 38 characters fit with margin in the rendered preview states.
@@ -452,11 +456,13 @@ class ToolHarness:
         output: str,
         model_observation=None,
         visual_observation=None,
+        action_outcome: ActionOutcome | None = None,
     ) -> ToolFinished:
         return ToolFinished(
             call_id=call.call_id,
             ok=ok,
             output=output,
+            action_outcome=action_outcome,
             turn_id=call.turn_id,
             response_epoch=call.response_epoch,
             observation_epoch=call.observation_epoch,
@@ -554,9 +560,16 @@ class ToolHarness:
                     )
                 return self._action_result(call, receipt)
             envelope = {"ok": True, "data": data, "duration_ms": int((time.monotonic() - started) * 1000)}
-            return self._result(call, ok=True, output=json.dumps(envelope))
+            verified = (call.name in self.local_actions and isinstance(data, dict)
+                        and data.get("status") == "verified")
+            return self._result(call, ok=True, output=json.dumps(envelope),
+                                action_outcome=ActionOutcome.VERIFIED if verified else None)
         except TimeoutError:
             envelope = {"ok": False, "error": f"timeout after {spec.timeout_s}s", "duration_ms": int((time.monotonic() - started) * 1000)}
+            if call.name in self.local_actions:
+                # An approved action that ran out of time may still have landed.
+                return self._result(call, ok=False, output=json.dumps(envelope),
+                                    action_outcome=ActionOutcome.DISPATCH_ONLY)
         except ToolError as e:
             if mutating:
                 return self._action_result(call, uncertain_failure_receipt(
@@ -566,6 +579,11 @@ class ToolHarness:
                     summary=str(e),
                 ))
             envelope = {"ok": False, "error": str(e), "duration_ms": int((time.monotonic() - started) * 1000)}
+            if call.name in self.local_actions and str(e).startswith(_SENT_UNCONFIRMED):
+                # The island says "Sent, not confirmed", matching the spoken line,
+                # never "Did not run" for a write that may have landed.
+                return self._result(call, ok=False, output=json.dumps(envelope),
+                                    action_outcome=ActionOutcome.DISPATCH_ONLY)
         except Exception as e:
             if mutating:
                 return self._action_result(call, uncertain_failure_receipt(

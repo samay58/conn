@@ -351,3 +351,56 @@ def test_friendly_stamp_reads_like_a_person_and_stays_exact():
     assert friendly_stamp("2026-11-14", today) == "Sat"
     for raw in ("call Dana", "2026-13-01 09:00", "2026-11-12 25:00", "tomorrow 9am"):
         assert friendly_stamp(raw, today) == raw
+
+
+# -- what the island says after a connector write --------------------------------
+
+ARGS = {"query": "q", "acting_email": "me@x", "text": "x"}
+
+
+def _harness_finish(result=None, raises=None):
+    import asyncio
+
+    from conn.events import ToolCall
+
+    mgr = FakeManager(result, raises)
+    cfg, registry, _, _ = build({"capture": tool_cfg(**WRITE_CFG), "search": tool_cfg()},
+                                [info(**WRITE_INFO), info()], mgr)
+    harness = ToolHarness(registry, cfg, ExecutionContext(cfg=cfg, screenshot_dir=Path("/x")))
+
+    def finish(name, args):
+        call = ToolCall(call_id="c1", name=name, arguments=args, gate=Gate.AUTO, preview=name)
+        return asyncio.run(harness.run(call))
+    return finish
+
+
+def test_verified_connector_write_is_a_verified_outcome():
+    from conn.actions import ActionOutcome
+    from conn.state import SessionStateMachine
+
+    finish = _harness_finish(McpCallResult("", {"verified": True}, False))
+    done = finish("notes_capture", ARGS)
+    assert done.ok and done.action_outcome is ActionOutcome.VERIFIED
+    assert SessionStateMachine._status_for_result(done).value == "verified"
+
+
+@pytest.mark.parametrize("result,raises", [
+    (McpCallResult("", {"verified": False}, False), None),   # mcp_write_unconfirmed
+    (None, McpCallFailed("dropped")),                        # mcp_write_unknown
+])
+def test_unconfirmed_connector_write_reads_sent_not_confirmed(result, raises):
+    from conn.actions import ActionOutcome
+
+    done = _harness_finish(result, raises)("notes_capture", ARGS)
+    assert done.ok is False  # the model still never hears "done"
+    assert done.action_outcome is ActionOutcome.DISPATCH_ONLY  # island: "Sent, not confirmed"
+
+
+def test_connector_write_that_never_left_conn_still_reads_did_not_run():
+    done = _harness_finish(raises=McpNotConnected("down"))("notes_capture", ARGS)
+    assert done.ok is False and done.action_outcome is None  # FAILED: "Did not run"
+
+
+def test_reads_carry_no_action_outcome():
+    done = _harness_finish(McpCallResult("", {"status": "verified"}, False))("notes_search", ARGS)
+    assert done.ok and done.action_outcome is None
