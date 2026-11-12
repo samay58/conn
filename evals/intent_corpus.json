@@ -3244,6 +3244,14 @@
       },
       "source": "authored",
       "context_bundle": "com.apple.Notes"
+    },
+    {
+      "utterance": "Hello, what can you do?",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_max_sentences": 1
+      },
+      "source": "live 2026-11-12 trial"
     }
   ]
 }
