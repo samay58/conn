@@ -380,6 +380,12 @@ async def _run(cfg: Config, limit: int | None) -> dict:
         marker = "pass" if ok else "FAIL"
         print(f"  {marker}  {index + 1:>3}/{len(items)}  {item['utterance'][:56]}"
               + ("" if ok else f"  [{detail}]"))
+        spent = cost_summary(cfg, turn_usage)["total_usd"]
+        if spent >= cfg.budget.session_cap_usd:
+            # The same hard cap as a live session: an eval never spends past it.
+            print(f"  stopped at ${spent:.2f}: the ${cfg.budget.session_cap_usd:.2f} cap")
+            items = items[:index + 1]
+            break
     return {
         "model": cfg.realtime.model,
         "corpus_version": corpus.get("version"),
