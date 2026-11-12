@@ -121,7 +121,10 @@ reads, which now answer in 0.1 to 0.3 seconds. Measure it before keeping it.
 - Native: Obsidian note opens and Safari page loads now have witnesses; `computer_zoom` (no approval) and `computer_close_tabs` (approval, never the last tab) are new.
 - Island: style D (the icon's character) is being refined to become the default; classic stays selectable. New app icon.
 
-Live checks still open: Safari address read on a real page, Safari tab close buttons, zoom menu names in Safari, Obsidian and Notes, the WhatsApp send end to end, and the D island on a real desktop.
+- Voice and tone: cedar with a light British accent; crisp, with an occasional dry aside built from a concrete detail of the result, never on failures, approvals or sends. Live intent eval on the new prompt: 268 of 276 at $2.42 (`data/intent-evals/2026-11-12/results-1794498661.json`); the original 232 scored 228, the new connector items 40 of 44. Misses worth a prompt pass: "summarize the latest recruiter email" (the mail rule wants a named person) and "I'm done with the dentist" (strike rule too strict).
+- Waveform: driven by real speech through `WaveformEngine` (ripple from the center, noise gate, soft knee, breathing silence, its own thinking glide, eye blinks on pauses, reduced motion respected); `Conn --playtest-waveform` renders filmstrips from a wav.
+
+Live checks still open: Safari address read on a real page, Safari tab close buttons, zoom menu names in Safari, Obsidian and Notes, the WhatsApp send end to end, the D island on a real desktop, mic gain and voice sync for the waveform, and whether the island's shadow swallows clicks just outside it.
 
 ## Human gates still open
 
