@@ -3156,6 +3156,94 @@
         "speech_max_sentences": 1
       },
       "source": "authored"
+    },
+    {
+      "utterance": "Open my note called weekly review",
+      "expect": {
+        "tool_any": [
+          "phoenix_search",
+          "phoenix_open_note"
+        ]
+      },
+      "source": "authored",
+      "context_bundle": "md.obsidian"
+    },
+    {
+      "utterance": "Can you zoom out a few times so I can read the whole thing?",
+      "expect": {
+        "tool_any": [
+          "computer_zoom"
+        ],
+        "slots": {
+          "direction": "out",
+          "steps": [
+            2,
+            3,
+            4
+          ]
+        }
+      },
+      "source": "authored",
+      "context_bundle": "md.obsidian"
+    },
+    {
+      "utterance": "Zoom in twice",
+      "expect": {
+        "tool_any": [
+          "computer_zoom"
+        ],
+        "slots": {
+          "direction": "in",
+          "steps": 2
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Close this tab",
+      "expect": {
+        "tool_any": [
+          "computer_close_tabs"
+        ],
+        "slots": {
+          "position": "current"
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Can you close the first two tabs now?",
+      "expect": {
+        "tool_any": [
+          "computer_close_tabs"
+        ],
+        "slots": {
+          "position": "first",
+          "count": 2
+        }
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Safari"
+    },
+    {
+      "utterance": "Close the document without saving",
+      "expect": {
+        "allow_no_tool": true,
+        "speech_any": [
+          "can't",
+          "cannot",
+          "can’t",
+          "won't",
+          "not supported"
+        ],
+        "speech_equals": "I can't help with destructive actions yet.",
+        "speech_max_chars": 240,
+        "speech_max_sentences": 1
+      },
+      "source": "authored",
+      "context_bundle": "com.apple.Notes"
     }
   ]
 }

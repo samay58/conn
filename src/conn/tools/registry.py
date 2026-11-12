@@ -298,6 +298,68 @@ def build_registry() -> dict[str, ToolSpec]:
             ),
         ),
         ToolSpec(
+            name="computer_zoom",
+            description=(
+                "Zoom the current app's view in or out, or back to actual "
+                "size, through the app's own View menu. Use steps for "
+                "\"a few times\" (3) or \"twice\" (2). Name only the "
+                "direction; Conn finds the menu item."
+            ),
+            parameters=_obj({
+                "direction": {"type": "string", "enum": ["in", "out", "reset"]},
+                "steps": {"type": "integer", "minimum": 1, "maximum": 5},
+                "app": {"type": "string"},
+            }, ["direction"]),
+            risk=RiskLevel.ACT_LOW,
+            preview=lambda a: (
+                "Reset zoom" if a.get("direction") == "reset"
+                else f"Zoom {a.get('direction', 'in')}"
+                + (f" {a['steps']} steps" if (a.get("steps") or 1) > 1 else "")
+            ),
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="semantic_intent",
+            good_examples=(
+                '{"name": "computer_zoom", "arguments": {"direction": "out", "steps": 3}}',
+            ),
+            rejected_examples=(
+                'Menu paths or shortcuts as arguments: Conn compiles the mechanism itself.',
+            ),
+        ),
+        ToolSpec(
+            name="computer_close_tabs",
+            description=(
+                "Close tabs in the current app's tab bar, after a click to "
+                "approve. Pick tabs by position (the current tab, or the "
+                "first or last count tabs) or by a title the user names. "
+                "Never closes the last tab of a window, never closes a "
+                "window, and never discards unsaved work."
+            ),
+            parameters=_obj({
+                "position": {"type": "string", "enum": ["current", "first", "last"]},
+                "count": {"type": "integer", "minimum": 1, "maximum": 5},
+                "title": {"type": "string", "minLength": 1, "maxLength": 160},
+                "app": {"type": "string"},
+            }, []),
+            risk=RiskLevel.ACT_CONFIRM,
+            preview=lambda a: (
+                f"Close tab: {a['title']}" if a.get("title")
+                else "Close this tab" if a.get("position", "current") == "current"
+                else f"Close the {a['position']} {a.get('count') or 1} tabs"
+            ),
+            executor=_native_only,
+            computer_mutation=True,
+            semantic_operation="semantic_intent",
+            good_examples=(
+                '{"name": "computer_close_tabs", "arguments": {"position": "current"}}',
+                '{"name": "computer_close_tabs", "arguments": {"position": "first", "count": 2}}',
+                '{"name": "computer_close_tabs", "arguments": {"title": "Example"}}',
+            ),
+            rejected_examples=(
+                'Closing a window or closing without saving: refused.',
+            ),
+        ),
+        ToolSpec(
             name="computer_select",
             description=(
                 "Select one uniquely named item in a live list, table, "

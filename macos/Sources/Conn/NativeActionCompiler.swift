@@ -108,6 +108,23 @@ struct NativeActionCompiler {
         ])
     }
 
+    /// Witness for an open_url whose handler app the harness named (an
+    /// Obsidian note): that app comes forward showing a window whose title
+    /// starts with the document's own title. Without both hints the plan
+    /// keeps its truthful dispatch_only ceiling.
+    func openURLEffect(_ request: NativeActionRequest) -> NativeEffectGroup? {
+        guard request.operation == .openURL,
+              let bundleID = request.payload.witnessBundleID,
+              NativeAppIdentity.validBundleID(bundleID),
+              let prefix = request.payload.witnessTitlePrefix?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              !prefix.isEmpty, prefix.count <= 512 else { return nil }
+        return NativeEffectGroup(mode: "all", predicates: [
+            NativeEffectPredicate(kind: "frontmost_bundle_equals", expected: bundleID),
+            NativeEffectPredicate(kind: "window_title_has_prefix", expected: prefix),
+        ])
+    }
+
     func effectClass(
         request: NativeActionRequest,
         target: NativeObservationNode?,
@@ -118,6 +135,14 @@ struct NativeActionCompiler {
             return .secureOrDenied
         }
         if baseline.denied || target?.secure == true { return .secureOrDenied }
+        // Closing browser-style tabs is consequential, not destructive: it
+        // waits on a pointer approval, and the lowering already refused any
+        // close that would take the window with it. Its "close" wording must
+        // not trip the destructive word list, which still blocks everything
+        // else that closes.
+        if request.loweredIntentFamily == "close_tabs" { return .consequential }
+        // Zoom only rescales the view and is undone by the opposite step.
+        if request.loweredIntentFamily == "zoom" { return .reversibleNavigation }
 
         let words = semanticWords(request: request, target: target)
         if !words.isDisjoint(with: Self.destructiveWords) { return .destructive }

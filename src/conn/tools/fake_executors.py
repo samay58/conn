@@ -143,6 +143,21 @@ def _select_relative(args: dict, ctx: ExecutionContext) -> dict:
         effect="simulated selection change", data=data)
 
 
+def _zoom(args: dict, ctx: ExecutionContext) -> dict:
+    data = {"direction": args.get("direction"), "steps": args.get("steps", 1),
+            "simulated": True}
+    return simulated_verified_receipt(
+        target=f"zoom {args.get('direction', 'in')}",
+        effect="simulated zoom", data=data)
+
+
+def _close_tabs(args: dict, ctx: ExecutionContext) -> dict:
+    data = {"closed": args.get("title") or args.get("position"),
+            "count": args.get("count", 1), "simulated": True}
+    return simulated_verified_receipt(
+        target=str(data["closed"]), effect="simulated tabs removed", data=data)
+
+
 def _shortcuts_list(args: dict, ctx: ExecutionContext) -> dict:
     names = ["Focus Mode On", "Log Water", "Morning Routine", "Dark Mode", "Start Timer"]
     return {"count": len(names), "shortcuts": names, "simulated": True}
@@ -173,6 +188,8 @@ FAKE_EXECUTORS = {
     "app_menu": _menu,
     "computer_create": _create,
     "computer_select_relative": _select_relative,
+    "computer_zoom": _zoom,
+    "computer_close_tabs": _close_tabs,
     "shortcuts_list": _shortcuts_list,
     "shortcuts_run": _shortcuts_run,
 }

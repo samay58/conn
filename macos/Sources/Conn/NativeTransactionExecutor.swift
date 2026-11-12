@@ -13,6 +13,9 @@ struct NativeActionPlan {
     var preview: String
     var createdMs: Int
     var effectClass: NativeEffectClass
+    // Further targets pressed with the selected strategy after the first,
+    // inside the same approved transaction (the other tabs of one close).
+    var followUpTargets: [NativeObservationNode] = []
 }
 
 final class NativeEffectEvaluator {
@@ -78,8 +81,11 @@ final class NativeEffectEvaluator {
         case "frontmost_bundle_equals": return snapshot.bundleID ?? "none"
         case "document_url_equals": return snapshot.documentURL.map(NativeHash.sha256) ?? "none"
         case "window_count_delta": return String(snapshot.windowCount)
-        case "window_title_equals", "window_title_changes":
+        case "window_title_equals", "window_title_changes", "window_title_has_prefix":
             return snapshot.windowTitle.map(NativeHash.sha256) ?? "none"
+        case "collection_items_removed":
+            return removalItems(predicate, baseline: baseline, in: snapshot)
+                .map { String($0.count) } ?? "unavailable"
         case "element_exists", "element_disappears":
             return findNode(ref: predicate.ref, baseline: baseline, in: snapshot) == nil
                 ? "absent" : "present"
@@ -150,8 +156,20 @@ final class NativeEffectEvaluator {
         case "frontmost_bundle_equals":
             return after.bundleID == predicate.expected
         case "document_url_equals":
-            return after.documentURL.flatMap(NativeActionCompiler.normalizeBrowserURL)
-                == predicate.expected
+            return NativeBrowserURL.navigationLanded(
+                expected: predicate.expected,
+                actual: after.documentURL,
+                baselineToken: predicate.baseline
+            )
+        case "window_title_has_prefix":
+            // Whole-word prefix: "note - vault - Obsidian" matches the title
+            // itself or the title followed by a space (Obsidian appends its
+            // version), never "note - vault - Obsidianish".
+            guard let expected = predicate.expected, !expected.isEmpty,
+                  let title = after.windowTitle else { return false }
+            return title == expected || title.hasPrefix(expected + " ")
+        case "collection_items_removed":
+            return collectionItemsRemoved(predicate, before: before, after: after)
         case "window_count_delta":
             return after.windowCount - before.windowCount == predicate.expectedDelta
         case "window_title_equals":
@@ -294,6 +312,22 @@ final class NativeEffectEvaluator {
             if predicate.kind == "unique_focused_find_field_appears" {
                 bound.baseline = String(focusedFindFields(in: snapshot).count)
             }
+            if predicate.kind == "document_url_equals" {
+                // The page before the action only counts when the bound
+                // browser was the one observed; otherwise a redirect cannot
+                // be told from a stale page, and only an exact match verifies.
+                let browser = group.predicates.first {
+                    $0.kind == "frontmost_bundle_equals"
+                }?.expected
+                bound.baseline = browser != nil && browser == snapshot.bundleID
+                    ? NativeBrowserURL.baselineToken(snapshot.documentURL)
+                    : NativeBrowserURL.unboundBaseline
+            }
+            if predicate.kind == "collection_items_removed" {
+                bound.baseline = removalItems(
+                    predicate, baseline: snapshot, in: snapshot
+                ).map { String($0.count) }
+            }
             if predicate.kind == "unique_page_status_changes" {
                 bound.baseline = uniquePageStatusValue(in: snapshot)
             }
@@ -319,7 +353,8 @@ final class NativeEffectEvaluator {
             "element_child_count_increases",
         ])
         let expectedKinds = Set([
-            "frontmost_bundle_equals", "window_title_equals",
+            "frontmost_bundle_equals", "window_title_equals", "window_title_has_prefix",
+            "collection_items_removed",
             "element_attribute_equals", "text_contains", "text_hash_equals",
             "clipboard_hash_equals",
         ])
@@ -349,6 +384,18 @@ final class NativeEffectEvaluator {
                       !collectionRoles.isEmpty, !itemRoles.isEmpty else { return false }
                 if let ref = predicate.ref,
                    snapshot.nodes.filter({ $0.ref == ref }).count != 1 {
+                    return false
+                }
+            }
+            if predicate.kind == "collection_items_removed" {
+                guard let ref = predicate.ref,
+                      snapshot.nodes.filter({ $0.ref == ref }).count == 1,
+                      let delta = predicate.expectedDelta, delta > 0,
+                      let items = removalItems(
+                          predicate, baseline: snapshot, in: snapshot
+                      ),
+                      items.count > delta,
+                      Self.removalKeys(predicate).count == delta else {
                     return false
                 }
             }
@@ -384,6 +431,75 @@ final class NativeEffectEvaluator {
                   ) == bound else {
                 return false
             }
+        }
+        return true
+    }
+
+    /// Names of the items a removal witness expects to disappear, one per
+    /// removed item, in the normalized form `itemKey` produces.
+    static func removalKeys(_ predicate: NativeEffectPredicate) -> [String] {
+        (predicate.expected ?? "").split(separator: "\u{1f}").map(String.init)
+    }
+
+    static func itemKey(_ node: NativeObservationNode) -> String? {
+        let raw = [node.title, node.description]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        return raw.map {
+            $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        }
+    }
+
+    /// The items of the witnessed collection in `snapshot`, resolving the
+    /// collection itself through the same identity rules as a create
+    /// witness. Nil when the collection cannot be found again, so a window
+    /// change or a truncated observation never reads as items removed.
+    private func removalItems(
+        _ predicate: NativeEffectPredicate,
+        baseline: NativeCapturedObservation,
+        in snapshot: NativeCapturedObservation
+    ) -> [NativeObservationNode]? {
+        guard let itemRoles = predicate.attribute.map(roleSet), !itemRoles.isEmpty else {
+            return nil
+        }
+        let collection: NativeObservationNode?
+        if snapshot.snapshotID == baseline.snapshotID {
+            collection = snapshot.nodes.first { $0.ref == predicate.ref }
+        } else {
+            collection = findCollectionNode(
+                ref: predicate.ref, baseline: baseline, in: snapshot
+            )
+        }
+        guard let collection else { return nil }
+        return snapshot.nodes.filter {
+            itemRoles.contains($0.role)
+                && isDescendant($0, of: collection.ref, in: snapshot)
+        }
+    }
+
+    /// Verified only when the same collection is still there, it holds
+    /// exactly `expectedDelta` fewer items, and each removed name lost
+    /// exactly as many items as were asked to close under that name. Two
+    /// tabs titled alike therefore cannot stand in for each other.
+    private func collectionItemsRemoved(
+        _ predicate: NativeEffectPredicate,
+        before: NativeCapturedObservation,
+        after: NativeCapturedObservation
+    ) -> Bool {
+        guard let baselineCount = predicate.baseline.flatMap(Int.init),
+              let delta = predicate.expectedDelta, delta > 0,
+              let beforeItems = removalItems(predicate, baseline: before, in: before),
+              beforeItems.count == baselineCount,
+              let afterItems = removalItems(predicate, baseline: before, in: after),
+              afterItems.count == baselineCount - delta else { return false }
+        let keys = Self.removalKeys(predicate)
+        guard keys.count == delta else { return false }
+        var removed: [String: Int] = [:]
+        for key in keys { removed[key, default: 0] += 1 }
+        for (key, count) in removed {
+            let beforeCount = beforeItems.filter { Self.itemKey($0) == key }.count
+            let afterCount = afterItems.filter { Self.itemKey($0) == key }.count
+            guard afterCount == beforeCount - count else { return false }
         }
         return true
     }
@@ -921,6 +1037,36 @@ struct NativeTransactionExecutor {
             resolved = nil
         }
 
+        // Every further target is re-resolved before anything is sent, so a
+        // multi-tab close either starts with all of its approved targets
+        // still current or does not start at all.
+        var followUps: [NativeResolvedTarget] = []
+        for original in plan.followUpTargets {
+            let resolution = store.resolve(
+                target: NativeActionTarget(
+                    snapshotID: plan.baseline.snapshotID,
+                    ref: original.ref,
+                    identifier: original.identifier,
+                    title: original.title,
+                    bundleID: plan.baseline.bundleID
+                ),
+                baseline: plan.baseline,
+                current: current
+            )
+            guard case .success(let target) = resolution, !target.current.secure else {
+                return receipt(
+                    outcome: .failed,
+                    dispatch: .notDispatched,
+                    plan: plan,
+                    strategy: nil,
+                    evidence: [evidence("target_resolution", false, "follow_up_changed")],
+                    nativeError: "stale_plan",
+                    started: started
+                )
+            }
+            followUps.append(target)
+        }
+
         if let binding = plan.request.applicationBinding,
            !backend.applicationBindingMatches(binding) {
             return receipt(
@@ -994,6 +1140,49 @@ struct NativeTransactionExecutor {
                 nativeError: dispatchResult.nativeError,
                 started: started
             )
+        }
+
+        // The rest of the approved transaction: the other tabs of one close,
+        // or the further steps of one zoom. A short settle lets the app
+        // apply each step before the next. A step that is not cleanly sent
+        // stops the run; what already went out is reported, never retried.
+        if let strategy = selectedStrategy {
+            let repeats = plan.request.operation == .menu
+                ? max(plan.request.repeatCount - 1, 0) : 0
+            let remaining: [NativeResolvedTarget?] = followUps.map { $0 }
+                + Array(repeating: nil, count: repeats)
+            for (index, next) in remaining.enumerated() {
+                try? await Task.sleep(for: .milliseconds(80))
+                if let refusal = executionRefusal(
+                    plan: plan, dispatch: .dispatched, started: started
+                ) {
+                    return refusal
+                }
+                let stepEvidence = evidence(
+                    "follow_up_dispatch", false, "step_\(index + 2)_of_\(remaining.count + 1)"
+                )
+                if NativeClock.ms() >= deadline {
+                    return receipt(
+                        outcome: .failed, dispatch: .dispatched, plan: plan,
+                        strategy: strategy, evidence: [stepEvidence],
+                        nativeError: "partial_dispatch", started: started
+                    )
+                }
+                let step = backend.dispatch(
+                    strategy: strategy,
+                    request: plan.request,
+                    target: next ?? resolved
+                )
+                if step.state != .dispatched {
+                    return receipt(
+                        outcome: .failed,
+                        dispatch: step.state == .possiblyDispatched
+                            ? .possiblyDispatched : .dispatched,
+                        plan: plan, strategy: strategy, evidence: [stepEvidence],
+                        nativeError: "partial_dispatch", started: started
+                    )
+                }
+            }
         }
 
         if plan.request.operation == .setText, plan.request.payload.submit {

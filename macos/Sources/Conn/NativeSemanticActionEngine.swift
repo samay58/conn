@@ -139,6 +139,8 @@ actor NativeSemanticActionEngine {
         }
         var intentCandidates: [[String: Any]]?
         var intentWitness: NativeEffectGroup?
+        var intentFollowUps: [NativeObservationNode] = []
+        var intentDisplayTarget: String?
         prunePlans(
             turnID: request.turnID,
             observationEpoch: request.observationEpoch
@@ -158,7 +160,8 @@ actor NativeSemanticActionEngine {
         }
         let wantsMenu = request.operation == .menu
             || (request.operation == .semanticIntent
-                && request.payload.intentFamily == "create")
+                && ["create", "zoom", "close_tabs"].contains(
+                    request.payload.intentFamily ?? ""))
         let query = NativeObservationQuery(
             bundleID: operationNeedsTarget(request.operation)
                 ? request.target.bundleID : nil,
@@ -206,13 +209,13 @@ actor NativeSemanticActionEngine {
             return failurePlan("app_identity_mismatch", outcome: .blocked)
         }
         if request.operation == .semanticIntent,
-           request.payload.intentFamily == "create",
-           let kind = request.payload.intentKind,
-           let synonyms = Self.createKindSynonyms[kind] {
-            let wanted = Set(synonyms.map { "new \($0)" })
+           let wanted = discoverableMenuTitles(request.payload) {
+            // A disabled zoom leaf still proves the menu is populated; the
+            // lowering reports the limit instead of hunting for another.
+            let acceptsDisabled = request.payload.intentFamily == "zoom"
             let hasAffordance = baseline.nodes.contains {
                 $0.role == "AXMenuItem"
-                    && $0.enabled != false
+                    && ($0.enabled != false || acceptsDisabled)
                     && wanted.contains(normalize($0.title))
             }
             if !hasAffordance {
@@ -263,8 +266,11 @@ actor NativeSemanticActionEngine {
             switch lowerSemanticIntent(request: request, baseline: baseline) {
             case .success(let lowered):
                 request = lowered.request
+                request.loweredIntentFamily = request.payload.intentFamily
                 intentCandidates = lowered.candidates
                 intentWitness = lowered.witness
+                intentFollowUps = lowered.followUps
+                intentDisplayTarget = lowered.displayTarget
             case .failure(let failure): return failure.plan
             }
         }
@@ -322,6 +328,7 @@ actor NativeSemanticActionEngine {
         }
         var effect = reboundDesired ?? intentWitness
             ?? compiler.navigationEffect(request)
+            ?? compiler.openURLEffect(request)
             ?? derivedEffect(
             request: request,
             target: targetNode,
@@ -346,6 +353,7 @@ actor NativeSemanticActionEngine {
             )
         }
         let safeTarget = [
+            intentDisplayTarget,
             targetNode?.title,
             targetNode?.description,
             semanticIntentTarget(request.payload),
@@ -365,6 +373,7 @@ actor NativeSemanticActionEngine {
             request: request,
             baseline: baseline,
             target: targetNode,
+            followUps: intentFollowUps,
             effect: effect,
             strategies: strategies,
             effectClass: effectClass
@@ -380,7 +389,8 @@ actor NativeSemanticActionEngine {
             safeTarget: safeTarget,
             preview: preview,
             createdMs: NativeClock.ms(),
-            effectClass: effectClass
+            effectClass: effectClass,
+            followUpTargets: intentFollowUps
         )
         plans[fingerprint] = plan
         prunePlanLimit()
@@ -411,6 +421,7 @@ actor NativeSemanticActionEngine {
             "denied": baseline.denied,
             "read_set": Array(Set(
                 effect.predicates.compactMap(\.ref) + [targetNode?.ref].compactMap { $0 }
+                    + intentFollowUps.map(\.ref)
             )).sorted(),
         ].merging(
             intentCandidates.map { ["candidates": $0] } ?? [:],
@@ -503,6 +514,8 @@ actor NativeSemanticActionEngine {
         let request: NativeActionRequest
         let candidates: [[String: Any]]
         var witness: NativeEffectGroup?
+        var followUps: [NativeObservationNode] = []
+        var displayTarget: String?
     }
 
     private func lowerSemanticIntent(
@@ -516,6 +529,10 @@ actor NativeSemanticActionEngine {
             return lowerSelectRelative(request: request, baseline: baseline)
         case "select_named":
             return lowerSelectNamed(request: request, baseline: baseline)
+        case "zoom":
+            return lowerZoom(request: request, baseline: baseline)
+        case "close_tabs":
+            return lowerCloseTabs(request: request, baseline: baseline)
         default:
             return .failure(IntentLoweringFailure(plan: failurePlan("unsupported_intent")))
         }
@@ -866,6 +883,267 @@ actor NativeSemanticActionEngine {
         ))
     }
 
+    /// Menu titles a semantic intent may need discovered from lazily built
+    /// menus before lowering. Nil when the intent never lowers onto a menu
+    /// that needs opening to read.
+    private func discoverableMenuTitles(_ payload: NativeActionPayload) -> Set<String>? {
+        switch payload.intentFamily {
+        case "create":
+            guard let kind = payload.intentKind,
+                  let synonyms = Self.createKindSynonyms[kind] else { return nil }
+            return Set(synonyms.map { "new \($0)" })
+        case "zoom":
+            return payload.direction.flatMap { Self.zoomMenuTitles[$0] }
+        default:
+            return nil
+        }
+    }
+
+    // The app's own View-menu wording for each zoom direction. The Window
+    // menu's bare "Zoom" (resize the window) is deliberately absent.
+    private static let zoomMenuTitles: [String: Set<String>] = [
+        "in": ["zoom in"],
+        "out": ["zoom out"],
+        "reset": ["actual size", "reset zoom"],
+    ]
+
+    static let zoomStepLimit = 5
+    static let closeTabLimit = 5
+
+    /// Zoom lowers onto the app's own live Zoom In / Zoom Out / Actual Size
+    /// menu leaf, chosen `steps` times in one transaction. Apps expose no
+    /// trustworthy zoom level through Accessibility, so the plan carries no
+    /// witness and its honest ceiling is dispatch_only.
+    private func lowerZoom(
+        request: NativeActionRequest,
+        baseline: NativeCapturedObservation
+    ) -> Result<LoweredIntent, IntentLoweringFailure> {
+        guard let direction = request.payload.direction,
+              let titles = Self.zoomMenuTitles[direction] else {
+            return .failure(IntentLoweringFailure(plan: failurePlan("unsupported_intent")))
+        }
+        let steps = direction == "reset" ? 1 : (request.payload.steps ?? 1)
+        guard (1...Self.zoomStepLimit).contains(steps) else {
+            return .failure(IntentLoweringFailure(plan: failurePlan("unsupported_intent")))
+        }
+        let leaves = baseline.nodes.filter {
+            $0.role == "AXMenuItem" && titles.contains(normalize($0.title))
+        }
+        guard !leaves.isEmpty else {
+            return .failure(IntentLoweringFailure(plan: failurePlan("no_live_affordance")))
+        }
+        let enabled = leaves.filter { $0.enabled != false }
+        guard let leaf = enabled.first else {
+            return .failure(IntentLoweringFailure(plan: failurePlan("zoom_limit_reached")))
+        }
+        let paths = Set(enabled.map { menuPathTitles(to: $0, in: baseline) })
+        guard paths.count == 1 else {
+            return .failure(IntentLoweringFailure(plan: failurePlan(
+                "ambiguous_intent", outcome: .ambiguous
+            )))
+        }
+        var lowered = request
+        lowered.operation = .menu
+        lowered.repeatCount = steps
+        lowered.payload.menuPath = menuPathTitles(to: leaf, in: baseline)
+            .split(separator: "\u{1e}").map(String.init)
+        var candidate: [String: Any] = [
+            "title": leaf.title ?? "", "role": leaf.role,
+            "strategy_class": "menu", "menu_path": lowered.payload.menuPath,
+        ]
+        candidate.put("shortcut", leaf.menuShortcut)
+        return .success(LoweredIntent(
+            request: lowered,
+            candidates: [candidate],
+            displayTarget: leaf.title
+        ))
+    }
+
+    /// Close tabs by position ("current", "first", "last" with a count) or by
+    /// name, in the one tab strip the window shows. Each tab closes through
+    /// its own live close button; the current tab alone may fall back to the
+    /// app's "Close Tab" menu leaf. Refuses any close that would empty the
+    /// strip, because closing the last tab closes the window, and Conn never
+    /// closes a window (it may hold unsaved documents). Verified only by the
+    /// named tabs being gone from the same strip.
+    private func lowerCloseTabs(
+        request: NativeActionRequest,
+        baseline: NativeCapturedObservation
+    ) -> Result<LoweredIntent, IntentLoweringFailure> {
+        func fail(
+            _ reason: String, _ outcome: NativeActionOutcome = .failed
+        ) -> Result<LoweredIntent, IntentLoweringFailure> {
+            .failure(IntentLoweringFailure(plan: failurePlan(reason, outcome: outcome)))
+        }
+        guard let shape = Self.createCollectionShapes["tab"] else {
+            return fail("unsupported_intent")
+        }
+        let strips = baseline.nodes.filter { node in
+            shape.collectionRoles.contains(node.role)
+                && effectEvaluator.descendantCount(
+                    of: node, itemRoles: shape.itemRoles, in: baseline) > 0
+        }
+        guard !strips.isEmpty else { return fail("no_live_affordance") }
+        guard strips.count == 1, let strip = strips.first else {
+            return fail("ambiguous_intent", .ambiguous)
+        }
+        let tabs = Self.visualOrder(baseline.nodes.filter {
+            shape.itemRoles.contains($0.role)
+                && NativeObservationStore.isDescendant($0, of: strip.ref, in: baseline)
+        })
+
+        let targets: [NativeObservationNode]
+        if let rawName = request.payload.intentName {
+            let name = normalize(rawName)
+            guard !name.isEmpty, request.payload.position == nil else {
+                return fail("unsupported_intent")
+            }
+            let exact = tabs.filter { NativeEffectEvaluator.itemKey($0) == name }
+            let matches = exact.isEmpty
+                ? tabs.filter { NativeEffectEvaluator.itemKey($0)?.contains(name) == true }
+                : exact
+            guard !matches.isEmpty else { return fail("no_matching_tab") }
+            guard matches.count == 1 else {
+                var plan = failurePlan("ambiguous_intent", outcome: .ambiguous)
+                plan["candidates"] = matches.prefix(5).map {
+                    ["display": $0.title ?? $0.description ?? "tab"]
+                }
+                return .failure(IntentLoweringFailure(plan: plan))
+            }
+            targets = matches
+        } else {
+            let count = request.payload.count ?? 1
+            guard (1...Self.closeTabLimit).contains(count) else {
+                return fail("unsupported_intent")
+            }
+            switch request.payload.position {
+            case "current":
+                guard count == 1 else { return fail("unsupported_intent") }
+                let selected = tabs.filter { $0.selected == true }
+                guard selected.count == 1 else {
+                    return selected.isEmpty
+                        ? fail("no_current_selection")
+                        : fail("ambiguous_intent", .ambiguous)
+                }
+                targets = selected
+            case "first", "last":
+                guard tabs.count >= count else { return fail("not_enough_tabs") }
+                targets = request.payload.position == "first"
+                    ? Array(tabs.prefix(count)) : Array(tabs.suffix(count))
+            default:
+                return fail("unsupported_intent")
+            }
+        }
+        guard targets.count < tabs.count else {
+            return fail("would_close_window", .blocked)
+        }
+
+        let keys = targets.map(NativeEffectEvaluator.itemKey)
+        let titles = targets.map { $0.title ?? $0.description ?? "tab" }
+        let witness: NativeEffectGroup? = keys.allSatisfy({ $0?.isEmpty == false })
+            ? NativeEffectGroup(mode: "all", predicates: [
+                NativeEffectPredicate(
+                    kind: "collection_items_removed",
+                    ref: strip.ref,
+                    attribute: shape.itemRoles.sorted().joined(separator: ","),
+                    expected: keys.compactMap { $0 }.joined(separator: "\u{1f}"),
+                    expectedDelta: targets.count
+                ),
+            ])
+            : nil
+        let candidates: [[String: Any]] = titles.map {
+            ["title": $0, "role": "AXRadioButton", "strategy_class": "tab_close"]
+        }
+
+        var lowered = request
+        // The resolved count drives the chip text ("Close 2 tabs: ...").
+        lowered.payload.count = targets.count
+        let buttons = targets.map { closeButton(of: $0, in: baseline) }
+        if buttons.allSatisfy({ $0 != nil }) {
+            let pressed = buttons.compactMap { $0 }
+            lowered.operation = .press
+            lowered.target = NativeActionTarget(
+                snapshotID: nil,
+                ref: pressed[0].ref,
+                identifier: pressed[0].identifier,
+                title: nil,
+                bundleID: request.target.bundleID
+            )
+            return .success(LoweredIntent(
+                request: lowered,
+                candidates: candidates,
+                witness: witness,
+                followUps: Array(pressed.dropFirst()),
+                displayTarget: titles.joined(separator: ", ")
+            ))
+        }
+        // Only the selected tab is what the app's own "Close Tab" acts on.
+        guard targets.count == 1, targets[0].selected == true else {
+            return fail("no_live_affordance")
+        }
+        let leaves = baseline.nodes.filter {
+            $0.role == "AXMenuItem" && $0.enabled != false
+                && normalize($0.title) == "close tab"
+        }
+        let paths = Set(leaves.map { menuPathTitles(to: $0, in: baseline) })
+        guard let leaf = leaves.first else { return fail("no_live_affordance") }
+        guard paths.count == 1 else { return fail("ambiguous_intent", .ambiguous) }
+        lowered.operation = .menu
+        lowered.payload.menuPath = menuPathTitles(to: leaf, in: baseline)
+            .split(separator: "\u{1e}").map(String.init)
+        return .success(LoweredIntent(
+            request: lowered,
+            candidates: candidates,
+            witness: witness,
+            displayTarget: titles.joined(separator: ", ")
+        ))
+    }
+
+    /// A tab's own close control: one pressable button inside the tab whose
+    /// name says close.
+    private func closeButton(
+        of tab: NativeObservationNode,
+        in baseline: NativeCapturedObservation
+    ) -> NativeObservationNode? {
+        let buttons = baseline.nodes.filter { node in
+            guard node.role == "AXButton",
+                  node.supportedActions.contains("AXPress"),
+                  !node.secure,
+                  NativeObservationStore.isDescendant(node, of: tab.ref, in: baseline) else {
+                return false
+            }
+            return [node.title, node.description, node.identifier, node.subrole]
+                .compactMap { $0?.lowercased() }
+                .contains { $0.contains("close") }
+        }
+        return buttons.count == 1 ? buttons[0] : nil
+    }
+
+    /// Left-to-right order when every tab has a frame, else tree order.
+    static func visualOrder(_ tabs: [NativeObservationNode]) -> [NativeObservationNode] {
+        if tabs.allSatisfy({ $0.frame != nil }) {
+            return tabs.sorted { lhs, rhs in
+                guard let left = lhs.frame, let right = rhs.frame else { return false }
+                return left.y == right.y ? left.x < right.x : left.y < right.y
+            }
+        }
+        return tabs.sorted { $0.path.lexicographicallyPrecedes($1.path) }
+    }
+
+    /// Approval chip text naming the tabs; the harness clamps it to the
+    /// island's 38 characters at a word boundary.
+    static func closeTabsPreview(_ names: String, count: Int) -> String {
+        count > 1 ? "Close \(count) tabs: \(names)" : "Close tab: \(names)"
+    }
+
+    static func zoomPreview(direction: String?, steps: Int) -> String {
+        switch direction {
+        case "in": return steps > 1 ? "Zoom in \(steps) steps" : "Zoom in"
+        case "out": return steps > 1 ? "Zoom out \(steps) steps" : "Zoom out"
+        default: return "Reset zoom"
+        }
+    }
+
     private func menuCandidates(
         path: [String],
         in snapshot: NativeCapturedObservation
@@ -1079,11 +1357,17 @@ actor NativeSemanticActionEngine {
         request: NativeActionRequest,
         baseline: NativeCapturedObservation,
         target: NativeObservationNode?,
+        followUps: [NativeObservationNode],
         effect: NativeEffectGroup,
         strategies: [NativeActionStrategy],
         effectClass: NativeEffectClass
     ) -> String {
-        NativeHash.sha256([
+        // Every node a transaction may press is part of what was approved.
+        let followUpParts = followUps.isEmpty ? [] : [
+            followUps.map { "\($0.ref):\($0.semanticFingerprint)" }
+                .joined(separator: ","),
+        ]
+        return NativeHash.sha256(([
             request.turnID,
             String(request.responseEpoch),
             String(request.observationEpoch),
@@ -1102,7 +1386,7 @@ actor NativeSemanticActionEngine {
             effectClass.rawValue,
             String(request.navigationGeneration),
             request.executionConnectionID,
-        ].joined(separator: "\u{1e}"))
+        ] + followUpParts).joined(separator: "\u{1e}"))
     }
 
     private func previewText(request: NativeActionRequest, target: String) -> String {
@@ -1117,6 +1401,12 @@ actor NativeSemanticActionEngine {
                 ? "Select \(target)" : "Focus \(target)"
         case .scroll: return "Scroll \(target)"
         case .setText: return "Enter text in \(target)"
+        case .press where request.payload.intentFamily == "close_tabs",
+             .menu where request.payload.intentFamily == "close_tabs":
+            return Self.closeTabsPreview(target, count: request.payload.count ?? 1)
+        case .menu where request.payload.intentFamily == "zoom":
+            return Self.zoomPreview(
+                direction: request.payload.direction, steps: request.repeatCount)
         case .press: return "Press \(target)"
         case .menu: return "Choose \(target)"
         case .keyChord: return "Send the approved shortcut"

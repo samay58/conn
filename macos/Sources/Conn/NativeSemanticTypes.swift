@@ -509,6 +509,15 @@ struct NativeActionPayload {
     var intentKind: String?
     var intentRelation: String?
     var intentName: String?
+    // Intent slots for zoom (steps) and close_tabs (position, count).
+    var steps: Int? = nil
+    var position: String? = nil
+    var count: Int? = nil
+    // Harness-derived witness hints for an open_url whose handler app is
+    // known (an Obsidian note): the app that must come forward and the
+    // window-title prefix it shows for that document. Never model-authored.
+    var witnessBundleID: String? = nil
+    var witnessTitlePrefix: String? = nil
 
     static func parse(_ value: Any?) -> Self {
         if let text = value as? String {
@@ -538,7 +547,12 @@ struct NativeActionPayload {
             intentFamily: dictionary["family"] as? String,
             intentKind: dictionary["kind"] as? String,
             intentRelation: dictionary["relation"] as? String,
-            intentName: dictionary["target_name"] as? String
+            intentName: dictionary["target_name"] as? String,
+            steps: dictionary["steps"] as? Int,
+            position: dictionary["position"] as? String,
+            count: dictionary["count"] as? Int,
+            witnessBundleID: dictionary["witness_bundle_id"] as? String,
+            witnessTitlePrefix: dictionary["witness_window_title_prefix"] as? String
         )
     }
 
@@ -551,6 +565,9 @@ struct NativeActionPayload {
             String(submit),
             intentFamily ?? "", intentKind ?? "", intentRelation ?? "",
             intentName ?? "",
+            steps.map(String.init) ?? "", position ?? "",
+            count.map(String.init) ?? "",
+            witnessBundleID ?? "", witnessTitlePrefix ?? "",
         ].joined(separator: "\u{1f}"))
     }
 }
@@ -672,6 +689,11 @@ struct NativeActionRequest {
     var applicationBinding: NativeApplicationBinding?
     var navigationGeneration: Int
     var executionConnectionID: String
+    // Times the lowered menu leaf is chosen in one transaction (zoom steps).
+    var repeatCount: Int = 1
+    // Set only by the engine's own intent lowering, never parsed from the
+    // wire, so a raw request cannot claim an intent's effect class.
+    var loweredIntentFamily: String? = nil
 
     static func parse(_ params: [String: Any]) -> Self? {
         let raw = params["request"] as? [String: Any] ?? params

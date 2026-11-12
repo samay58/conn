@@ -88,6 +88,13 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         let windowDocumentURL = stringAttribute(
             focusedWindow, kAXDocumentAttribute
         )
+        // Browsers leave the window's AXDocument empty; the page address
+        // lives on the page's own web area. Read it with a container-only
+        // walk before the bounded tree, so neither the node budget nor the
+        // verification deadline spent on toolbar nodes can hide it.
+        let pageURL = windowDocumentURL.flatMap(NativeActionCompiler.normalizeBrowserURL) == nil
+            ? primaryWebAreaURL(window: focusedWindow, deadlineMs: query.deadlineMs)
+            : nil
         let clipboardHash = NSPasteboard.general.string(forType: .string).map(NativeHash.sha256)
         guard !denied else {
             return NativeCapturedObservation(
@@ -103,7 +110,7 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
                 windowID: windowID,
                 windowTitle: windowTitle,
                 windowFrame: windowFrame,
-                documentURL: windowDocumentURL,
+                documentURL: pageURL ?? windowDocumentURL,
                 focusedWindowRef: nil,
                 focusedElementRef: nil,
                 nodes: [],
@@ -134,7 +141,7 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             maxDepth: query.maxDepth,
             deadlineMs: query.deadlineMs
         )
-        let documentURL = windowDocumentURL ?? webAreaDocumentURL(
+        let documentURL = pageURL ?? windowDocumentURL ?? webAreaDocumentURL(
             in: tree,
             deadlineMs: query.deadlineMs
         )
@@ -178,6 +185,21 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         return normalized.count == 1 ? normalized.first : nil
     }
 
+    static func hasAncestor(
+        _ node: NativeObservationNode,
+        role: String,
+        in nodes: [NativeObservationNode]
+    ) -> Bool {
+        var parentRef = node.parentRef
+        var visited: Set<String> = []
+        while let ref = parentRef, visited.insert(ref).inserted {
+            guard let parent = nodes.first(where: { $0.ref == ref }) else { return false }
+            if parent.role == role { return true }
+            parentRef = parent.parentRef
+        }
+        return false
+    }
+
     static func urlText(_ value: AnyObject?) -> String? {
         if let text = value as? String { return text }
         if let url = value as? NSURL { return url.absoluteString }
@@ -192,6 +214,24 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
         }
     }
 
+    private func primaryWebAreaURL(
+        window: AXUIElement?,
+        deadlineMs: Int?
+    ) -> String? {
+        guard let window else { return nil }
+        let expired = { deadlineMs.map { NativeClock.ms() >= $0 } == true }
+        let areas = NativeBrowserURL.outermostWebAreas(
+            roots: elementArrayAttribute(window, kAXChildrenAttribute),
+            role: { self.stringAttribute($0, kAXRoleAttribute) },
+            children: { self.elementArrayAttribute($0, kAXChildrenAttribute) },
+            isExpired: expired
+        )
+        guard !areas.isEmpty, !expired() else { return nil }
+        return NativeBrowserURL.uniqueURL(areas.map {
+            urlAttribute($0, kAXURLAttribute) ?? urlAttribute($0, kAXDocumentAttribute)
+        })
+    }
+
     private func webAreaDocumentURL(
         in nodes: [NativeObservationNode],
         deadlineMs: Int?
@@ -202,7 +242,9 @@ final class NativeAXSemanticBackend: NativeSemanticBackend, @unchecked Sendable 
             if deadlineMs.map({ NativeClock.ms() >= $0 }) == true {
                 return nil
             }
+            // A web area nested in another is an embedded frame, not the page.
             guard node.role == "AXWebArea",
+                  !Self.hasAncestor(node, role: "AXWebArea", in: nodes),
                   let element = latestElements[node.ref] else { return nil }
             return (
                 role: node.role,

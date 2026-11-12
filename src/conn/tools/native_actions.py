@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote_plus, quote
 
 from .registry import ToolSpec
+
+# Tools whose action opens something through Launch Services: the handling
+# app may need to launch, or the page to load, before the witness can match.
+_LAUNCH_TOOLS = frozenset({"app_open", "app_switch", "browser_navigate", "phoenix_open_note"})
 
 
 def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
@@ -27,9 +32,11 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
             hints = _application_hints(scope, cfg)
             payload.update(hints)
     elif name == "phoenix_open_note":
+        raw = str(args["path"]).lstrip("/")
         vault = quote(cfg.phoenix.obsidian_vault, safe="")
-        path = quote(str(args["path"]).lstrip("/"), safe="/")
+        path = quote(raw, safe="/")
         payload = {"url": f"obsidian://open?vault={vault}&file={path}"}
+        payload.update(_obsidian_note_witness(raw, cfg))
     elif name == "clipboard_set":
         payload = args["text"]
     elif name in {"computer_click", "computer_scroll"}:
@@ -90,6 +97,20 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
         if args.get("kind"):
             payload["kind"] = args["kind"]
         payload.update(_intent_scope(args, cfg))
+    elif name == "computer_zoom":
+        payload = {"family": "zoom", "direction": args["direction"]}
+        if args.get("steps") is not None:
+            payload["steps"] = int(args["steps"])
+        payload.update(_intent_scope(args, cfg))
+    elif name == "computer_close_tabs":
+        payload = {"family": "close_tabs"}
+        title = str(args.get("title") or "").strip()
+        if title:
+            payload["target_name"] = title
+        else:
+            payload["position"] = args["position"]
+            payload["count"] = int(args.get("count") or 1)
+        payload.update(_intent_scope(args, cfg))
     elif name == "computer_select":
         payload = {"family": "select_named", "target_name": args["name"]}
         if args.get("kind"):
@@ -98,7 +119,7 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
 
     timeout_ms = (
         cfg.actions.launch_verify_ms
-        if name in {"app_open", "app_switch"}
+        if name in _LAUNCH_TOOLS
         else cfg.actions.create_verify_ms
         if name == "computer_create"
         else cfg.actions.visual_verify_ms
@@ -125,6 +146,40 @@ def compile_action_request(spec: ToolSpec, args: dict, cfg) -> dict:
     if name == "computer_activate":
         request["visual_enabled"] = bool(cfg.actions.visual_enabled)
     return request
+
+
+def _obsidian_note_witness(raw: str, cfg) -> dict:
+    """What Obsidian shows once the note is open, so the native side can
+    verify the open instead of reporting it unconfirmed.
+
+    Obsidian titles its window "<active note basename> - <vault name> -
+    Obsidian <version>" (Obsidian 1.15 app bundle: getAppTitle joins the
+    active leaf's display text, a markdown file's `basename`, to the vault
+    title set at start-up as "<vault folder name> - Obsidian " + version).
+    The prefix up to "Obsidian" is fixed; the version is not, so the witness
+    is a whole-word prefix. A note that is not on disk gets no witness: what
+    Obsidian would show for it is unknown, and the plan stays dispatch_only.
+    """
+    bundle_id = str(cfg.apps.bundle_ids.get("Obsidian") or "").strip()
+    if not bundle_id:
+        return {}
+    root = Path(cfg.phoenix.vault_root)
+    if (root / raw).is_file():
+        basename = PurePosixPath(raw).stem
+    elif (root / f"{raw}.md").is_file():
+        # obsidian://open resolves an extensionless path to the .md note.
+        basename = PurePosixPath(raw).name
+    else:
+        return {}
+    basename = basename.strip()
+    if not basename:
+        return {}
+    return {
+        "witness_bundle_id": bundle_id,
+        "witness_window_title_prefix": (
+            f"{basename} - {cfg.phoenix.obsidian_vault} - Obsidian"
+        ),
+    }
 
 
 def _visual_grounding(value: dict) -> dict:

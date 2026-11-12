@@ -176,6 +176,22 @@ def _guard_scroll(args: dict, cfg: Config) -> str | None:
     return None
 
 
+def _guard_close_tabs(args: dict, cfg: Config) -> str | None:
+    """Exactly one way to pick tabs: a position (with an optional count for
+    first or last) or a title. Anything else is refused before native."""
+    title = str(args.get("title") or "").strip()
+    position = args.get("position")
+    if bool(title) == (position is not None):
+        return "close_tabs_needs_position_or_title"
+    if title and int(args.get("count") or 1) != 1:
+        return "close_tabs_count_needs_position"
+    if position == "current" and int(args.get("count") or 1) != 1:
+        return "close_tabs_current_is_one_tab"
+    if title and any(ord(char) < 32 or ord(char) == 127 for char in title):
+        return "close_tabs_title_invalid"
+    return None
+
+
 ARG_GUARDS: dict[str, Callable[[dict, Config], str | None]] = {
     "app_open": _guard_app_name,
     "app_switch": _guard_app_name,
@@ -183,6 +199,7 @@ ARG_GUARDS: dict[str, Callable[[dict, Config], str | None]] = {
     "phoenix_open_note": _guard_vault_path,
     "clipboard_set": _guard_clipboard_size,
     "computer_scroll": _guard_scroll,
+    "computer_close_tabs": _guard_close_tabs,
     "shortcuts_list": _guard_shortcuts_enabled,
     "shortcuts_run": _guard_shortcut_run,
     "app_focus_tab": _guard_present_app_allowlist,

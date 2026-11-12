@@ -106,6 +106,8 @@ class ActionReceipt:
         move, with no internal terminology."""
         if self.reason_code == "navigation_grant_required":
             return NAVIGATION_GRANT_GUIDANCE
+        if self.reason_code == "would_close_window":
+            return "That would close the whole window, so I left it open."
         match self.outcome:
             case ActionOutcome.VERIFIED:
                 return "Done."
@@ -139,6 +141,16 @@ class ActionReceipt:
             return "Nothing is selected to move from."
         if reason == "no_relative_item":
             return "There is no item in that direction."
+        if reason == "effect_already_satisfied":
+            return "That is already the case."
+        if reason == "partial_dispatch":
+            return "Only part of that went through. Check before retrying."
+        if reason == "zoom_limit_reached":
+            return "Zoom is already at its limit."
+        if reason == "not_enough_tabs":
+            return "There are not that many tabs open."
+        if reason == "no_matching_tab":
+            return "I can't find a tab with that name."
         return "It did not run."
 
     def as_dict(self) -> dict:
