@@ -45,6 +45,8 @@ class ToolSpec:
     diagnostic: bool = False
     good_examples: tuple[str, ...] = ()
     rejected_examples: tuple[str, ...] = ()
+    # Island card template (conn.cards.TEMPLATES); "" shows no card.
+    card: str = ""
 
     def __post_init__(self) -> None:
         if self.computer_mutation != (self.semantic_operation is not None):

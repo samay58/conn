@@ -190,6 +190,7 @@ def register_mcp_tools(
                                     manager, exported),
             computer_mutation=False,
             timeout_s=(tool_cfg.timeout_s or cfg.mcp.call_timeout_s) + 2,
+            card=tool_cfg.card,
         )
         registered += 1
     if registered > cfg.mcp.max_tools:

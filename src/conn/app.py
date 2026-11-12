@@ -23,6 +23,7 @@ from .navigation import NavigationLease
 from .config import Config
 from .cost import CostMeter
 from .turn_ledger import TurnLedger
+from . import cards
 from .events import (
     AckTurn, ApprovalDecision, BudgetOverride, BudgetTripped, CancelResponse,
     ClearInput, CloseMic, Command, CommitInput, CreateResponse, EndSession,
@@ -85,6 +86,7 @@ class ConnApp:
         self.cost.ledger = TurnLedger(cfg.pricing)
         self.cost.ledger.attach(self.trace)
         self.approvals = ApprovalManager(on_timeout=self.dispatch_soon)
+        self._send_cards: dict[str, dict] = {}   # call_id -> send args shown on a reply card
         self.console_capability = os.environ.pop("CONN_CONSOLE_CAPABILITY", None)
         self.ax_bridge = AxBridge()
         self.harness.ctx.ax_reader = self.ax_bridge
@@ -214,6 +216,8 @@ class ConnApp:
         self._spoke_this_response = False
         self._response_transcript.clear()
         self._response_modality = None
+        self._send_cards.clear()
+        self.publish({"type": "card_clear"})
         self._turn_count = 0
         self._phase_since = time.monotonic()
         self._current_response_id = None
@@ -502,6 +506,7 @@ class ConnApp:
                     )))
             case QueueApproval(call=call):
                 self.approvals.ask(call)
+                self._show_send_card(call)
                 self.trace.log("approval_asked", call_id=call.call_id,
                                name=call.name, preview=call.preview,
                                plan_fingerprint=(call.prepared_plan or {}).get(
@@ -515,6 +520,7 @@ class ConnApp:
                 visual_observation=visual_observation,
             ):
                 self.trace.log("tool_result_sent", call_id=call_id, ok=tool_ok)
+                self._settle_send_card(call_id, output)
                 if visual_observation is not None:
                     self.cost.record_visual_observation(visual_observation)
                     self.trace.log("visual_observation_sent", **visual_observation.metadata)
@@ -618,6 +624,7 @@ class ConnApp:
                        ok=result.ok,
                        output=self.artifacts.trace_preview(call.name, result.output),
                        output_artifact=artifact)
+        self._show_result_card(call, result.output)
         if result.action_trace is not None:
             self.trace.log(
                 "action_transaction",
@@ -627,6 +634,49 @@ class ConnApp:
             )
         await self.dispatch(result)
 
+
+    # ---- cards (see conn/cards.py; published to the app, never traced) ----
+
+    def _card_template(self, name: str) -> str:
+        spec = self.harness.registry.get(name)
+        return getattr(spec, "card", "") if spec is not None else ""
+
+    def _publish_card(self, card: dict | None, call_id: str) -> None:
+        if card is None:
+            return
+        self.publish({"type": "card", "card": card})
+        self.trace.log("card_shown", call_id=call_id, card_kind=card["kind"],
+                       state=card.get("state"), rows=len(card.get("rows") or []))
+
+    def _show_result_card(self, call, output: str) -> None:
+        template = self._card_template(call.name)
+        if template and template != "send":
+            self._publish_card(cards.build(template, call.arguments, output), call.call_id)
+
+    def _show_send_card(self, call) -> None:
+        if self._card_template(call.name) != "send":
+            return
+        card = cards.send_card(call.arguments, "approve")
+        if card is not None:
+            self._send_cards[call.call_id] = call.arguments
+            self._publish_card(card, call.call_id)
+
+    def _settle_send_card(self, call_id: str, output: str) -> None:
+        args = self._send_cards.pop(call_id, None)
+        if args is None:
+            return
+        try:
+            envelope = json.loads(output)
+        except (TypeError, ValueError):
+            envelope = {}
+        error = str(envelope.get("error") or "") if isinstance(envelope, dict) else ""
+        if isinstance(envelope, dict) and envelope.get("ok") is True:
+            state = "sent"
+        elif error.startswith(("denied_by_user", "approval_timeout")) or error.startswith("mcp_server_unavailable"):
+            state = "held"   # nothing was sent
+        else:
+            state = "unconfirmed"   # it may have gone out; never claim "Not sent"
+        self._publish_card(cards.send_card(args, state), call_id)
 
     async def _pump(self) -> None:
         try:

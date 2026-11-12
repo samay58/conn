@@ -143,6 +143,8 @@ class McpToolCfg(BaseModel):
     timeout_s: float | None = Field(default=None, gt=0, le=60)  # overrides McpCfg.call_timeout_s
     done_message: str = "Done."             # what Conn says after a verified write
     max_result_chars: int = Field(default=4000, ge=200, le=12000)
+    # Island card for the result (reads) or the approval (a send write); see conn.cards.
+    card: Literal["", "people", "today", "calendar", "thread", "draft", "send"] = ""
 
 
 class McpServerCfg(BaseModel):
