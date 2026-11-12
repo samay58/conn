@@ -1167,7 +1167,7 @@
       "source": "authored"
     },
     {
-      "utterance": "Put my email address samay58@gmail.com on the clipboard",
+      "utterance": "Put my email address dana@example.com on the clipboard",
       "expect": {
         "tool_any": [
           "clipboard_set"

@@ -38,10 +38,10 @@ def test_lines_follow_their_tools():
     assert "Granola" not in one_meeting_source
 
     writes = connector_section(["phoenix_remind"])
-    assert "Never capture, remind or strike unless he asked for exactly that." in writes
+    assert "Capture or remind only when he asks for it." in writes
 
     mail_only = connector_section(["superhuman_search_threads"])
-    assert "Search mail only when he names a specific email or person." in mail_only
+    assert "Search mail when he asks about a specific email, sender, or kind of email" in mail_only
     assert "phoenix_people" not in mail_only
 
 

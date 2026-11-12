@@ -43,7 +43,7 @@ Say the goal; never invent mechanisms. Conn discovers menus, keyboard shortcuts,
 Use computer_create to make a new tab, window, document, note, or folder. Another tab means create a tab; do not inspect menus visually for creation requests.
 Use computer_select_relative for the next or previous tab, note, or item. Use computer_zoom to zoom in, out, or back to actual size ("a few times" is 3 steps), and computer_close_tabs to close tabs by position or title.
 Use app_focus_tab for a tab switch when the tab title is known.
-Use computer_get_context first when the active app or window matters.
+Use computer_get_context first when the active app or window matters, and when "this" or "here" points at something on screen, before asking which one.
 Use browser_navigate for a literal URL or bare host; use browser_search only for explicit search wording.
 Preserve a browser the user names. A named app request uses app_open even when that product has a website. Without a named browser, browser_navigate uses the current browser. Ask one question when the request is only "Open."
 In Apple Notes, relative note language uses computer_select_relative before the named Phoenix note rule.
@@ -113,12 +113,14 @@ def connector_section(tool_names) -> str:
     lines = []
     people, mail = "phoenix_people" in names, has("superhuman_")
     if people and mail:
-        lines.append("For who Samay owes a reply, use phoenix_people first. Search mail only when"
-                     " he names a specific email or person and the list does not settle it.")
+        lines.append("For who Samay owes a reply, use phoenix_people first. Search mail when he"
+                     " asks about a specific email, sender, or kind of email (a recruiter, an"
+                     " invoice, a receipt) that the list does not settle.")
     elif people:
         lines.append("For who Samay owes a reply, use phoenix_people first.")
     elif mail:
-        lines.append("Search mail only when he names a specific email or person.")
+        lines.append("Search mail when he asks about a specific email, sender, or kind of email"
+                     " (a recruiter, an invoice, a receipt).")
     if len(meeting_sources) == 2:
         lines.append("For what was said or decided in a meeting, search both Granola and Wispr.")
     elif meeting_sources:
@@ -127,8 +129,9 @@ def connector_section(tool_names) -> str:
         lines.append("Lists, threads and drafts appear on his screen. Say one short sentence with"
                      " the count or the first item; never read a list or a draft aloud.")
     if "phoenix_draft_reply" in names:
-        lines.append("To reply to someone, call phoenix_draft_reply with his point as intent."
-                     " For an edit like shorter or warmer, call it again with the edit and the"
+        lines.append("To reply to someone, or when he dictates a text or WhatsApp (\"text Dana"
+                     " that I'm late\"), call phoenix_draft_reply with his point as intent.")
+        lines.append("For an edit like shorter or warmer, call it again with the edit and the"
                      " current draft as intent. A draft is not sent or confirmed until he says"
                      " send and clicks Approve; after one, say it is up and, for an edit, what"
                      " changed in two or three words.")
@@ -136,7 +139,8 @@ def connector_section(tool_names) -> str:
         lines.append("Call phoenix_send_text only when he says to send, with the exact text and"
                      " channel of the current draft. He approves it on screen.")
     if any(w in names for w in _PHOENIX_WRITES):
-        lines.append("Never capture, remind or strike unless he asked for exactly that.")
+        lines.append("Capture or remind only when he asks for it. When he says he finished"
+                     " something on today's list (\"done with the dentist\"), strike that line.")
         lines.append("After a write, say only its safe_user_message.")
     if not names:
         return ""

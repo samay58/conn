@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 import json
+import os
 import math
 import re
 import statistics
@@ -344,7 +345,13 @@ def cost_summary(cfg: Config, turns: list[list[dict]]) -> dict:
 async def _run(cfg: Config, limit: int | None) -> dict:
     corpus_path = Path(__file__).resolve().parents[2] / "evals" / "intent_corpus.json"
     corpus = json.loads(corpus_path.read_text())
-    items = corpus["items"][:limit] if limit else corpus["items"]
+    items = corpus["items"]
+    match = os.environ.get("CONN_EVAL_MATCH", "").strip()
+    if match:
+        # A cheap targeted rerun while iterating on the prompt: only matching utterances.
+        pattern = re.compile(match, re.IGNORECASE)
+        items = [i for i in items if pattern.search(i["utterance"])]
+    items = items[:limit] if limit else items
     results = []
     turn_usage = []
     passed = 0
