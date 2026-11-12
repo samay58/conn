@@ -8,6 +8,9 @@ actions through a verified semantic transaction.
 The name comes from the naval handoff of steering authority: spoken, bounded,
 and revocable. The Stop control is `belay that`.
 
+To use it or set it up on another Mac, start with
+[docs/TRY-CONN.md](docs/TRY-CONN.md).
+
 Current architecture and measured status:
 [docs/STATE-OF-PLAY.md](docs/STATE-OF-PLAY.md). Approved verified-action spec:
 [docs/2026-07-09-verified-action-engine-spec.md](docs/2026-07-09-verified-action-engine-spec.md).
