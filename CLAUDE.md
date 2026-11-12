@@ -31,7 +31,9 @@ PYTHONPATH=src .venv/bin/python -m conn                           # live; needs 
 PYTHONPATH=src .venv/bin/python -m conn --no-audio --no-hotkey    # live with typed input only, no mic/speaker/global key
 PYTHONPATH=src .venv/bin/python -m conn --doctor                  # environment + TCC permission checks
 PYTHONPATH=src .venv/bin/python -m conn --eval                    # 14 harness-only evals (scripted adapter; not model quality)
-PYTHONPATH=src .venv/bin/python -m conn --intent-eval 25          # live model intent eval over evals/intent_corpus.json (billed; omit the number for all 226)
+PYTHONPATH=src .venv/bin/python -m conn --intent-eval 25          # live model intent eval over evals/intent_corpus.json (billed; omit the number for all 276)
+CONN_EVAL_MATCH="<regex>" PYTHONPATH=src .venv/bin/python -m conn --intent-eval   # only the corpus items whose utterance matches (cheap rerun after a prompt change)
+PYTHONPATH=src .venv/bin/python -m conn --cost-report             # cost per command for the newest trace; add a trace path, or --days N for a rollup
 PYTHONPATH=src .venv/bin/python -m conn --latency-report          # latency spans + budget pass/fail on the newest trace
 PYTHONPATH=src .venv/bin/python -m conn --action-probe fixture    # installed-app smoke probe (also terminal|safari|chrome|notes|obsidian) → data/action-probes/
 

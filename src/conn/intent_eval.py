@@ -389,7 +389,8 @@ async def _run(cfg: Config, limit: int | None) -> dict:
               + ("" if ok else f"  [{detail}]"))
         spent = cost_summary(cfg, turn_usage)["total_usd"]
         if spent >= cfg.budget.session_cap_usd:
-            # The same hard cap as a live session: an eval never spends past it.
+            # The session cap, checked between items: a run stops within one item
+            # (about a cent) of it. Timed-out items report no usage and are not counted.
             print(f"  stopped at ${spent:.2f}: the ${cfg.budget.session_cap_usd:.2f} cap")
             items = items[:index + 1]
             break
