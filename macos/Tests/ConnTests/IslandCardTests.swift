@@ -65,15 +65,15 @@ final class IslandCardTests: XCTestCase {
 
     func testSameIdReplacesInPlace() {
         let state = AppState()
-        state.apply(cardMessage("reply:alex", kind: "reply", state: "draft", persist: true))
-        state.apply(cardMessage("reply:alex", kind: "reply", state: "approve", persist: true))
-        XCTAssertEqual(state.card?.id, "reply:alex")
+        state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
+        state.apply(cardMessage("reply", kind: "reply", state: "approve", persist: true))
+        XCTAssertEqual(state.card?.id, "reply")
         XCTAssertEqual(state.card?.state, "approve")
     }
 
     func testCardClearRemovesTheCard() {
         let state = AppState()
-        state.apply(cardMessage("reply:alex", kind: "reply", state: "draft", persist: true))
+        state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
         state.apply(["type": "card_clear"])
         XCTAssertNil(state.card)
     }
@@ -86,14 +86,14 @@ final class IslandCardTests: XCTestCase {
         XCTAssertNil(state.card, "a non-persisting card retires on the next push-to-talk")
 
         state.apply(phase("speaking"))
-        state.apply(cardMessage("reply:alex", kind: "reply", state: "draft", persist: true))
+        state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
         state.apply(phase("listening"))
-        XCTAssertEqual(state.card?.id, "reply:alex", "a persisting card survives push-to-talk")
+        XCTAssertEqual(state.card?.id, "reply", "a persisting card survives push-to-talk")
     }
 
     func testDismissIsLocal() {
         let state = AppState()
-        state.apply(cardMessage("reply:alex", kind: "reply", state: "draft", persist: true))
+        state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
         state.dismissCard()
         XCTAssertNil(state.card)
     }
@@ -111,16 +111,16 @@ final class IslandCardTests: XCTestCase {
     func testPersistingCardOutlivesTheLinger() async {
         await withLingers(0.05, settled: 0.05) {
             let state = AppState()
-            state.apply(cardMessage("reply:alex", kind: "reply", state: "draft", persist: true))
+            state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
             await spin(0.25)
-            XCTAssertEqual(state.card?.id, "reply:alex")
+            XCTAssertEqual(state.card?.id, "reply")
         }
     }
 
     func testSettledReplyUsesTheShorterLinger() async {
         await withLingers(5, settled: 0.05) {
             let state = AppState()
-            state.apply(cardMessage("reply:alex", kind: "reply", state: "sent", persist: false))
+            state.apply(cardMessage("reply", kind: "reply", state: "sent", persist: false))
             XCTAssertTrue(state.card?.isSettledReply ?? false)
             await spin(0.25)
             XCTAssertNil(state.card, "sent, unconfirmed and held fade after the short linger")
@@ -133,15 +133,15 @@ final class IslandCardTests: XCTestCase {
             state.apply(cardMessage("list:people"))
             await spin(0.1)
             // The replacement persists: the first card's timer must not clear it.
-            state.apply(cardMessage("reply:alex", kind: "reply", state: "draft", persist: true))
+            state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
             await spin(0.3)
-            XCTAssertEqual(state.card?.id, "reply:alex")
+            XCTAssertEqual(state.card?.id, "reply")
         }
     }
 
     func testDaemonLossClearsTheCard() {
         let state = AppState()
-        state.apply(cardMessage("reply:alex", kind: "reply", state: "approve", persist: true))
+        state.apply(cardMessage("reply", kind: "reply", state: "approve", persist: true))
         state.markDaemonLost()
         XCTAssertNil(state.card)
     }

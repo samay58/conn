@@ -175,13 +175,13 @@ final class PreviewSample: Identifiable {
     }
 
     // The card samples use the daemon's exact wire shapes (src/conn/cards.py).
-    private static let draftText = "Hey Alex, the address is 418 Hayes Street, apartment 3B. "
+    private static let draftText = "Hey Sam, the address is 12 Example Street, apartment 4. "
         + "The buzzer is broken, so text me when you're outside and I'll come down."
 
     private static func reply(_ state: String, title: String) -> IslandCard? {
         IslandCard(wire: [
-            "id": "reply:alex", "kind": "reply", "title": title,
-            "subtitle": "Alex · Messages", "body": draftText, "state": state,
+            "id": "reply", "kind": "reply", "title": title,
+            "subtitle": "Sam · Messages", "body": draftText, "state": state,
             "persist": state == "draft" || state == "approve",
         ])
     }
@@ -212,7 +212,7 @@ final class PreviewSample: Identifiable {
             sample("thinking", "Thinking", "quiet breath while the model works") {
                 $0.connected = true
                 $0.live = true
-                $0.userLine = "send Alex the address"
+                $0.userLine = "send Sam the address"
                 $0.spentUSD = 0.014
             },
             sample("acting", "Acting", "running tool name is visible") {
@@ -305,7 +305,7 @@ final class PreviewSample: Identifiable {
                    phase: "speaking", card: reply("draft", title: "Draft")) {
                 $0.connected = true
                 $0.live = true
-                $0.modelLine = "Here's a draft for Alex."
+                $0.modelLine = "Here's a draft for Sam."
                 $0.spentUSD = 0.041
             },
             sample("reply_approve", "Card: reply to send",
@@ -314,7 +314,7 @@ final class PreviewSample: Identifiable {
                 $0.connected = true
                 $0.live = true
                 $0.chips = [Chip(id: "c5", name: "messages_send",
-                                  preview: "Text Alex: the address and buzzer",
+                                  preview: "Text Sam: the address and buzzer",
                                   status: "proposed")]
                 $0.spentUSD = 0.043
             },

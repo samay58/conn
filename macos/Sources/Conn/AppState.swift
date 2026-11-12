@@ -12,7 +12,7 @@ struct Chip: Identifiable, Equatable {
 
 // The island's detail surface (daemon src/conn/cards.py): a list of rows or
 // the full text of a reply. One card shows at a time; a card with the same id
-// is a revision of the one on screen ("reply:alex" moves draft -> approve ->
+// is a revision of the one on screen ("reply" moves draft -> approve ->
 // sent) and replaces it in place. Approval never lives here: a reply card in
 // state "approve" only shows the body, and the decision stays on the chip.
 struct IslandCard: Identifiable, Equatable {
