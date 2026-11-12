@@ -31,6 +31,8 @@ struct IslandView: View {
     @State private var shapeScaleY: CGFloat = 1
     @State private var contentOpacity: Double = 1
     @State private var exhaleScale: CGFloat = 1
+    // The running call whose capsule has outlived the show delay.
+    @State private var capsuleCallID: String?
 
     private var islandShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
@@ -63,6 +65,7 @@ struct IslandView: View {
         .modifier(IslandBreath(isListening: state.phase == "listening"))
         .animation(.easeInOut(duration: DesignTokens.stateWordCrossfade), value: state.stateLabel)
         .task(id: state.toast) { await autoClearToast() }
+        .task(id: runningCallID) { await revealCapsuleAfterDelay() }
         .onChange(of: state.rejectPulse) { _, _ in refusalPulse() }
         .onChange(of: state.phase) { _, phase in
             if phase == "done" && state.showsDoneSuccess { exhale() }
@@ -121,15 +124,17 @@ struct IslandView: View {
                 ThinkingEllipsis(phase: state.phase)
             } else if state.toast == nil, state.phase == "acting",
                       let label = runningToolLabel {
-                toolCapsule(label)
+                // A read that answers inside the delay (most connector reads
+                // take 0.1 to 0.3 s) never flashes a capsule in and out.
+                if capsuleCallID == runningCallID {
+                    toolCapsule(label)
+                } else if state.modelLine.isEmpty {
+                    ThinkingEllipsis(phase: state.phase)
+                } else {
+                    primaryText
+                }
             } else {
-                Text(state.islandPrimaryText)
-                    .font(.system(size: primaryIsSpeech ? 12.5 : 11,
-                                  weight: primaryIsSpeech ? .regular : .medium))
-                    .foregroundStyle(primaryColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .contentTransition(.opacity)
+                primaryText
             }
             if showsCost {
                 // Two decimals at the cap reads as money. Everywhere
@@ -148,6 +153,16 @@ struct IslandView: View {
             }
         }
         .frame(maxWidth: 280)
+    }
+
+    private var primaryText: some View {
+        Text(state.islandPrimaryText)
+            .font(.system(size: primaryIsSpeech ? 12.5 : 11,
+                          weight: primaryIsSpeech ? .regular : .medium))
+            .foregroundStyle(primaryColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .contentTransition(.opacity)
     }
 
     // Outline against Approve's fill: distinct by construction. Pointer-only
@@ -200,6 +215,17 @@ struct IslandView: View {
     }
 
     // MARK: content resolution
+
+    private var runningCallID: String? {
+        state.chips.first(where: { $0.status == "running" })?.id
+    }
+
+    private func revealCapsuleAfterDelay() async {
+        capsuleCallID = nil
+        guard let id = runningCallID else { return }
+        try? await Task.sleep(for: .seconds(DesignTokens.toolCapsuleShowDelay))
+        if !Task.isCancelled { capsuleCallID = id }
+    }
 
     private var runningToolLabel: String? {
         guard let chip = state.chips.first(where: { $0.status == "running" }),

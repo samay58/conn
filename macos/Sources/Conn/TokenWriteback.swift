@@ -73,6 +73,7 @@ enum TokenWriteback {
             @Published var toastDuration = \(fmt(v.toastDuration))
             @Published var thinkingEllipsisPeriod = \(fmt(v.thinkingEllipsisPeriod))
             @Published var thinkingDotOpacityFloor = \(fmt(v.thinkingDotOpacityFloor))
+            @Published var toolCapsuleShowDelay = \(fmt(v.toolCapsuleShowDelay))
             let refusalShakeMagnitude: CGFloat = 2
             let refusalShakeCycles = 3
             // personality
@@ -163,6 +164,7 @@ enum TokenWriteback {
             static var toastDuration: Double { current.toastDuration }
             static var thinkingEllipsisPeriod: Double { current.thinkingEllipsisPeriod }
             static var thinkingDotOpacityFloor: Double { current.thinkingDotOpacityFloor }
+            static var toolCapsuleShowDelay: Double { current.toolCapsuleShowDelay }
             // personality
             static var aliveness: Double { current.aliveness }
             static var breathAmplitude: Double { current.breathAmplitude }
@@ -238,6 +240,7 @@ enum TokenWriteback {
         row("toastDuration", "State vocabulary / toast", fmt(old.toastDuration), fmt(new.toastDuration))
         row("thinkingEllipsisPeriod", "Motion / Thinking ellipsis", fmt(old.thinkingEllipsisPeriod), fmt(new.thinkingEllipsisPeriod))
         row("thinkingDotOpacityFloor", "Motion / Thinking ellipsis", fmt(old.thinkingDotOpacityFloor), fmt(new.thinkingDotOpacityFloor))
+        row("toolCapsuleShowDelay", "Motion / Tool capsule", fmt(old.toolCapsuleShowDelay), fmt(new.toolCapsuleShowDelay))
         row("aliveness", "Personality", fmt(old.aliveness), fmt(new.aliveness))
         row("breathAmplitude", "Personality / Breath", fmt(old.breathAmplitude), fmt(new.breathAmplitude))
         row("breathPeriod", "Personality / Breath", fmt(old.breathPeriod), fmt(new.breathPeriod))

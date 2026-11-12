@@ -33,6 +33,7 @@ final class DesignTokenStore: ObservableObject {
     @Published var toastDuration = 3.0
     @Published var thinkingEllipsisPeriod = 1.2
     @Published var thinkingDotOpacityFloor = 0.25
+    @Published var toolCapsuleShowDelay = 0.25
     let refusalShakeMagnitude: CGFloat = 2
     let refusalShakeCycles = 3
     // personality
@@ -123,6 +124,7 @@ enum DesignTokens {
     static var toastDuration: Double { current.toastDuration }
     static var thinkingEllipsisPeriod: Double { current.thinkingEllipsisPeriod }
     static var thinkingDotOpacityFloor: Double { current.thinkingDotOpacityFloor }
+    static var toolCapsuleShowDelay: Double { current.toolCapsuleShowDelay }
     // personality
     static var aliveness: Double { current.aliveness }
     static var breathAmplitude: Double { current.breathAmplitude }
