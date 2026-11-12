@@ -508,7 +508,7 @@ class ConnApp:
                 self.approvals.ask(call)
                 self._show_send_card(call)
                 self.trace.log("approval_asked", call_id=call.call_id,
-                               name=call.name, preview=call.preview,
+                               name=call.name, preview=self._trace_preview(call),
                                plan_fingerprint=(call.prepared_plan or {}).get(
                                    "plan_fingerprint"
                                ))
@@ -619,11 +619,16 @@ class ConnApp:
         self.cost.tool_calls += 1
         if call.name == "computer_screenshot" and result.ok:
             self.cost.screenshots += 1
-        artifact = self._write_tool_result_artifact(call, result)
+        if self._card_template(call.name):
+            # The result is a thread, a draft or a list of people: lengths only.
+            artifact = None
+            output_preview = json.dumps({"withheld": "message_content",
+                                         "output_bytes": len(result.output.encode())})
+        else:
+            artifact = self._write_tool_result_artifact(call, result)
+            output_preview = self.artifacts.trace_preview(call.name, result.output)
         self.trace.log("tool_result", call_id=call.call_id, name=call.name,
-                       ok=result.ok,
-                       output=self.artifacts.trace_preview(call.name, result.output),
-                       output_artifact=artifact)
+                       ok=result.ok, output=output_preview, output_artifact=artifact)
         self._show_result_card(call, result.output)
         if result.action_trace is not None:
             self.trace.log(
@@ -639,7 +644,14 @@ class ConnApp:
 
     def _card_template(self, name: str) -> str:
         spec = self.harness.registry.get(name)
-        return getattr(spec, "card", "") if spec is not None else ""
+        return spec.card if spec is not None else ""
+
+    def _trace_preview(self, call) -> str:
+        """A card tool's chip preview quotes the message ("Text Dana: Friday
+        works"), so the trace keeps its length, not its words."""
+        if self._card_template(call.name):
+            return f"<{len(call.preview)} chars>"
+        return call.preview
 
     def _publish_card(self, card: dict | None, call_id: str) -> None:
         if card is None:
@@ -786,7 +798,7 @@ class ConnApp:
                 if call.gate is Gate.BLOCKED:
                     self.cost.blocked_proposals += 1
                 self.trace.log("tool_proposed", call_id=call_id, name=name,
-                               gate=call.gate.value, preview=call.preview,
+                               gate=call.gate.value, preview=self._trace_preview(call),
                                arguments=self.harness.trace_arguments(
                                    name, call.arguments
                                ),

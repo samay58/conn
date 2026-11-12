@@ -98,7 +98,7 @@ def main() -> None:
         print(format_report(spans(trace_path), distributions(trace_path)))
         return
 
-    if args.cost_report or args.days:
+    if args.cost_report or args.days is not None:
         sys.exit(_cost_report(args))
 
     cfg = load_config(args.config)

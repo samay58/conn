@@ -1,9 +1,11 @@
 # Conn
 
 Conn is a push-to-talk voice command surface for the Mac, built on the OpenAI
-Realtime API. Hold a key, speak, and release. Python handles the model session,
-policy, approvals, traces, and cost. Conn.app performs macOS observation and
-actions through a verified semantic transaction.
+Realtime API. Hold a key, speak, and release. It opens apps and pages, works
+menus and tabs, reads your day and your messages, drafts replies, and sends
+them after you click Approve. Python handles the model session, policy,
+approvals, traces, and cost. Conn.app performs macOS observation and actions
+through a verified semantic transaction.
 
 The name comes from the naval handoff of steering authority: spoken, bounded,
 and revocable. The Stop control is `belay that`.
@@ -73,8 +75,8 @@ the live menu path, shortcut, or selection natively, with compiler-owned
 witnesses (collection growth, window count, selected state). Raw menu and
 key-chord tools are policy-gated diagnostics hidden from the model. Semantic
 operations also cover app open/switch, clipboard write, tab focus, scroll,
-non-secure text entry, element press, lazy menu action, and allowlisted key
-chords. Actions with no surviving target-bound effect report dispatch-only.
+non-secure text entry, element press, lazy menu action, page zoom, closing
+tabs (behind approval, never the last tab), and allowlisted key chords. Actions with no surviving target-bound effect report dispatch-only.
 Secure fields and denied bundles remain blocked. When Accessibility cannot
 reach a target, a bounded visual lane can act instead: Conn.app captures the
 current window, grounds the target in that image, revalidates app, window and
@@ -113,6 +115,20 @@ or an approval chip.
   browser page); tokens live in the login Keychain. `--mcp-tools` lists what
   each server offers, and `--doctor` reports who still needs to sign in.
 - `[mcp] enabled = false` turns every connector off.
+
+A tool can name a card in config (`card = "people"`). Conn then says one
+sentence and shows the rest on a card under the island: a list of who is
+waiting, today's tasks, a calendar, a thread, or a reply draft. A send shows
+its whole text on the card while Deny and Approve wait, then settles as
+"Sent", "Sent, not confirmed" or "Not sent" from the real result. Cards go
+to the signed app only and are never written to a trace.
+
+### What a command costs
+
+Every turn leaves a `turn_cost` trace event with lengths and dollars, never
+the words. `python -m conn --cost-report` prints the newest session per
+command, and `--cost-report --days 7` rolls up a week. The first measured
+session averaged 3 cents a command; spoken audio was the largest share.
 
 ## Stable signing
 
@@ -163,7 +179,7 @@ export OPENAI_API_KEY=...
 PYTHONPATH=src .venv/bin/python -m conn
 ```
 
-Defaults are model `gpt-realtime-2.1`, voice `marin`, low reasoning effort, a
+Defaults are model `gpt-realtime-2.1`, voice `cedar`, low reasoning effort, a
 $5.00 session hard cap and a warning at $2.50.
 `--no-audio` runs typed-input mode. `--no-hotkey` skips the global key.
 

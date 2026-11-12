@@ -424,10 +424,12 @@ class ToolHarness:
     @staticmethod
     def trace_arguments(name: str, args: dict) -> dict:
         safe = dict(args)
-        if "text" in safe:
-            text = str(safe.pop("text"))
-            safe["text_length"] = len(text)
-            safe["text_sha256"] = hashlib.sha256(text.encode()).hexdigest()
+        # Free text the user dictated: a message body, or what a reply should say.
+        for key in ("text", "intent"):
+            if key in safe:
+                text = str(safe.pop(key))
+                safe[f"{key}_length"] = len(text)
+                safe[f"{key}_sha256"] = hashlib.sha256(text.encode()).hexdigest()
         return safe
 
     @staticmethod

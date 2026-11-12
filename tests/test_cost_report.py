@@ -192,3 +192,14 @@ class TestCli:
 
         out = capsys.readouterr().out
         assert "last 2 day(s)" in out and today in out
+
+    def test_days_zero_is_an_error_not_a_live_start(self, monkeypatch, capsys):
+        # `--days 0` once fell through the flag check and started the billed daemon.
+        monkeypatch.setattr(sys, "argv", ["conn", "--days", "0"])
+        try:
+            main()
+            raise AssertionError("main() returned instead of exiting")
+        except SystemExit as exit_:
+            assert exit_.code == 2
+
+        assert "positive number" in capsys.readouterr().err

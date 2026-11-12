@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .config import PricingCfg
 from .cost import CATEGORY_FIELDS
-from .latency import _read_events
+from .latency import read_events
 from .turn_ledger import TurnAccount, TurnLedger
 
 UTTERANCE_WIDTH = 50
@@ -23,7 +23,7 @@ UTTERANCE_WIDTH = 50
 def replay(trace_path: Path | str, pricing: PricingCfg) -> TurnLedger:
     """Feed a whole trace through a fresh, non-emitting ledger."""
     ledger = TurnLedger(pricing)
-    for event in _read_events(trace_path):
+    for event in read_events(trace_path):
         ledger.observe(event)
     return ledger
 

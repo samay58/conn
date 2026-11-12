@@ -110,3 +110,22 @@ def test_stalled_client_is_disconnected_at_bounded_queue_limit():
 
     assert attached is False
     assert close_code == 1013
+
+
+def test_cards_reach_the_app_role_only():
+    # A card holds a draft or a thread: message content the console never sees.
+    async def scenario():
+        bus = Broadcaster()
+        app, console = FakeWS(), FakeWS()
+        bus.attach(app, "app")
+        bus.attach(console, "console")
+        bus.publish({"type": "card", "card": {"id": "reply", "body": "Friday works."}})
+        bus.publish({"type": "card_clear"})
+        await asyncio.sleep(0.01)
+        for _ws, (_queue, task, _role) in list(bus._clients.items()):
+            task.cancel()
+        return app.sent, console.sent
+
+    app_messages, console_messages = asyncio.run(scenario())
+    assert [json.loads(m)["type"] for m in app_messages] == ["card", "card_clear"]
+    assert [json.loads(m)["type"] for m in console_messages] == ["card_clear"]

@@ -60,9 +60,10 @@ class Broadcaster:
 
     def publish(self, msg: dict) -> None:
         data = json.dumps(msg, default=str)
-        native_rpc = msg.get("type") in {"ax_read", "ax_action"}
+        # Native RPC and cards (message content) go to the signed app only.
+        app_only = msg.get("type") in {"ax_read", "ax_action", "card"}
         for ws, (queue, _task, role) in list(self._clients.items()):
-            if native_rpc and role != "app":
+            if app_only and role != "app":
                 continue
             try:
                 queue.put_nowait(data)

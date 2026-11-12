@@ -34,7 +34,7 @@ BUDGETS_MS: dict[str, tuple[float, float | None]] = {
 SPAN_NAMES = list(BUDGETS_MS)
 
 
-def _read_events(trace_path: Path | str) -> list[dict]:
+def read_events(trace_path: Path | str) -> list[dict]:
     path = Path(trace_path)
     if not path.exists():
         return []
@@ -84,7 +84,7 @@ def spans(trace_path: Path | str) -> dict[str, float | None]:
     needs. Reads the file fresh every call; traces are small JSONL files
     and this is a report/receipt-attachment path, not a hot loop.
     """
-    return _spans_from_events(_read_events(trace_path))
+    return _spans_from_events(read_events(trace_path))
 
 
 def _spans_from_events(events: list[dict]) -> dict[str, float | None]:
@@ -113,7 +113,7 @@ def per_turn_spans(trace_path: Path | str) -> list[dict[str, float | None]]:
     the next turn-starting ptt_down; duplicate or rejected edges (traced with
     starts_turn=false) never create a boundary. Traces older than the field
     treat every ptt_down as a boundary."""
-    events = _read_events(trace_path)
+    events = read_events(trace_path)
     starts = [i for i, e in enumerate(events)
               if e.get("kind") == "ptt_down"
               and e.get("starts_turn", True) is not False]

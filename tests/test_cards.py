@@ -155,3 +155,14 @@ def test_read_result_card_and_no_card_for_native_tools(tmp_path, ctx):
     trace = app.trace.read()
     shown_events = [e for e in trace if e["kind"] == "card_shown"]
     assert shown_events and "Dana" not in json.dumps(shown_events)
+
+
+def test_card_tool_previews_and_results_stay_out_of_the_trace(tmp_path, ctx):
+    app, _ = _app_with_send_tool(tmp_path, ctx)
+    send = ToolCall(call_id="s1", name="phoenix_send_text", arguments={"person": "Dana", "text": "Friday works"},
+                    gate=Gate.AUTO, preview="Text Dana: Friday works")
+    assert app._trace_preview(send) == "<23 chars>"
+    native = ToolCall(call_id="n1", name="open_app", arguments={"app": "Notes"}, gate=Gate.AUTO, preview="Open Notes")
+    assert app._trace_preview(native) == "Open Notes"
+    safe = app.harness.trace_arguments("phoenix_draft_reply", {"person": "Dana", "intent": "say Friday works"})
+    assert "intent" not in safe and safe["intent_length"] == 16
