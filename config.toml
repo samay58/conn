@@ -6,7 +6,7 @@ confirm = ["cmd+t", "cmd+w", "cmd+n"]   # tab/window verbs run behind the approv
 
 [realtime]
 model = "gpt-realtime-2.1"
-voice = "marin"
+voice = "cedar"
 reasoning_effort = "low"
 transcription_language = "en"   # pins input transcription; short clips stop decoding as random languages
 
