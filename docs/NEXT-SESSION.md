@@ -100,6 +100,18 @@ exists with `[mcp] enabled = false`. What is left:
 4. `cd macos && ./make-app.sh install` (adds the Notes, Reminders and Calendar
    usage strings), set `enabled = true`, reopen Conn.app, approve the macOS
    prompts, and say the 16 commands in `plans/VOICE-CONNECTORS.md`.
+   The first Reminders read asks macOS for Conn's Reminders access; until it
+   is approved, reads fall back to AppleScript and take 9 to 20 seconds.
+5. While saying them, check the island: a slow read shows its plain label
+   ("Searching Granola") after 0.25 s and a fast one shows none; a write's
+   whole preview ("Remind tomorrow 9 AM: Call the vet") sits above Deny and
+   Approve; a write that cannot be confirmed reads "Sent, not confirmed".
+
+Added on 2026-11-12, untested live: reads send structured results without
+the duplicate text (Phoenix reads 55 to 65 percent smaller), and the
+connector prompt section appears only when connector tools are exported.
+One candidate for the eval run: skip the spoken preamble before Phoenix
+reads, which now answer in 0.1 to 0.3 seconds. Measure it before keeping it.
 
 ## Human gates still open
 
