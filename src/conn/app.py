@@ -194,6 +194,7 @@ class ConnApp:
         self._closing = False
         self.session_id = new_id("session")
         self.navigation.begin_session(self.session_id)
+        self._grant_navigation_by_default()
         self.machine = SessionStateMachine(
             tap_threshold_ms=self.cfg.session.tap_threshold_ms,
             watchdog_timeout_s=self.cfg.session.watchdog_timeout_s,
@@ -220,6 +221,17 @@ class ConnApp:
     def on_app_connection(self, client_id: str) -> None:
         self.navigation.bind_connection(client_id)
         self.trace.log("navigation_connection", generation=self.navigation.generation)
+        self._grant_navigation_by_default()
+
+    def _grant_navigation_by_default(self) -> None:
+        """Only the signed app's bound connection can hold the lease, so this grants
+        exactly what a menu click would; a suspended lease stays suspended."""
+        client_id = self.navigation.connection_id
+        if (self.cfg.browser.navigation_default_on and client_id is not None
+                and not self.navigation.public_snapshot()["granted"]
+                and self.navigation.grant(self.session_id, client_id)):
+            self.trace.log("navigation_granted", generation=self.navigation.generation,
+                           source="default")
 
     def on_app_disconnect(self, client_id: str) -> None:
         if self.navigation.disconnect(client_id):

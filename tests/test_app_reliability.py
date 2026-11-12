@@ -201,6 +201,8 @@ class TestReconnectBackoff:
 
     def test_app_bridge_reconnect_revokes_the_navigation_grant(
             self, cfg, ctx):
+        cfg.browser.navigation_default_on = False
+
         async def run():
             app, _messages = build_app(cfg, ctx)
             app.on_app_connection("signed-app-a")
@@ -218,6 +220,25 @@ class TestReconnectBackoff:
         assert after_reconnect["active"] is False
         assert after_reconnect["generation"] > granted["generation"]
         assert after_stale_grant == after_reconnect
+
+    def test_signed_app_connection_grants_navigation_by_default(self, cfg, ctx):
+        async def run():
+            app, _messages = build_app(cfg, ctx)
+            before = app.navigation.public_snapshot()
+            app.on_app_connection("signed-app-a")
+            granted = app.navigation.public_snapshot()
+            await app.on_navigation_suspend(client_id="signed-app-a")
+            app._grant_navigation_by_default()  # a suspension is never undone by the default
+            suspended = app.navigation.public_snapshot()
+            app.on_app_connection("signed-app-b")  # a new connection gets its own lease
+            await app.on_navigation_grant(client_id="signed-app-a")  # the old one cannot act
+            return before, granted, suspended, app.navigation.public_snapshot()
+
+        before, granted, suspended, rebound = asyncio.run(run())
+        assert before["active"] is False
+        assert granted["active"] is True
+        assert suspended["active"] is False and suspended["suspended"] is True
+        assert rebound["active"] is True and rebound["generation"] > suspended["generation"]
 
     def test_concurrent_disconnect_paths_share_one_reconnect(self, cfg, ctx):
         async def run():

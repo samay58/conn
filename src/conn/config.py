@@ -53,6 +53,9 @@ class AppsCfg(BaseModel):
 
 class BrowserCfg(BaseModel):
     search_url: str = "https://www.google.com/search?q={q}"
+    # The signed app's connection switches navigation on by itself; the menu toggle
+    # still turns it off. False restores the explicit click-to-grant flow.
+    navigation_default_on: bool = True
 
 
 class PhoenixCfg(BaseModel):

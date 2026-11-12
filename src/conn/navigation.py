@@ -28,6 +28,10 @@ class NavigationLease:
     def generation(self) -> int:
         return self._generation
 
+    @property
+    def connection_id(self) -> str | None:
+        return self._connection_id
+
     def public_snapshot(self) -> dict:
         return {
             "granted": self._granted,
