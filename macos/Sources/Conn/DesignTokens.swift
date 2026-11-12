@@ -100,26 +100,11 @@ final class DesignTokenStore: ObservableObject {
     @Published var overrideCornerRadius: CGFloat = 10
     // island style (IslandGlassStyles.swift). D, Character, is the live
     // default; classic stays selectable from the menu bar and the preview
-    // picker, and A, B and C remain preview-only prototypes. Glass is static
-    // per state: only transform and opacity animate, never blur or glass
-    // parameters.
+    // picker. Glass is static per state: only transform and opacity animate,
+    // never blur or glass parameters.
     @Published var islandStyle = IslandStyle.d
     @Published var glassMorphSpring = Spring(response: 0.3, dampingRatio: 0.86)
     @Published var glassEnterDuration = 0.22
-    @Published var glassRimOpacity = 0.22
-    @Published var glassInnerLightOpacity = 0.05
-    @Published var glassSmokeOpacity = 0.45
-    // deep lilac: the accent on light glass, where #C3B1E1 washes out.
-    @Published var glassAccentDeepRGB = PaletteColor(red: 0.42, green: 0.33, blue: 0.62)
-    let glassRimWidth: CGFloat = 1.5
-    let glassFusedCornerRadius: CGFloat = 20
-    let glassFusedWidth: CGFloat = 340
-    let glassCapsuleHeight: CGFloat = 40
-    let glassCardCornerRadius: CGFloat = 24
-    let glassCardWidth: CGFloat = 356
-    let glassNotchGap: CGFloat = 8
-    let glassEarWidth: CGFloat = 104
-    let glassPillCornerRadius: CGFloat = 12
     let glassButtonHeight: CGFloat = 28
     // Deny and Approve take clicks this far past their drawn edge; half
     // the gap between them, so the two areas never overlap.
@@ -323,23 +308,10 @@ enum DesignTokens {
     static var toolChipPaddingH: CGFloat { current.toolChipPaddingH }
     static var toolChipBgOpacity: Double { current.toolChipBgOpacity }
     static var overrideCornerRadius: CGFloat { current.overrideCornerRadius }
-    // island style prototypes
+    // island style
     static var islandStyle: IslandStyle { current.islandStyle }
     static var glassMorphSpring: Spring { current.glassMorphSpring }
     static var glassEnterDuration: Double { current.glassEnterDuration }
-    static var glassRimOpacity: Double { current.glassRimOpacity }
-    static var glassInnerLightOpacity: Double { current.glassInnerLightOpacity }
-    static var glassSmokeOpacity: Double { current.glassSmokeOpacity }
-    static var glassAccentDeep: Color { current.glassAccentDeepRGB.color }
-    static var glassRimWidth: CGFloat { current.glassRimWidth }
-    static var glassFusedCornerRadius: CGFloat { current.glassFusedCornerRadius }
-    static var glassFusedWidth: CGFloat { current.glassFusedWidth }
-    static var glassCapsuleHeight: CGFloat { current.glassCapsuleHeight }
-    static var glassCardCornerRadius: CGFloat { current.glassCardCornerRadius }
-    static var glassCardWidth: CGFloat { current.glassCardWidth }
-    static var glassNotchGap: CGFloat { current.glassNotchGap }
-    static var glassEarWidth: CGFloat { current.glassEarWidth }
-    static var glassPillCornerRadius: CGFloat { current.glassPillCornerRadius }
     static var glassButtonHeight: CGFloat { current.glassButtonHeight }
     static var glassButtonHitOutset: CGFloat { current.glassButtonHitOutset }
     // cards

@@ -140,26 +140,11 @@ enum TokenWriteback {
             @Published var overrideCornerRadius: CGFloat = \(fmtCG(v.overrideCornerRadius))
             // island style (IslandGlassStyles.swift). D, Character, is the live
             // default; classic stays selectable from the menu bar and the preview
-            // picker, and A, B and C remain preview-only prototypes. Glass is static
-            // per state: only transform and opacity animate, never blur or glass
-            // parameters.
+            // picker. Glass is static per state: only transform and opacity animate,
+            // never blur or glass parameters.
             @Published var islandStyle = IslandStyle.\(v.islandStyle.rawValue)
             @Published var glassMorphSpring = Spring(response: \(fmt(v.glassMorphSpring.response)), dampingRatio: \(fmt(v.glassMorphSpring.dampingRatio)))
             @Published var glassEnterDuration = \(fmt(v.glassEnterDuration))
-            @Published var glassRimOpacity = \(fmt(v.glassRimOpacity))
-            @Published var glassInnerLightOpacity = \(fmt(v.glassInnerLightOpacity))
-            @Published var glassSmokeOpacity = \(fmt(v.glassSmokeOpacity))
-            // deep lilac: the accent on light glass, where #C3B1E1 washes out.
-            @Published var glassAccentDeepRGB = \(fmtColor(v.glassAccentDeepRGB))
-            let glassRimWidth: CGFloat = 1.5
-            let glassFusedCornerRadius: CGFloat = 20
-            let glassFusedWidth: CGFloat = 340
-            let glassCapsuleHeight: CGFloat = 40
-            let glassCardCornerRadius: CGFloat = 24
-            let glassCardWidth: CGFloat = 356
-            let glassNotchGap: CGFloat = 8
-            let glassEarWidth: CGFloat = 104
-            let glassPillCornerRadius: CGFloat = 12
             let glassButtonHeight: CGFloat = 28
             // Deny and Approve take clicks this far past their drawn edge; half
             // the gap between them, so the two areas never overlap.
@@ -363,23 +348,10 @@ enum TokenWriteback {
             static var toolChipPaddingH: CGFloat { current.toolChipPaddingH }
             static var toolChipBgOpacity: Double { current.toolChipBgOpacity }
             static var overrideCornerRadius: CGFloat { current.overrideCornerRadius }
-            // island style prototypes
+            // island style
             static var islandStyle: IslandStyle { current.islandStyle }
             static var glassMorphSpring: Spring { current.glassMorphSpring }
             static var glassEnterDuration: Double { current.glassEnterDuration }
-            static var glassRimOpacity: Double { current.glassRimOpacity }
-            static var glassInnerLightOpacity: Double { current.glassInnerLightOpacity }
-            static var glassSmokeOpacity: Double { current.glassSmokeOpacity }
-            static var glassAccentDeep: Color { current.glassAccentDeepRGB.color }
-            static var glassRimWidth: CGFloat { current.glassRimWidth }
-            static var glassFusedCornerRadius: CGFloat { current.glassFusedCornerRadius }
-            static var glassFusedWidth: CGFloat { current.glassFusedWidth }
-            static var glassCapsuleHeight: CGFloat { current.glassCapsuleHeight }
-            static var glassCardCornerRadius: CGFloat { current.glassCardCornerRadius }
-            static var glassCardWidth: CGFloat { current.glassCardWidth }
-            static var glassNotchGap: CGFloat { current.glassNotchGap }
-            static var glassEarWidth: CGFloat { current.glassEarWidth }
-            static var glassPillCornerRadius: CGFloat { current.glassPillCornerRadius }
             static var glassButtonHeight: CGFloat { current.glassButtonHeight }
             static var glassButtonHitOutset: CGFloat { current.glassButtonHitOutset }
             // cards
@@ -551,16 +523,12 @@ enum TokenWriteback {
         row("toolChipPaddingH", "State vocabulary / acting", fmtCG(old.toolChipPaddingH), fmtCG(new.toolChipPaddingH))
         row("toolChipBgOpacity", "State vocabulary / acting", fmt(old.toolChipBgOpacity), fmt(new.toolChipBgOpacity))
         row("overrideCornerRadius", "State vocabulary / budget_hold", fmtCG(old.overrideCornerRadius), fmtCG(new.overrideCornerRadius))
-        row("islandStyle", "Island style prototypes", old.islandStyle.rawValue, new.islandStyle.rawValue)
-        row("glassMorphSpring.response", "Island style prototypes",
+        row("islandStyle", "Island style", old.islandStyle.rawValue, new.islandStyle.rawValue)
+        row("glassMorphSpring.response", "Island style",
             fmt(old.glassMorphSpring.response), fmt(new.glassMorphSpring.response))
-        row("glassMorphSpring.dampingRatio", "Island style prototypes",
+        row("glassMorphSpring.dampingRatio", "Island style",
             fmt(old.glassMorphSpring.dampingRatio), fmt(new.glassMorphSpring.dampingRatio))
-        row("glassEnterDuration", "Island style prototypes", fmt(old.glassEnterDuration), fmt(new.glassEnterDuration))
-        row("glassRimOpacity", "Island style prototypes", fmt(old.glassRimOpacity), fmt(new.glassRimOpacity))
-        row("glassInnerLightOpacity", "Island style prototypes", fmt(old.glassInnerLightOpacity), fmt(new.glassInnerLightOpacity))
-        row("glassSmokeOpacity", "Island style prototypes", fmt(old.glassSmokeOpacity), fmt(new.glassSmokeOpacity))
-        row("glass.accentDeep", "Island style prototypes", hex(old.glassAccentDeepRGB), hex(new.glassAccentDeepRGB))
+        row("glassEnterDuration", "Island style", fmt(old.glassEnterDuration), fmt(new.glassEnterDuration))
         row("cardLinger", "Cards", fmt(old.cardLinger), fmt(new.cardLinger))
         row("cardSettledLinger", "Cards", fmt(old.cardSettledLinger), fmt(new.cardSettledLinger))
         row("cardFadeDuration", "Cards", fmt(old.cardFadeDuration), fmt(new.cardFadeDuration))

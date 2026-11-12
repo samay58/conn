@@ -11,11 +11,10 @@ import SwiftUI
 struct IslandChipView: View {
     let chip: Chip
     let client: DaemonClient
-    // Prototype directions restyle the buttons only; the decision path below
-    // (first click wins, approve settles then sends, deny sends at once) is
-    // shared by every style.
+    // The style restyles the buttons only; the decision path below (first
+    // click wins, approve settles then sends, deny sends at once) is shared.
     var style: IslandStyle = .classic
-    // Centered under a centered preview (A and D with no card); otherwise
+    // Centered under a centered preview (D with no card); otherwise
     // right-aligned, Mac dialog order.
     var centered = false
 

@@ -1,60 +1,46 @@
 import AppKit
 import SwiftUI
 
-// The notch island's styles, rendered by IslandView whenever
-// DesignTokens.islandStyle is not .classic. D (Character) is the live
-// default; classic stays selectable from the menu bar; A, B and C are
-// preview-only prototypes (`Conn --preview` flips the token live).
+// The notch island's character style, rendered by IslandView whenever
+// DesignTokens.islandStyle is not .classic. D (Character) is the live default;
+// classic stays selectable from the menu bar and renders through IslandView's
+// own classic body. The non-notch fallback is D too, as a free-floating pill.
 //
-//   A  Fused: the classic silhouette, square top flush to the notch, but the
-//      black body sits inside a thin Liquid Glass rim with a specular hairline
-//      along the bottom curve and a faint inner light.
-//   B  Floating: a Liquid Glass capsule detached below the notch, adaptive to
-//      light and dark, that morphs into a rounded card for content.
-//   C  Pill and card: the notch widens sideways into a black pill whose ears
-//      carry the waveform and the state; content drops into a smoked glass
-//      card beneath it.
-//   D  Character: the app icon come alive. A's fused pill in the icon's
-//      palette, lime eyes beside a lilac-to-pink voice line, a rim fading
-//      to a lilac lower edge, and a wink when a turn lands.
+//   D  Character: the app icon come alive. The classic silhouette in the
+//      icon's palette, lime eyes beside a lilac-to-pink voice line, a rim
+//      fading to a lilac lower edge, and a wink when a turn lands.
 //
 // Cards (AppState.card, from the daemon) render in every style; classic's
 // tile is ClassicCardTile below.
 //
-// Performance rules for every style: glass is static per state. Only transform
-// and opacity animate (plus B's shape size and corner during a morph, which
-// is a layout change, not a glass parameter). No new TimelineViews: the
-// waveform and the thinking ellipsis are the existing gated ones.
+// Performance rules: glass is static per state. Only transform and opacity
+// animate. No new TimelineViews: the waveform and the thinking ellipsis are
+// the existing gated ones.
 
 enum IslandStyle: String, CaseIterable, Identifiable {
-    case classic, a, b, c, d
+    case classic, d
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .classic: return "Classic"
-        case .a: return "A  Fused"
-        case .b: return "B  Floating"
-        case .c: return "C  Pill + card"
         case .d: return "D  Character"
         }
     }
 
     var ink: IslandInk {
         switch self {
-        case .b: return .adaptive
         case .d: return .character
-        default: return .onDark
+        case .classic: return .onDark
         }
     }
 }
 
 // MARK: ink
 
-// The colors a surface draws with. On black (A, the C pill, the smoked C
-// card) they are the classic palette; on B's adaptive glass they are system
-// label colors so the capsule reads in light and dark mode alike.
+// The colors a surface draws with: the classic palette on black, or the
+// Character palette drawn from the app icon.
 struct IslandInk {
     var primary: Color
     var secondary: Color
@@ -103,29 +89,6 @@ struct IslandInk {
             secondaryButtonText: text)
     }
 
-    static var adaptive: IslandInk {
-        IslandInk(
-            primary: Color(nsColor: .labelColor),
-            secondary: Color(nsColor: .secondaryLabelColor),
-            hairline: Color(nsColor: .separatorColor),
-            well: Color(nsColor: .labelColor).opacity(0.06),
-            accent: adaptiveAccent,
-            approveFill: Color(nsColor: .labelColor),
-            approveText: Color(nsColor: .textBackgroundColor),
-            voice: adaptiveAccent)
-    }
-
-    // Lilac on dark glass, the deeper lilac token on light glass.
-    private static var adaptiveAccent: Color {
-        let deep = DesignTokens.current.glassAccentDeepRGB
-        let light = DesignTokens.current.islandAccentRGB
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let c = dark ? light : deep
-            return NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: 1)
-        })
-    }
-
     func color(for tone: IslandTone, speech: Bool) -> Color {
         switch tone {
         case .done: return doneText ?? done
@@ -138,20 +101,6 @@ struct IslandInk {
         default: return speech ? primary : secondary
         }
     }
-
-    // The waveform tint on this ink; nil keeps the classic on-black tints.
-    func waveformTint(for tone: IslandTone, adaptive: Bool) -> Color? {
-        guard adaptive else { return nil }
-        switch tone {
-        case .listening: return accent
-        case .speaking: return primary
-        case .done: return DesignTokens.islandGreen
-        case .approval, .caution: return DesignTokens.islandAmber
-        case .failed: return DesignTokens.islandRed
-        case .budget: return DesignTokens.islandGold
-        default: return secondary
-        }
-    }
 }
 
 enum IslandTone { case idle, listening, thinking, acting, speaking, done, caution, failed, budget, approval }
@@ -160,7 +109,7 @@ enum IslandTone { case idle, listening, thinking, acting, speaking, done, cautio
 
 // What the island says right now, resolved once from AppState with the same
 // rules IslandView's caption uses (primary text, speech weight, cost
-// visibility), so the three directions differ in form, never in content.
+// visibility).
 @MainActor
 struct IslandReadout {
     let tone: IslandTone
@@ -281,20 +230,7 @@ struct CostLabel: View {
     }
 }
 
-// The existing gated waveform, drawn smaller for a smaller slot. The canvas
-// draws at the scaled size directly, so the timeline keeps its gate.
-struct GlassWaveform: View {
-    let meter: VoiceLevelMeter
-    let phase: String
-    var tint: Color?
-    var scale: CGFloat
-
-    var body: some View {
-        IslandWaveform(meter: meter, phase: phase, tintOverride: tint, scale: scale)
-    }
-}
-
-// Button faces for the prototype styles. The Button wrappers live in
+// Button faces for the Character style. The Button wrappers live in
 // IslandChipView and stay plain-styled: pointer-only, no shortcut, no focus.
 struct GlassButtonLabel: View {
     enum Role { case primary, secondary, quiet }
@@ -331,7 +267,7 @@ struct GlassButtonLabel: View {
     }
 }
 
-// Press feedback for the glass styles' pointer-only buttons: a slight scale
+// Press feedback for the Character style's pointer-only buttons: a slight scale
 // while held, nothing else. A ButtonStyle like .plain: no shortcut, no
 // default-button role, no focus ring (the panels can never become key).
 struct IslandPressStyle: ButtonStyle {
@@ -348,49 +284,6 @@ struct Hairline: View {
     let color: Color
     var body: some View {
         Rectangle().fill(color).frame(height: 0.5)
-    }
-}
-
-// Proposes a child its ideal width up to a cap, so a capsule hugs short text
-// and truncates long text instead of overflowing.
-struct HugWidth: Layout {
-    var minWidth: CGFloat
-    var maxWidth: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard let child = subviews.first else { return .zero }
-        let ideal = child.sizeThatFits(.unspecified)
-        let width = min(max(ideal.width, minWidth), maxWidth)
-        return child.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        subviews.first?.place(at: bounds.origin,
-                              proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
-    }
-}
-
-// Liquid Glass on macOS 26 and later; a system material with a hairline
-// below it. `smoke` darkens the glass for white text (direction C's card).
-struct GlassSurface<S: Shape>: ViewModifier {
-    let shape: S
-    var smoke: Double?
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content.glassEffect(glass, in: shape)
-        } else {
-            content
-                .background(shape.fill(smoke == nil ? Material.regularMaterial : Material.ultraThinMaterial))
-                .background(shape.fill(Color.black.opacity(smoke ?? 0)))
-                .overlay(shape.stroke(Color.white.opacity(DesignTokens.glassRimOpacity), lineWidth: 0.5))
-        }
-    }
-
-    @available(macOS 26, *)
-    private var glass: Glass {
-        guard let smoke else { return .regular }
-        return .regular.tint(Color.black.opacity(smoke))
     }
 }
 
@@ -610,7 +503,7 @@ struct IslandGlassSurface: View {
             .environment(\.islandContentOpacity, contentOpacity)
             .offset(x: shakeOffset)
             .scaleEffect(x: scale.x, y: scale.y, anchor: .top)
-            .opacity(style == .b || floating ? Double(shapeOpen) : 1)
+            .opacity(floating ? Double(shapeOpen) : 1)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .onChange(of: reveal.token) { _, _ in open() }
             .onChange(of: reveal.collapseToken) { _, _ in close() }
@@ -618,30 +511,21 @@ struct IslandGlassSurface: View {
             .task(id: state.toast) { await autoClearToast() }
     }
 
+    // Classic never reaches this router: IslandView draws it from its own
+    // classic body unless floating, and floating always draws D.
     @ViewBuilder private var surface: some View {
         if floating {
             CharacterIsland(state: state, client: client, topInset: 0,
                             notchWidth: notch, attached: false)
         } else {
-            switch style {
-            case .a:
-                FusedIsland(state: state, client: client, topInset: topInset,
+            CharacterIsland(state: state, client: client, topInset: topInset,
                             notchWidth: notch)
-            case .b:
-                FloatingIsland(state: state, client: client, topInset: topInset)
-            case .d:
-                CharacterIsland(state: state, client: client, topInset: topInset,
-                                notchWidth: notch)
-            case .c, .classic:
-                PillCardIsland(state: state, client: client, topInset: topInset,
-                               notchWidth: notch)
-            }
         }
     }
 
-    // Collapsed transform per style: A, C and D retreat into the notch they
-    // grow from (D maps its measured size back onto the notch rect); B and
-    // the floating pill, which never touch the notch, shrink and fade in place.
+    // Collapsed transform: D retreats into the notch it grows from (it maps
+    // its measured size back onto the notch rect); the floating pill, which
+    // never touches the notch, shrinks and fades in place.
     private var scale: (x: CGFloat, y: CGFloat) {
         if reduceMotion { return (1, 1) }
         let p = shapeOpen
@@ -650,12 +534,7 @@ struct IslandGlassSurface: View {
             let s = DesignTokens.characterFloatingCollapsedScale
             collapsed = (s, s)
         } else {
-            switch style {
-            case .d: collapsed = notchScale
-            case .a: collapsed = (0.6, 0.35)
-            case .b: collapsed = (0.9, 0.9)
-            default: collapsed = (notch / (notch + 2 * DesignTokens.glassEarWidth), 1)
-            }
+            collapsed = notchScale
         }
         return (collapsed.x + (1 - collapsed.x) * p, collapsed.y + (1 - collapsed.y) * p)
     }
@@ -722,400 +601,6 @@ extension EnvironmentValues {
         set { self[IslandContentOpacityKey.self] = newValue }
     }
 }
-
-// MARK: A  Fused
-
-// The classic silhouette with material depth. The black body is inset by the
-// rim width on the sides and bottom; the gap is real Liquid Glass, so the
-// rim picks up whatever the desktop shows at the island's edge while the top
-// stays flush, unbroken hardware black. A card does not detach: the same
-// body grows downward and the card reads below a hairline, then the
-// approval buttons, so the full text sits above the decision.
-@MainActor
-struct FusedIsland: View {
-    @ObservedObject var state: AppState
-    let client: DaemonClient
-    let topInset: CGFloat
-    let notchWidth: CGFloat
-
-    @Environment(\.islandContentOpacity) private var contentOpacity
-
-    private var readout: IslandReadout { IslandReadout(state: state) }
-    private var expanded: Bool { state.card != nil || readout.pendingChip != nil }
-    private var ink: IslandInk { .onDark }
-
-    private var shape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            topLeadingRadius: 0,
-            bottomLeadingRadius: DesignTokens.glassFusedCornerRadius,
-            bottomTrailingRadius: DesignTokens.glassFusedCornerRadius,
-            topTrailingRadius: 0,
-            style: .continuous)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Color.clear.frame(height: topInset)
-            content
-                .opacity(contentOpacity)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, expanded ? 16 : 12)
-        }
-        .frame(width: expanded ? DesignTokens.glassFusedWidth
-                               : notchWidth + 2 * DesignTokens.islandGrowWidth)
-        .background(FusedBody(shape: shape))
-        .animation(.spring(DesignTokens.glassMorphSpring), value: expanded)
-        .animation(.easeOut(duration: DesignTokens.cardFadeDuration), value: state.card?.id)
-    }
-
-    private var content: some View {
-        VStack(spacing: 12) {
-            if let chip = readout.pendingChip {
-                ApprovalPreview(preview: chip.preview, ink: ink, centered: state.card == nil)
-                    .padding(.top, 4)
-            } else {
-                VStack(spacing: 8) {
-                    IslandWaveform(meter: state.meter, phase: state.phase)
-                    caption
-                }
-                .frame(minHeight: 50)
-            }
-            if let card = state.card {
-                Hairline(color: ink.hairline)
-                IslandCardContent(card: card, ink: ink, onClose: { state.dismissCard() })
-                    .transition(.opacity)
-            }
-            if let chip = readout.pendingChip {
-                IslandChipView(chip: chip, client: client, style: .a,
-                               centered: state.card == nil)
-                    .id(chip.id)
-            }
-        }
-    }
-
-    private var caption: some View {
-        HStack(spacing: 8) {
-            if let label = readout.runningLabel, !readout.hasToast {
-                // The running connector as an etched capsule: well fill plus
-                // a hairline, so it reads as a status object, not a button.
-                Text(label)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(ink.primary)
-                    .padding(.horizontal, 10)
-                    .frame(height: 22)
-                    .background(Capsule(style: .continuous).fill(ink.well))
-                    .overlay(Capsule(style: .continuous).strokeBorder(ink.hairline, lineWidth: 0.5))
-            } else {
-                ReadoutLabel(readout: readout, ink: ink, phase: state.phase)
-            }
-            if let cost = readout.cost {
-                CostLabel(cost: cost, ink: ink, budget: readout.tone == .budget)
-            }
-        }
-        .frame(maxWidth: 290)
-    }
-}
-
-// The fused body's layers, all static: the glass rim (or a quiet white rim
-// before macOS 26), the black body inset inside it, a faint lift of light at
-// the bottom, and a specular hairline that brightens toward the bottom curve
-// and is gone before it reaches the notch.
-struct FusedBody: View {
-    let shape: UnevenRoundedRectangle
-
-    var body: some View {
-        let rim = DesignTokens.glassRimWidth
-        ZStack {
-            rimLayer
-            shape.fill(DesignTokens.islandBg)
-                .padding([.horizontal, .bottom], rim)
-            shape.fill(LinearGradient(
-                colors: [Color.white.opacity(0), Color.white.opacity(DesignTokens.glassInnerLightOpacity)],
-                startPoint: UnitPoint(x: 0.5, y: 0.45), endPoint: .bottom))
-                .padding([.horizontal, .bottom], rim)
-            shape.strokeBorder(LinearGradient(
-                colors: [Color.white.opacity(0), Color.white.opacity(DesignTokens.glassRimOpacity)],
-                startPoint: UnitPoint(x: 0.5, y: 0.25), endPoint: .bottom), lineWidth: 0.75)
-                .padding([.horizontal, .bottom], rim)
-        }
-    }
-
-    @ViewBuilder private var rimLayer: some View {
-        if #available(macOS 26, *) {
-            Color.clear.glassEffect(.regular, in: shape)
-        } else {
-            shape.fill(Color.white.opacity(DesignTokens.glassRimOpacity / 2))
-        }
-    }
-}
-
-// MARK: B  Floating
-
-// A Liquid Glass capsule a few points below the notch, never touching it.
-// One glass shape for every state: compact states hug their line, a card or
-// an approval morphs the same shape into a rounded card, and the header row
-// stays put so the eye has an anchor through the morph. Adaptive: light
-// glass with label-colored text in light mode, dark glass in dark mode.
-@MainActor
-struct FloatingIsland: View {
-    @ObservedObject var state: AppState
-    let client: DaemonClient
-    let topInset: CGFloat
-
-    @Environment(\.islandContentOpacity) private var contentOpacity
-
-    private var readout: IslandReadout { IslandReadout(state: state) }
-    private var expanded: Bool { state.card != nil || readout.pendingChip != nil }
-    private var ink: IslandInk { .adaptive }
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(
-            cornerRadius: expanded ? DesignTokens.glassCardCornerRadius
-                                   : DesignTokens.glassCapsuleHeight / 2,
-            style: .continuous)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Color.clear.frame(height: topInset + DesignTokens.glassNotchGap)
-            glassBody
-        }
-    }
-
-    private var glassBody: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-                .frame(height: DesignTokens.glassCapsuleHeight)
-            if expanded {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let chip = readout.pendingChip, state.card == nil {
-                        ApprovalPreview(preview: chip.preview, ink: ink)
-                    }
-                    if let card = state.card {
-                        IslandCardContent(card: card, ink: ink, wellBody: true,
-                                          onClose: { state.dismissCard() })
-                    }
-                    if let chip = readout.pendingChip {
-                        IslandChipView(chip: chip, client: client, style: .b)
-                            .id(chip.id)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
-                .transition(.opacity)
-            }
-        }
-        .opacity(contentOpacity)
-        .modifier(WidthRule(expanded: expanded))
-        .modifier(GlassSurface(shape: shape))
-        .animation(.spring(DesignTokens.glassMorphSpring), value: expanded)
-        .animation(.easeOut(duration: DesignTokens.cardFadeDuration), value: state.card?.id)
-    }
-
-    // The header keeps the live state even when a card is open: the waveform
-    // and the spoken line (or the approval word) stay where they were.
-    private var header: some View {
-        HStack(spacing: 10) {
-            GlassWaveform(meter: state.meter, phase: state.phase,
-                          tint: ink.waveformTint(for: readout.tone, adaptive: true),
-                          scale: 0.66)
-            if readout.pendingChip != nil {
-                Text("Needs your approval")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(ink.primary)
-                    .lineLimit(1)
-            } else {
-                ReadoutLabel(readout: readout, ink: ink, phase: state.phase)
-            }
-            Spacer(minLength: 0)
-            if let cost = readout.cost {
-                CostLabel(cost: cost, ink: ink, budget: readout.tone == .budget)
-            }
-        }
-        .padding(.horizontal, 16)
-    }
-}
-
-// B's width rule: compact states hug their content between a floor and a
-// cap; expanded states take the fixed card width so text wraps predictably.
-private struct WidthRule: ViewModifier {
-    let expanded: Bool
-
-    func body(content: Content) -> some View {
-        if expanded {
-            content.frame(width: DesignTokens.glassCardWidth)
-        } else {
-            HugWidth(minWidth: 220, maxWidth: 380) { content }
-        }
-    }
-}
-
-// MARK: C  Pill and card
-
-// The notch widens sideways into a black pill at notch height, Dynamic
-// Island style: waveform in the left ear, state in the right, nothing under
-// the camera. Anything worth reading drops into a smoked glass card below,
-// which enters and leaves on its own while the pill stays put.
-@MainActor
-struct PillCardIsland: View {
-    @ObservedObject var state: AppState
-    let client: DaemonClient
-    let topInset: CGFloat
-    let notchWidth: CGFloat
-
-    @Environment(\.islandContentOpacity) private var contentOpacity
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var readout: IslandReadout { IslandReadout(state: state) }
-    private var ink: IslandInk { .onDark }
-
-    private enum Drop: Equatable { case none, line, content }
-
-    private var drop: Drop {
-        if state.card != nil || readout.pendingChip != nil { return .content }
-        if readout.hasToast || readout.tone == .speaking { return .line }
-        if readout.tone == .failed, !state.modelLine.isEmpty { return .line }
-        return .none
-    }
-
-    var body: some View {
-        VStack(spacing: DesignTokens.cardGap) {
-            pill
-            if drop != .none {
-                cardView
-                    .transition(cardTransition)
-            }
-        }
-        .animation(.easeOut(duration: DesignTokens.glassEnterDuration), value: drop)
-        .animation(.easeOut(duration: DesignTokens.cardFadeDuration), value: state.card?.id)
-    }
-
-    private var cardTransition: AnyTransition {
-        if reduceMotion { return .opacity }
-        return .opacity
-            .combined(with: .offset(y: -8))
-            .combined(with: .scale(scale: 0.97, anchor: .top))
-    }
-
-    // MARK: pill
-
-    private var pill: some View {
-        HStack(spacing: 0) {
-            leftEar
-                .frame(width: DesignTokens.glassEarWidth)
-            Color.clear.frame(width: notchWidth)
-            rightEar
-                .frame(width: DesignTokens.glassEarWidth)
-        }
-        .frame(height: topInset)
-        .opacity(contentOpacity)
-        .background(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: DesignTokens.glassPillCornerRadius,
-                bottomTrailingRadius: DesignTokens.glassPillCornerRadius,
-                topTrailingRadius: 0,
-                style: .continuous)
-                .fill(DesignTokens.islandBg))
-    }
-
-    private var leftEar: some View {
-        HStack {
-            GlassWaveform(meter: state.meter, phase: state.phase, tint: nil, scale: 0.62)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 16)
-    }
-
-    private var rightEar: some View {
-        HStack(spacing: 5) {
-            Spacer(minLength: 0)
-            earStatus
-        }
-        .padding(.trailing, 16)
-    }
-
-    @ViewBuilder private var earStatus: some View {
-        switch readout.tone {
-        case .thinking:
-            ThinkingEllipsis(phase: state.phase)
-        case .acting:
-            Text(readout.runningLabel ?? "Working")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(ink.primary)
-                .lineLimit(1)
-        case .listening:
-            earWord("Listening", DesignTokens.islandAccent)
-        case .approval:
-            Circle().fill(DesignTokens.islandAmber).frame(width: 5, height: 5)
-            earWord("Approve?", DesignTokens.islandAmber)
-        case .done:
-            Image(systemName: "checkmark")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(DesignTokens.islandGreen)
-            earWord(state.modelLine.isEmpty ? "Done" : readout.text, DesignTokens.islandGreen)
-        case .budget:
-            CostLabel(cost: readout.cost ?? "", ink: ink, budget: true)
-        default:
-            earWord(state.stateLabel, ink.color(for: readout.tone, speech: false))
-        }
-    }
-
-    private func earWord(_ word: String, _ color: Color) -> some View {
-        Text(word)
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(color)
-            .lineLimit(1)
-    }
-
-    // MARK: card
-
-    private var cardShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: drop == .line ? DesignTokens.glassCapsuleHeight / 2
-                                                     : DesignTokens.glassCardCornerRadius,
-                         style: .continuous)
-    }
-
-    private var cardView: some View {
-        cardContent
-            .opacity(contentOpacity)
-            .frame(width: DesignTokens.glassCardWidth)
-            .environment(\.colorScheme, .dark)
-            .modifier(GlassSurface(shape: cardShape, smoke: DesignTokens.glassSmokeOpacity))
-    }
-
-    @ViewBuilder private var cardContent: some View {
-        switch drop {
-        case .line:
-            Text(readout.text)
-                .font(.system(size: 13.5))
-                .foregroundStyle(readout.tone == .failed ? DesignTokens.islandRed : ink.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 18)
-                .frame(minHeight: DesignTokens.glassCapsuleHeight)
-        case .content:
-            VStack(alignment: .leading, spacing: 12) {
-                if let chip = readout.pendingChip, state.card == nil {
-                    ApprovalPreview(preview: chip.preview, ink: ink)
-                }
-                if let card = state.card {
-                    IslandCardContent(card: card, ink: ink, onClose: { state.dismissCard() })
-                }
-                if let chip = readout.pendingChip {
-                    IslandChipView(chip: chip, client: client, style: .c)
-                        .id(chip.id)
-                }
-            }
-            .padding(16)
-        case .none:
-            EmptyView()
-        }
-    }
-}
-
 
 // MARK: D  Character
 
@@ -1204,7 +689,7 @@ struct CharacterIsland: View {
             if let card = state.card {
                 Hairline(color: ink.hairline)
                 IslandCardContent(card: card, ink: ink, wellBody: true,
-                                  onClose: { state.dismissCard() })
+                                  onClose: { state.clearCard() })
                     .transition(.opacity)
             }
             if let chip = readout.pendingChip {
@@ -1549,7 +1034,7 @@ struct VoiceLine: View {
 
 // The live style preference: the menu bar's Island Style choice, persisted so
 // a relaunch keeps it. Only the shipped styles are selectable; a stored
-// prototype or unknown value falls back to the compiled default.
+// value that is retired or unknown falls back to the compiled default.
 enum IslandStylePreference {
     static let defaultsKey = "islandStyle"
     static let selectable: [IslandStyle] = [.d, .classic]

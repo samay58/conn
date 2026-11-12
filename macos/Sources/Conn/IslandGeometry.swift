@@ -56,7 +56,7 @@ struct IslandGeometry {
         return frame
     }
 
-    // The panel for a glass style (D and the prototypes): the surface's
+    // The panel for a glass style (D): the surface's
     // measured size plus room for its shadow, centered on the notch and flush
     // to the screen's top edge. The surface sizes itself inside; the panel
     // only has to contain it. A zero size (nothing laid out yet) gets the

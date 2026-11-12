@@ -17,8 +17,8 @@ import SwiftUI
 struct IslandWaveform: View {
     let meter: VoiceLevelMeter
     var phase: String
-    // The prototype glass styles draw on light glass, where the on-black
-    // tints wash out; nil keeps the phase tint below.
+    // The Character style tints the line from its own palette; nil keeps
+    // the phase tint below.
     var tintOverride: Color?
     // A gradient across the line (the Character speaking voice); wins over
     // the tint.

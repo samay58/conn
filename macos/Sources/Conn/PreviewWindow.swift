@@ -6,10 +6,9 @@ import SwiftUI
 // session. The cycler steps through every reviewable state (nine phases plus
 // toast, chips, and the card states); Replay and Collapse drive the same
 // reveal tokens IslandController uses live. The style picker flips every
-// sample between classic and the prototype directions (IslandGlassStyles
-// .swift), and Morph keeps one island on stage so stepping through states
+// sample between classic and D, Character (IslandGlassStyles.swift), and Morph keeps one island on stage so stepping through states
 // shows the transitions between them. `Conn --preview --shoot <dir>` writes
-// <style>-<state>.png for every style and state headlessly, plus
+// <style>-<state>.png for classic and d in every state headlessly, plus
 // floating-<state>.png: the non-notch fallback panel's Character pill.
 
 @MainActor
@@ -406,7 +405,7 @@ final class PreviewSample: Identifiable {
 
 // One state rendered on a stand-in desktop: wallpaper, a window, the menu
 // bar, and the notch, so glass has something real to refract and every
-// direction is judged against the same scene. Classic keeps its live width;
+// style is judged against the same scene. Classic keeps its live width;
 // every style sizes its own height inside the stage.
 @MainActor
 struct PreviewStage: View {

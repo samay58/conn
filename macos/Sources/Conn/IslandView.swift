@@ -79,7 +79,7 @@ struct IslandView: View {
                 .frame(height: topInset + DesignTokens.islandContentHeight
                            + (chipShowing ? DesignTokens.chipRowHeight : 0))
             if let card = state.card {
-                ClassicCardTile(card: card, onClose: { state.dismissCard() })
+                ClassicCardTile(card: card, onClose: { state.clearCard() })
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                         reveal.cardHeight = height
@@ -430,8 +430,8 @@ private struct IslandBreath: ViewModifier {
 // static at full opacity.
 struct ThinkingEllipsis: View {
     var phase: String
-    // nil keeps the signature lilac; the light-glass prototype passes a
-    // deeper tone of the same hue.
+    // nil keeps the signature lilac; the Character style passes its own voice
+    // color.
     var tint: Color? = nil
 
     // Increments once per timeline tick; the motion-policy test asserts it

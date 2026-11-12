@@ -234,16 +234,12 @@ final class AppState: ObservableObject {
         if retires { scheduleCardRetire() }
     }
 
+    // Also the card's close button: Swift-local, no daemon message.
     func clearCard() {
         cardRetireTask?.cancel()
         cardRetireTask = nil
         cardRevision &+= 1
         card = nil
-    }
-
-    // The close button on a card: Swift-local, no daemon message.
-    func dismissCard() {
-        clearCard()
     }
 
     // Persisting cards stay until replaced, cleared, or closed. The rest

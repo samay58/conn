@@ -89,11 +89,12 @@ final class IslandCharacterTests: XCTestCase {
         IslandStylePreference.save(.d, defaults)
         XCTAssertEqual(IslandStylePreference.load(defaults), .d)
 
-        // A prototype or junk value never becomes the live surface.
-        defaults.set(IslandStyle.b.rawValue, forKey: IslandStylePreference.defaultsKey)
-        XCTAssertNil(IslandStylePreference.load(defaults))
-        defaults.set("nonsense", forKey: IslandStylePreference.defaultsKey)
-        XCTAssertNil(IslandStylePreference.load(defaults))
+        // A retired style's stored value (a, b, c) or junk never becomes the
+        // live surface; the caller falls back to the compiled default.
+        for stale in ["a", "b", "c", "nonsense"] {
+            defaults.set(stale, forKey: IslandStylePreference.defaultsKey)
+            XCTAssertNil(IslandStylePreference.load(defaults), stale)
+        }
     }
 
     func testCharacterInkKeepsTextWhiteAndColorInTheDetails() {

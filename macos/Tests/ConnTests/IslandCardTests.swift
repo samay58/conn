@@ -96,7 +96,7 @@ final class IslandCardTests: XCTestCase {
     func testDismissIsLocal() {
         let state = AppState()
         state.apply(cardMessage("reply", kind: "reply", state: "draft", persist: true))
-        state.dismissCard()
+        state.clearCard()
         XCTAssertNil(state.card)
     }
 
