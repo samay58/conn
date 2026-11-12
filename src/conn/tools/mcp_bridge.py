@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import copy
 import json
+import re
+from datetime import date, datetime
 
 from ..config import Config
 from ..mcp_client import McpCallFailed, McpNotConnected, McpToolInfo
@@ -26,12 +28,52 @@ class _Preview(dict):
         return "?"
 
 
+_LOCAL_STAMP = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):(\d{2}))?$")
+
+
+def _clock(hour: int, minute: int) -> str:
+    suffix = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    return f"{hour12} {suffix}" if minute == 0 else f"{hour12}:{minute:02d} {suffix}"
+
+
+def friendly_stamp(value: str, today: date | None = None) -> str:
+    """A local date or date-time argument as a person reads it on a chip: "today 9 AM",
+    "tomorrow 2:30 PM", "Fri 9 AM", "Nov 20 9 AM". Exact to the minute, so the click
+    approves the same moment the server receives. Anything else comes back unchanged."""
+    match = _LOCAL_STAMP.match(value.strip())
+    if not match:
+        return value
+    try:
+        day = date.fromisoformat(match.group(1))
+    except ValueError:
+        return value
+    today = today or datetime.now().date()
+    delta = (day - today).days
+    if delta == 0:
+        when = "today"
+    elif delta == 1:
+        when = "tomorrow"
+    elif 1 < delta < 7:
+        when = day.strftime("%a")
+    elif day.year == today.year:
+        when = f"{day.strftime('%b')} {day.day}"
+    else:
+        when = f"{day.strftime('%b')} {day.day} {day.year}"
+    if match.group(2) is None:
+        return when
+    hour, minute = int(match.group(2)), int(match.group(3))
+    if hour > 23 or minute > 59:
+        return value
+    return f"{when} {_clock(hour, minute)}"
+
+
 def _preview_fn(template: str, default: str, exported: frozenset[str]):
     def preview(args: dict) -> str:
         if not template:
             return default
         values = _Preview({
-            k: str(v)[:PREVIEW_VALUE_MAX] for k, v in args.items() if k in exported})
+            k: friendly_stamp(str(v))[:PREVIEW_VALUE_MAX] for k, v in args.items() if k in exported})
         try:
             return template.format_map(values)
         except (KeyError, IndexError, ValueError, AttributeError):
@@ -82,11 +124,14 @@ def _make_executor(server: str, tool: str, tool_cfg, server_cfg, cfg: Config,
                 return {"status": "verified", "safe_user_message": tool_cfg.done_message}
             raise ToolError("mcp_write_unconfirmed: I sent that but couldn't confirm it landed.")
 
+        # The MCP spec has a server repeat its structured result as JSON text, so sending
+        # both doubled every read (Phoenix's today: 3,817 characters, 1,644 without the
+        # copy). Structured wins when it fits; otherwise the text, cut to the limit.
         limit = tool_cfg.max_result_chars
         structured = result.structured
-        if structured is not None and len(json.dumps(structured, default=str)) > limit:
-            structured = None
-        return {"text": result.text[:limit], "structured": structured}
+        if structured is not None and len(json.dumps(structured, default=str)) <= limit:
+            return {"structured": structured}
+        return {"text": result.text[:limit]}
 
     return execute
 
@@ -135,7 +180,12 @@ def register_mcp_tools(
             description=tool_cfg.description,
             parameters=parameters,
             risk=RiskLevel.ACT_CONFIRM if is_write else RiskLevel.READ,
-            preview=_preview_fn(tool_cfg.preview, f"{info.server}: {info.tool}", exported),
+            # The island shows a read's preview while it runs, so an unconfigured read says
+            # "Checking Granola"; a write keeps "server: tool", which names exactly what is approved.
+            preview=_preview_fn(tool_cfg.preview,
+                                f"{info.server}: {info.tool}" if is_write
+                                else f"Checking {info.server.replace('_', ' ').title()}",
+                                exported),
             executor=_make_executor(info.server, info.tool, tool_cfg, server_cfg, cfg,
                                     manager, exported),
             computer_mutation=False,

@@ -8,6 +8,7 @@
           "kind": "read",
           "alias": "phoenix_today",
           "description": "Samay's must-do and should-do lines for today from his TODAY note, with which are done, plus reminders due today.",
+          "preview": "Checking today",
           "input_schema": {
             "type": "object",
             "properties": {}
@@ -18,6 +19,7 @@
           "kind": "read",
           "alias": "phoenix_calendar",
           "description": "Samay's calendar events and open stretches for a day or date range. Work events show only as busy.",
+          "preview": "Checking the calendar",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -39,6 +41,7 @@
           "kind": "read",
           "alias": "phoenix_people",
           "description": "Who Samay owes a reply across personal email, texts and WhatsApp: name, channel, wait, and the one-line ask. Use first for any reply question.",
+          "preview": "Checking who's waiting",
           "input_schema": {
             "type": "object",
             "properties": {}
@@ -49,6 +52,7 @@
           "kind": "read",
           "alias": "phoenix_thread",
           "description": "The latest texts or WhatsApp messages with one named person. Only when Samay asks about that person's messages.",
+          "preview": "Reading the thread",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -73,6 +77,7 @@
           "kind": "read",
           "alias": "phoenix_lookup",
           "description": "Weather (optional place) or sports results and schedule (optional team).",
+          "preview": "Checking {kind}",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -180,6 +185,7 @@
           "kind": "read",
           "alias": "",
           "description": "Find Samay's recorded Granola meetings by person, company, keyword or date.",
+          "preview": "Searching Granola",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -209,6 +215,7 @@
           "kind": "read",
           "alias": "",
           "description": "Find what was said in Samay's Granola meeting transcripts, by keywords and optional date range.",
+          "preview": "Searching Granola",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -242,6 +249,7 @@
           "kind": "read",
           "alias": "",
           "description": "Find Samay's Wispr Flow meeting notes by keyword, person or date.",
+          "preview": "Searching Wispr",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -270,6 +278,7 @@
           "kind": "read",
           "alias": "",
           "description": "Read one Wispr Flow meeting's notes by id from wispr_search_meetings.",
+          "preview": "Reading the Wispr note",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -295,6 +304,7 @@
           "kind": "read",
           "alias": "superhuman_search_threads",
           "description": "PLACEHOLDER until sign-in. Search Samay's personal email threads by sender, subject or keyword.",
+          "preview": "Searching mail",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -315,6 +325,7 @@
           "kind": "read",
           "alias": "superhuman_get_thread",
           "description": "PLACEHOLDER until sign-in. Read one personal email thread by id from superhuman_search_threads.",
+          "preview": "Reading the email",
           "input_schema": {
             "type": "object",
             "properties": {

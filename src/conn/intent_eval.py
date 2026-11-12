@@ -202,7 +202,7 @@ CANNED_SHORTCUTS = ["Focus Mode On", "Log Water", "Morning Routine", "Dark Mode"
 
 def canned_read(name: str, bundle_id: str) -> dict:
     if name in MCP_CANNED_READS:
-        return {"ok": True, "data": {"text": MCP_CANNED_READS[name], "structured": None},
+        return {"ok": True, "data": {"text": MCP_CANNED_READS[name]},
                 "duration_ms": 80}
     if name == "shortcuts_list":
         return {"ok": True, "data": {"count": len(CANNED_SHORTCUTS), "shortcuts": CANNED_SHORTCUTS}}

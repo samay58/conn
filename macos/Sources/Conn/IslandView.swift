@@ -182,9 +182,9 @@ struct IslandView: View {
     // MARK: content resolution
 
     private var runningToolLabel: String? {
-        guard let name = state.chips.first(where: { $0.status == "running" })?.name,
-              !name.isEmpty else { return nil }
-        return ToolLabels.label(for: name)
+        guard let chip = state.chips.first(where: { $0.status == "running" }),
+              !chip.name.isEmpty else { return nil }
+        return ToolLabels.label(for: chip.name, preview: chip.preview)
     }
 
     private var primaryIsSpeech: Bool {
@@ -397,10 +397,24 @@ enum ToolLabels {
         "computer_type_text": "Typing text",
         "computer_scroll": "Scrolling",
         "computer_hotkey": "Pressing keys",
+        "computer_key": "Pressing a key",
+        "computer_create": "Creating",
+        "computer_select": "Selecting",
+        "computer_select_relative": "Moving selection",
+        "computer_activate": "Pressing",
+        "computer_visual_observe": "Looking at the screen",
+        "browser_navigate": "Opening page",
+        "shortcuts_list": "Checking shortcuts",
+        "shortcuts_run": "Running shortcut",
     ]
 
-    static func label(for name: String) -> String {
-        labels[name] ?? name.replacingOccurrences(of: "_", with: " ")
+    // Built-in tools use the table. Anything else (connector tools, named in
+    // the user's config) uses the daemon's preview, which is written to be read
+    // ("Checking today", "Searching Granola"), never the raw tool name.
+    static func label(for name: String, preview: String = "") -> String {
+        if let known = labels[name] { return known }
+        let trimmed = preview.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? name.replacingOccurrences(of: "_", with: " ") : trimmed
     }
 }
 

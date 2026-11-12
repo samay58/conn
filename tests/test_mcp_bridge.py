@@ -164,9 +164,11 @@ def test_read_result_shape_and_cap():
     mgr = FakeManager(McpCallResult("a" * 5000, {"k": 1}, False))
     cfg, registry, _, _ = build({"search": tool_cfg(max_result_chars=300)}, [info()], mgr)
     out = run(registry, "notes_search", {"query": "q"}, cfg)
-    assert out == {"text": "a" * 300, "structured": {"k": 1}}
-    mgr.result = McpCallResult("t", {"k": "b" * 400}, False)
-    assert run(registry, "notes_search", {"query": "q"}, cfg)["structured"] is None
+    assert out == {"structured": {"k": 1}}  # the text copy is never sent beside it
+    mgr.result = McpCallResult("t" * 500, {"k": "b" * 400}, False)  # structured too big
+    assert run(registry, "notes_search", {"query": "q"}, cfg) == {"text": "t" * 300}
+    mgr.result = McpCallResult("<xml>meetings</xml>", None, False)  # text-only servers
+    assert run(registry, "notes_search", {"query": "q"}, cfg) == {"text": "<xml>meetings</xml>"}
 
 
 def test_withhold_marker_drops_whole_result():
@@ -294,7 +296,7 @@ def test_preview_template():
     assert cap({"text": "ask Dana"}) == "Capture: ask Dana"
     assert cap({}) == "Capture: ?"
     assert cap({"text": "x" * 100}) == "Capture: " + "x" * 40
-    assert registry["notes_search"].preview({"query": "q"}) == "notes: search"
+    assert registry["notes_search"].preview({"query": "q"}) == "Checking Notes"
 
 
 # -- serialization ---------------------------------------------------------
@@ -328,3 +330,24 @@ def test_mcp_write_takes_the_turn_slot():
                           execution_id=running.execution_id))
     m.handle(proposed("c3", "app_open", Gate.AUTO))
     assert "mutation_chain_closed" in m.ledger["c3"].output
+
+
+# -- friendly times on chips ----------------------------------------------------
+
+def test_friendly_stamp_reads_like_a_person_and_stays_exact():
+    from datetime import date
+
+    from conn.tools.mcp_bridge import friendly_stamp
+
+    today = date(2026, 11, 12)  # a Thursday
+    assert friendly_stamp("2026-11-12 09:00", today) == "today 9 AM"
+    assert friendly_stamp("2026-11-13 14:30", today) == "tomorrow 2:30 PM"
+    assert friendly_stamp("2026-11-13 00:05", today) == "tomorrow 12:05 AM"
+    assert friendly_stamp("2026-11-13 12:00", today) == "tomorrow 12 PM"
+    assert friendly_stamp("2026-11-16 09:00", today) == "Mon 9 AM"
+    assert friendly_stamp("2026-11-20 09:00", today) == "Nov 20 9 AM"
+    assert friendly_stamp("2027-01-04 09:00", today) == "Jan 4 2027 9 AM"
+    assert friendly_stamp("2026-11-11 09:00", today) == "Nov 11 9 AM"  # the past never reads as "today"
+    assert friendly_stamp("2026-11-14", today) == "Sat"
+    for raw in ("call Dana", "2026-13-01 09:00", "2026-11-12 25:00", "tomorrow 9am"):
+        assert friendly_stamp(raw, today) == raw
