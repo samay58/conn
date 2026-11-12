@@ -84,7 +84,7 @@ enum PreviewRunner {
         for pass in passes {
             DesignTokens.current.islandStyle = pass ?? .d
             for sample in samples {
-                sample.state.level = sample.animatedLevel(from: 0.55)
+                sample.state.meter.hold(sample.animatedLevel(from: 0.55))
                 let stage = PreviewStage(sample: sample, crosshair: false, floating: pass == nil)
 
                 let size = PreviewStage.size

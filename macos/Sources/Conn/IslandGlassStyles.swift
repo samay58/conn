@@ -281,21 +281,16 @@ struct CostLabel: View {
     }
 }
 
-// The existing gated waveform, scaled for a smaller slot. scaleEffect is a
-// render transform, so the bars keep their geometry and the timeline its gate.
+// The existing gated waveform, drawn smaller for a smaller slot. The canvas
+// draws at the scaled size directly, so the timeline keeps its gate.
 struct GlassWaveform: View {
-    let level: Double
+    let meter: VoiceLevelMeter
     let phase: String
     var tint: Color?
     var scale: CGFloat
 
-    // IslandWaveform's own footprint: 15 bars of 3pt at 3pt spacing, 24pt tall.
-    private static let natural = CGSize(width: 87, height: 24)
-
     var body: some View {
-        IslandWaveform(level: level, phase: phase, tintOverride: tint)
-            .scaleEffect(scale)
-            .frame(width: Self.natural.width * scale, height: Self.natural.height * scale)
+        IslandWaveform(meter: meter, phase: phase, tintOverride: tint, scale: scale)
     }
 }
 
@@ -773,7 +768,7 @@ struct FusedIsland: View {
                     .padding(.top, 4)
             } else {
                 VStack(spacing: 8) {
-                    IslandWaveform(level: state.level, phase: state.phase)
+                    IslandWaveform(meter: state.meter, phase: state.phase)
                     caption
                 }
                 .frame(minHeight: 50)
@@ -914,7 +909,7 @@ struct FloatingIsland: View {
     // and the spoken line (or the approval word) stay where they were.
     private var header: some View {
         HStack(spacing: 10) {
-            GlassWaveform(level: state.level, phase: state.phase,
+            GlassWaveform(meter: state.meter, phase: state.phase,
                           tint: ink.waveformTint(for: readout.tone, adaptive: true),
                           scale: 0.66)
             if readout.pendingChip != nil {
@@ -1019,7 +1014,7 @@ struct PillCardIsland: View {
 
     private var leftEar: some View {
         HStack {
-            GlassWaveform(level: state.level, phase: state.phase, tint: nil, scale: 0.62)
+            GlassWaveform(meter: state.meter, phase: state.phase, tint: nil, scale: 0.62)
             Spacer(minLength: 0)
         }
         .padding(.leading, 16)
@@ -1183,10 +1178,7 @@ struct CharacterIsland: View {
     private var content: some View {
         VStack(spacing: DesignTokens.characterSectionGap) {
             VStack(spacing: DesignTokens.characterCaptionGap) {
-                HStack(spacing: DesignTokens.characterFaceGap) {
-                    CharacterEyes(mood: mood)
-                    VoiceLine(level: state.level, phase: state.phase, tone: readout.tone)
-                }
+                VoiceLine(meter: state.meter, phase: state.phase, tone: readout.tone, mood: mood)
                 if let chip = readout.pendingChip {
                     ApprovalPreview(preview: chip.preview, ink: ink,
                                     centered: state.card == nil, marker: false)
@@ -1432,10 +1424,16 @@ struct BehindWindowMaterial: NSViewRepresentable {
 
 // Two lime eyes in the icon's proportions, set wide. Awake: open. Focused: narrowed (a vertical scale, not a new shape).
 // Wink: the right eye closes into the icon's arc. Alert: pink. Low: dimmed.
-// Changes ride one short ease-out.
+// Changes ride one short ease-out. While awake, the voice line's engine
+// drives three small live values: openness (a blink at a speech pause),
+// lift (Conn's own voice raises them a hair), and glance (the user's voice
+// draws them toward the line). All three are transforms only.
 struct CharacterEyes: View {
     enum Mood: Equatable { case awake, focused, wink, alert, low }
     let mood: Mood
+    var openness: Double = 1
+    var lift: CGFloat = 0
+    var glance: CGFloat = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var winkClosed = false
@@ -1467,6 +1465,7 @@ struct CharacterEyes: View {
             .frame(width: DesignTokens.characterEyeWidth)
         }
         .frame(height: DesignTokens.characterEyeHeight)
+        .offset(x: glance, y: -lift)
         .animation(.easeOut(duration: DesignTokens.characterWinkDuration), value: mood)
         .onAppear { winkClosed = mood == .wink }
         .onChange(of: mood) { _, next in
@@ -1485,7 +1484,8 @@ struct CharacterEyes: View {
         Capsule(style: .continuous)
             .fill(color)
             .frame(width: DesignTokens.characterEyeWidth, height: DesignTokens.characterEyeHeight)
-            .scaleEffect(x: 1, y: mood == .focused ? DesignTokens.characterFocusedEyeScale : 1)
+            .scaleEffect(x: 1, y: (mood == .focused ? DesignTokens.characterFocusedEyeScale : 1)
+                                  * CGFloat(min(max(openness, 0), 1)))
     }
 }
 
@@ -1500,45 +1500,35 @@ struct WinkArc: Shape {
     }
 }
 
-// The existing gated waveform at a finer scale, recolored by mood: lime
-// while the user speaks, the icon's lilac-to-pink gradient while Conn speaks
-// (a static gradient seen through the bars), quieter lilac while it works.
-// Outside the live phases the line rests dimmed, so the idle dots recede.
-// scaleEffect is a render transform: the bars keep their geometry and the
-// timeline its gate.
+// The face: the eyes and the gated waveform at a finer scale on one
+// timeline, recolored by mood: lime while the user speaks, the icon's
+// lilac-to-pink gradient while Conn speaks, quieter lilac while it works.
+// Outside the live phases the line rests dimmed, so the idle line recedes;
+// the eyes never dim with it.
 struct VoiceLine: View {
-    let level: Double
+    let meter: VoiceLevelMeter
     let phase: String
     let tone: IslandTone
-
-    private static let natural = CGSize(width: 87, height: 24)
+    var mood: CharacterEyes.Mood = .awake
 
     private var live: Bool {
         ["listening", "thinking", "acting", "speaking"].contains(phase)
     }
 
     var body: some View {
-        let s = DesignTokens.characterVoiceScale
-        line
-            .scaleEffect(s)
-            .frame(width: Self.natural.width * s, height: Self.natural.height * s)
-            .opacity(live ? 1 : DesignTokens.characterRestingVoiceOpacity)
+        IslandWaveform(meter: meter, phase: phase, tintOverride: Self.tint(for: tone),
+                       gradient: Self.gradient(for: tone),
+                       scale: DesignTokens.characterVoiceScale,
+                       lineOpacity: live ? 1 : DesignTokens.characterRestingVoiceOpacity,
+                       face: mood)
             .accessibilityHidden(true)
     }
 
-    @ViewBuilder private var line: some View {
-        switch tone {
-        case .speaking:
-            LinearGradient(colors: [DesignTokens.iconLilac, DesignTokens.iconPink],
-                           startPoint: .leading, endPoint: .trailing)
-                .frame(width: Self.natural.width, height: Self.natural.height)
-                .mask(IslandWaveform(level: level, phase: phase, tintOverride: Color.white))
-        default:
-            IslandWaveform(level: level, phase: phase, tintOverride: tint)
-        }
+    static func gradient(for tone: IslandTone) -> [Color]? {
+        tone == .speaking ? [DesignTokens.iconLilac, DesignTokens.iconPink] : nil
     }
 
-    private var tint: Color {
+    static func tint(for tone: IslandTone) -> Color {
         switch tone {
         case .listening, .done: return DesignTokens.iconLime
         case .failed: return DesignTokens.islandRed

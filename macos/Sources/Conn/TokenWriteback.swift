@@ -241,6 +241,54 @@ enum TokenWriteback {
             let characterWinkHeight: CGFloat = 3.5
             let characterWinkRestScale: CGFloat = 0.6
             @Published var characterCoreBottomOpacity = \(fmt(v.characterCoreBottomOpacity))
+            // voice line (WaveformEngine.swift): the island waveform, tuned against
+            // real speech with `Conn --playtest-waveform`. Levels arrive at 25 Hz;
+            // the engine integrates on a fixed 120 Hz step so the feel is the same
+            // at any display rate. Times are seconds; amplitudes are 0...1 of the
+            // bar's travel from waveMinHeight to waveMaxHeight.
+            let waveBarCount = 15
+            let waveBarWidth: CGFloat = 3
+            let waveBarSpacing: CGFloat = 3
+            let waveMinHeight: CGFloat = 3
+            let waveMaxHeight: CGFloat = 24
+            let waveFrameInterval = 1.0 / 60.0
+            let waveStepInterval = 1.0 / 120.0
+            let waveAttack = 0.025
+            let waveRelease = 0.1
+            let waveStaleAfter = 0.15
+            let waveNoiseFloor = 0.012
+            let waveGamma = 0.65
+            let waveKnee = 0.7
+            let waveEnvelopeFalloff = 1.3
+            let waveEnvelopeFloor = 0.3
+            let waveRippleDelay = 0.028
+            let waveRippleSkew = 0.35
+            let waveShimmer = 0.12
+            let waveShimmerRate = 1.3
+            let waveBreathFloor = 0.08
+            let waveBreathDepth = 0.22
+            let waveBreathPeriod = 2.8
+            let waveBreathTravel = 0.5
+            let waveThinkBase = 0.1
+            let waveThinkCrest = 0.38
+            let waveThinkPeriod = 1.8
+            let waveThinkWidth = 2.0
+            let waveRestAmplitude = 0.05
+            let waveBrightnessFloor = 0.6
+            let waveMorphDuration = 0.28
+            let waveVoicedThreshold = 0.2
+            let waveReducedAttack = 0.08
+            let waveReducedRelease = 0.3
+            let waveEyeAttack = 0.12
+            let waveEyeRelease = 0.35
+            let characterBlinkClose = 0.07
+            let characterBlinkOpen = 0.13
+            let characterBlinkClosedScale: CGFloat = 0.12
+            let characterBlinkAfterPause = 0.28
+            let characterBlinkMinGap = 1.8
+            let characterBlinkWhileWaiting = 3.4
+            let characterNodLift: CGFloat = 1.2
+            let characterGlanceShift: CGFloat = 0.8
         }
 
         // The static names every view reads. Forwarding, not storage: the values
@@ -394,6 +442,50 @@ enum TokenWriteback {
             static var characterWinkHeight: CGFloat { current.characterWinkHeight }
             static var characterWinkRestScale: CGFloat { current.characterWinkRestScale }
             static var characterCoreBottomOpacity: Double { current.characterCoreBottomOpacity }
+            // voice line
+            static var waveBarCount: Int { current.waveBarCount }
+            static var waveBarWidth: CGFloat { current.waveBarWidth }
+            static var waveBarSpacing: CGFloat { current.waveBarSpacing }
+            static var waveMinHeight: CGFloat { current.waveMinHeight }
+            static var waveMaxHeight: CGFloat { current.waveMaxHeight }
+            static var waveFrameInterval: Double { current.waveFrameInterval }
+            static var waveStepInterval: Double { current.waveStepInterval }
+            static var waveAttack: Double { current.waveAttack }
+            static var waveRelease: Double { current.waveRelease }
+            static var waveStaleAfter: Double { current.waveStaleAfter }
+            static var waveNoiseFloor: Double { current.waveNoiseFloor }
+            static var waveGamma: Double { current.waveGamma }
+            static var waveKnee: Double { current.waveKnee }
+            static var waveEnvelopeFalloff: Double { current.waveEnvelopeFalloff }
+            static var waveEnvelopeFloor: Double { current.waveEnvelopeFloor }
+            static var waveRippleDelay: Double { current.waveRippleDelay }
+            static var waveRippleSkew: Double { current.waveRippleSkew }
+            static var waveShimmer: Double { current.waveShimmer }
+            static var waveShimmerRate: Double { current.waveShimmerRate }
+            static var waveBreathFloor: Double { current.waveBreathFloor }
+            static var waveBreathDepth: Double { current.waveBreathDepth }
+            static var waveBreathPeriod: Double { current.waveBreathPeriod }
+            static var waveBreathTravel: Double { current.waveBreathTravel }
+            static var waveThinkBase: Double { current.waveThinkBase }
+            static var waveThinkCrest: Double { current.waveThinkCrest }
+            static var waveThinkPeriod: Double { current.waveThinkPeriod }
+            static var waveThinkWidth: Double { current.waveThinkWidth }
+            static var waveRestAmplitude: Double { current.waveRestAmplitude }
+            static var waveBrightnessFloor: Double { current.waveBrightnessFloor }
+            static var waveMorphDuration: Double { current.waveMorphDuration }
+            static var waveVoicedThreshold: Double { current.waveVoicedThreshold }
+            static var waveReducedAttack: Double { current.waveReducedAttack }
+            static var waveReducedRelease: Double { current.waveReducedRelease }
+            static var waveEyeAttack: Double { current.waveEyeAttack }
+            static var waveEyeRelease: Double { current.waveEyeRelease }
+            static var characterBlinkClose: Double { current.characterBlinkClose }
+            static var characterBlinkOpen: Double { current.characterBlinkOpen }
+            static var characterBlinkClosedScale: CGFloat { current.characterBlinkClosedScale }
+            static var characterBlinkAfterPause: Double { current.characterBlinkAfterPause }
+            static var characterBlinkMinGap: Double { current.characterBlinkMinGap }
+            static var characterBlinkWhileWaiting: Double { current.characterBlinkWhileWaiting }
+            static var characterNodLift: CGFloat { current.characterNodLift }
+            static var characterGlanceShift: CGFloat { current.characterGlanceShift }
         }
 
         """

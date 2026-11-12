@@ -81,7 +81,14 @@ final class AppState: ObservableObject {
     @Published var userLine = ""
     @Published var modelLine = ""
     @Published var chips: [Chip] = []
-    @Published var level: Double = 0
+    // Mic or playback level, 25 Hz. Deliberately not published: the
+    // waveform reads the meter inside its own timeline, so level traffic
+    // never re-renders the island. Setting `level` stamps it fresh.
+    let meter = VoiceLevelMeter()
+    var level: Double {
+        get { meter.value }
+        set { meter.push(newValue, source: meter.source) }
+    }
     @Published var spentUSD = 0.0
     @Published var capUSD = 5.0
     @Published var toast: String?
@@ -181,7 +188,7 @@ final class AppState: ObservableObject {
         case "transcript_delta":
             modelLine += msg["text"] as? String ?? ""
         case "level":
-            level = msg["value"] as? Double ?? 0
+            meter.push(msg["value"] as? Double ?? 0, source: msg["source"] as? String ?? "")
         case "cost":
             if let r = msg["receipt"] as? [String: Any],
                let usd = r["estimated_usd"] as? Double { spentUSD = usd }
@@ -264,7 +271,7 @@ final class AppState: ObservableObject {
         userLine = ""
         modelLine = ""
         toast = nil
-        level = 0
+        meter.reset()
         // A card may describe a send whose chip just died with the socket.
         clearCard()
         clearNavigationState()

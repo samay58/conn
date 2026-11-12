@@ -13,7 +13,7 @@ struct PanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WaveformView(level: state.level, phase: state.phase)
+            WaveformView(meter: state.meter, phase: state.phase)
                 .padding(.top, 16)
                 .padding(.bottom, 10)
 

@@ -135,7 +135,7 @@ struct IslandView: View {
     private var belowNotch: some View {
         VStack(spacing: 7) {
             VStack(spacing: 6) {
-                IslandWaveform(level: state.level, phase: state.phase)
+                IslandWaveform(meter: state.meter, phase: state.phase)
                 caption
                 if let warning = state.axWarning {
                     Text(warning)

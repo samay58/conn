@@ -3,6 +3,10 @@ import AppKit
 MainActor.assumeIsolated {
     if CommandLine.arguments.contains("--preview") {
         PreviewRunner.run()
+    } else if CommandLine.arguments.contains("--playtest-waveform") {
+        // Headless: renders the voice line from a wav and exits.
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        exit(WaveformPlaytest.run(CommandLine.arguments))
     } else if CommandLine.arguments.contains("--request-screen-recording") {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
