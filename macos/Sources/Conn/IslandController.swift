@@ -7,17 +7,70 @@ final class IslandPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+// Keeps a panel just large enough for a glass surface that animates its own
+// size. Growth applies at once, so the surface is never clipped while it
+// springs open; shrinking waits until the morph has settled, so the surface
+// is never clipped while it springs closed. The panel is transparent, so the
+// extra room in between is invisible.
+@MainActor
+final class GlassPanelFitter {
+    private weak var panel: NSPanel?
+    private var shrinkTimer: Timer?
+
+    init(panel: NSPanel) {
+        self.panel = panel
+    }
+
+    // `target` is recomputed when the deferred shrink fires, so a size that
+    // changed again in the meantime is honored.
+    func fit(_ target: @escaping () -> CGRect, immediately: Bool) {
+        cancel()
+        guard let panel else { return }
+        let goal = target()
+        if immediately || !panel.isVisible {
+            panel.setFrame(goal, display: false)
+            return
+        }
+        let current = panel.frame
+        guard goal != current else { return }
+        let room = current.union(goal)
+        if room != current {
+            panel.setFrame(room, display: true)
+        }
+        guard room != goal else { return }
+        shrinkTimer = Timer.scheduledTimer(
+            withTimeInterval: DesignTokens.glassMorphSpring.settlingDuration,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let panel = self.panel, panel.isVisible else { return }
+                self.shrinkTimer = nil
+                panel.setFrame(target(), display: true)
+            }
+        }
+    }
+
+    func cancel() {
+        shrinkTimer?.invalidate()
+        shrinkTimer = nil
+    }
+}
+
 @MainActor
 final class IslandController: ConnSurface {
     private let panel: IslandPanel
     private let state: AppState
     private let geometry: IslandGeometry
     private let reveal = IslandReveal()
+    private let fitter: GlassPanelFitter
     private var subscriptions = Set<AnyCancellable>()
     private var collapseTimer: Timer?
     private var orderOutTimer: Timer?
     private var isCollapsing = false
     private var chipOpen = false
+    // The style the panel is sized for. Read from the token store's emitted
+    // value, since @Published fires before the stored property changes.
+    private var style = DesignTokens.islandStyle
 
     init(state: AppState, client: DaemonClient, geometry: IslandGeometry) {
         self.state = state
@@ -28,11 +81,19 @@ final class IslandController: ConnSurface {
             client: client,
             topInset: geometry.notchHeight,
             collapsedScale: geometry.collapsedScale(),
-            reveal: reveal))
+            reveal: reveal,
+            notchWidth: geometry.notchRect.width))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
+        // The controller owns the panel frame. Without this the hosting view
+        // would push its content's minimum size onto the window, which grows
+        // from the bottom-left origin and would lift the island off the
+        // screen's top edge.
+        hosting.sizingOptions = []
 
-        let frame = geometry.expandedFrame(chipOpen: false)
+        let frame = style == .classic
+            ? geometry.expandedFrame(chipOpen: false)
+            : geometry.surfaceFrame(for: .zero)
         panel = IslandPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -46,6 +107,7 @@ final class IslandController: ConnSurface {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
+        fitter = GlassPanelFitter(panel: panel)
 
         // The island never takes keyboard focus (enforced by IslandPanel's
         // canBecomeKey / canBecomeMain overrides above). Approvals are
@@ -85,14 +147,49 @@ final class IslandController: ConnSurface {
         reveal.$cardHeight
             .removeDuplicates()
             .sink { [weak self] _ in
-                guard let self, self.panel.isVisible, !self.isCollapsing else { return }
+                guard let self, self.style == .classic,
+                      self.panel.isVisible, !self.isCollapsing else { return }
                 self.summon(chipOpen: self.chipOpen)
             }
+            .store(in: &subscriptions)
+        // Glass styles: the surface reports its laid-out size on every change
+        // (a card, an approval, a longer line) and the panel follows it.
+        reveal.$surfaceSize
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                guard let self, self.style != .classic,
+                      self.panel.isVisible, !self.isCollapsing else { return }
+                self.fitter.fit({ [weak self] in self?.glassFrame ?? .zero }, immediately: false)
+            }
+            .store(in: &subscriptions)
+        // A live style switch (the menu bar's Island Style) re-frames an
+        // open island for the new style at once.
+        DesignTokens.current.$islandStyle
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] next in self?.styleChanged(to: next) }
             .store(in: &subscriptions)
     }
 
     private var cardHeight: CGFloat {
         state.card == nil ? 0 : reveal.cardHeight
+    }
+
+    private var glassFrame: CGRect {
+        geometry.surfaceFrame(for: reveal.surfaceSize)
+    }
+
+    private func styleChanged(to next: IslandStyle) {
+        style = next
+        fitter.cancel()
+        guard panel.isVisible, !isCollapsing else { return }
+        panel.setFrame(targetFrame(chipOpen: chipOpen), display: true)
+    }
+
+    private func targetFrame(chipOpen: Bool) -> CGRect {
+        style == .classic
+            ? geometry.expandedFrame(chipOpen: chipOpen, cardHeight: cardHeight)
+            : glassFrame
     }
 
     private func cardChanged(present: Bool) {
@@ -118,19 +215,25 @@ final class IslandController: ConnSurface {
         orderOutTimer = nil
         let wasHidden = !panel.isVisible
         self.chipOpen = chipOpen
-        let target = geometry.expandedFrame(chipOpen: chipOpen, cardHeight: cardHeight)
         reveal.collapsedScale = geometry.collapsedScale(chipOpen: chipOpen)
-        if !wasHidden && !isCollapsing && panel.frame != target {
-            // Mid-session frame change: the chip row opening or closing. The
-            // shape grows and retreats on the chip-open curve, matching the
-            // row's SwiftUI layout animation inside IslandView.
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = DesignTokens.chipOpenDuration
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrame(target, display: true)
+        if style == .classic {
+            let target = targetFrame(chipOpen: chipOpen)
+            if !wasHidden && !isCollapsing && panel.frame != target {
+                // Mid-session frame change: the chip row opening or closing.
+                // The shape grows and retreats on the chip-open curve,
+                // matching the row's SwiftUI layout animation inside IslandView.
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = DesignTokens.chipOpenDuration
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    panel.animator().setFrame(target, display: true)
+                }
+            } else {
+                panel.setFrame(target, display: false)
             }
         } else {
-            panel.setFrame(target, display: false)
+            // The surface animates its own size; the panel only contains it.
+            fitter.fit({ [weak self] in self?.glassFrame ?? .zero },
+                       immediately: wasHidden || isCollapsing)
         }
         panel.orderFrontRegardless()
         // Replay the breathe-open only when the island arrives from the notch
@@ -149,6 +252,7 @@ final class IslandController: ConnSurface {
         cancelScheduledCollapse()
         guard panel.isVisible, !isCollapsing else { return }
         isCollapsing = true
+        fitter.cancel()
         reveal.collapseToken &+= 1
         // The retreat is staggered (height first, width one lead behind), so
         // the panel stays up until the trailing width spring has settled too.

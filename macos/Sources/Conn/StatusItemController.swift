@@ -81,6 +81,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         binding.submenu = choices
         menu.addItem(binding)
+        let style = NSMenuItem(title: "Island Style", action: nil, keyEquivalent: "")
+        style.tag = 5
+        let styles = NSMenu()
+        for choice in IslandStylePreference.selectable {
+            let styleItem = makeItem(Self.styleTitle(choice), #selector(selectIslandStyle), "")
+            styleItem.representedObject = choice.rawValue
+            styles.addItem(styleItem)
+        }
+        style.submenu = styles
+        menu.addItem(style)
         menu.addItem(makeItem("Open Console", #selector(openConsole), ""))
         menu.addItem(makeItem("Report Last Command", #selector(reportLastCommand), "r"))
         menu.addItem(.separator())
@@ -123,6 +133,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.state = item.representedObject as? String == hotkey.binding.rawValue
                 ? .on : .off
         }
+        for item in menu.item(withTag: 5)?.submenu?.items ?? [] {
+            item.state = item.representedObject as? String == DesignTokens.islandStyle.rawValue
+                ? .on : .off
+        }
+    }
+
+    static func styleTitle(_ style: IslandStyle) -> String {
+        style == .d ? "Character" : "Classic"
     }
 
     @objc private func showPanel() { panelProvider().show() }
@@ -168,6 +186,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let raw = sender.representedObject as? String,
               let binding = HotkeyMonitor.Binding(rawValue: raw) else { return }
         hotkey.setBinding(binding)
+    }
+
+    // Applies live (the island and panel observe the token) and persists.
+    @objc private func selectIslandStyle(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let style = IslandStyle(rawValue: raw),
+              IslandStylePreference.selectable.contains(style) else { return }
+        DesignTokens.current.islandStyle = style
+        IslandStylePreference.save(style)
     }
 
     @objc private func openConsole() {

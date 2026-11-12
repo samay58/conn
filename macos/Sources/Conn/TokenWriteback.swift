@@ -138,10 +138,11 @@ enum TokenWriteback {
             // Just under half the button height: at exactly height/2 (a true capsule)
             // the stroke path renders seam ticks at the ends; 10pt reads identically.
             @Published var overrideCornerRadius: CGFloat = \(fmtCG(v.overrideCornerRadius))
-            // island style prototypes (directions A, B, C in IslandGlassStyles.swift).
-            // Production stays classic; the preview picker flips this live. Glass is
-            // static per state: only transform and opacity animate, never blur or
-            // glass parameters.
+            // island style (IslandGlassStyles.swift). D, Character, is the live
+            // default; classic stays selectable from the menu bar and the preview
+            // picker, and A, B and C remain preview-only prototypes. Glass is static
+            // per state: only transform and opacity animate, never blur or glass
+            // parameters.
             @Published var islandStyle = IslandStyle.\(v.islandStyle.rawValue)
             @Published var glassMorphSpring = Spring(response: \(fmt(v.glassMorphSpring.response)), dampingRatio: \(fmt(v.glassMorphSpring.dampingRatio)))
             @Published var glassEnterDuration = \(fmt(v.glassEnterDuration))
@@ -185,6 +186,61 @@ enum TokenWriteback {
             @Published var iconRimLilacOpacity = \(fmt(v.iconRimLilacOpacity))
             // style d: the done wink, one eye closing on an ease-out.
             @Published var characterWinkDuration = \(fmt(v.characterWinkDuration))
+            // style d (Character), the live default: the icon's pill hanging from
+            // the notch. Geometry is fixed; the morph between compact and card
+            // widths keeps one corner radius so no path is re-rounded mid-spring.
+            let characterExpandedWidth: CGFloat = 360
+            let characterCornerRadius: CGFloat = 22
+            let characterPaddingH: CGFloat = 18
+            let characterPaddingTop: CGFloat = 8
+            let characterPaddingBottom: CGFloat = 14
+            let characterSectionGap: CGFloat = 12
+            let characterCaptionGap: CGFloat = 7
+            let characterCaptionMaxWidth: CGFloat = 288
+            let characterFaceGap: CGFloat = 12
+            // the eyes: the icon's 64x112 eye and its wide set, at island scale
+            // (its white glint is dropped: at this size it vanishes into the lime).
+            let characterEyeWidth: CGFloat = 5.5
+            let characterEyeHeight: CGFloat = 10
+            let characterEyeGap: CGFloat = 8
+            let characterWinkStroke: CGFloat = 2.25
+            let characterFocusedEyeScale: CGFloat = 0.6
+            let characterVoiceScale: CGFloat = 0.8
+            // the body: a glass rim around a black core, a hairline sheen that runs
+            // to a lilac lower edge, and a soft shadow drawn only outside the shape.
+            let characterRimWidth: CGFloat = 1.5
+            let characterSheenWidth: CGFloat = 0.75
+            let characterTopFade: CGFloat = 12
+            let characterShadowRadius: CGFloat = 14
+            let characterShadowY: CGFloat = 5
+            let characterPanelMargin: CGFloat = 20
+            let characterPanelBottomMargin: CGFloat = 28
+            let characterFloatingTopGap: CGFloat = 10
+            let characterFloatingCollapsedScale: CGFloat = 0.96
+            let characterCapsuleHeight: CGFloat = 22
+            let characterCapsulePaddingH: CGFloat = 10
+            let characterOverrideHeight: CGFloat = 24
+            let characterCloseSize: CGFloat = 18
+            let characterCloseHitSize: CGFloat = 28
+            @Published var characterTextOpacity = \(fmt(v.characterTextOpacity))
+            @Published var characterTextSecondaryOpacity = \(fmt(v.characterTextSecondaryOpacity))
+            @Published var characterWellOpacity = \(fmt(v.characterWellOpacity))
+            @Published var characterHairlineOpacity = \(fmt(v.characterHairlineOpacity))
+            @Published var characterGlassTintOpacity = \(fmt(v.characterGlassTintOpacity))
+            @Published var characterBodyBottomRGB = \(fmtColor(v.characterBodyBottomRGB))
+            @Published var characterSheenSideOpacity = \(fmt(v.characterSheenSideOpacity))
+            @Published var characterSheenTopOpacity = \(fmt(v.characterSheenTopOpacity))
+            @Published var characterSheenLilacOpacity = \(fmt(v.characterSheenLilacOpacity))
+            @Published var characterShadowOpacity = \(fmt(v.characterShadowOpacity))
+            @Published var characterRestingVoiceOpacity = \(fmt(v.characterRestingVoiceOpacity))
+            @Published var characterFocusedEyeOpacity = \(fmt(v.characterFocusedEyeOpacity))
+            @Published var characterLowEyeOpacity = \(fmt(v.characterLowEyeOpacity))
+            @Published var characterPressScale = \(fmt(v.characterPressScale))
+            @Published var characterPressDuration = \(fmt(v.characterPressDuration))
+            let characterWinkWidth: CGFloat = 7.5
+            let characterWinkHeight: CGFloat = 3.5
+            let characterWinkRestScale: CGFloat = 0.6
+            @Published var characterCoreBottomOpacity = \(fmt(v.characterCoreBottomOpacity))
         }
 
         // The static names every view reads. Forwarding, not storage: the values
@@ -289,6 +345,55 @@ enum TokenWriteback {
             static var iconRimMidOpacity: Double { current.iconRimMidOpacity }
             static var iconRimLilacOpacity: Double { current.iconRimLilacOpacity }
             static var characterWinkDuration: Double { current.characterWinkDuration }
+            // style d (Character)
+            static var characterExpandedWidth: CGFloat { current.characterExpandedWidth }
+            static var characterCornerRadius: CGFloat { current.characterCornerRadius }
+            static var characterPaddingH: CGFloat { current.characterPaddingH }
+            static var characterPaddingTop: CGFloat { current.characterPaddingTop }
+            static var characterPaddingBottom: CGFloat { current.characterPaddingBottom }
+            static var characterSectionGap: CGFloat { current.characterSectionGap }
+            static var characterCaptionGap: CGFloat { current.characterCaptionGap }
+            static var characterCaptionMaxWidth: CGFloat { current.characterCaptionMaxWidth }
+            static var characterFaceGap: CGFloat { current.characterFaceGap }
+            static var characterEyeWidth: CGFloat { current.characterEyeWidth }
+            static var characterEyeHeight: CGFloat { current.characterEyeHeight }
+            static var characterEyeGap: CGFloat { current.characterEyeGap }
+            static var characterWinkStroke: CGFloat { current.characterWinkStroke }
+            static var characterFocusedEyeScale: CGFloat { current.characterFocusedEyeScale }
+            static var characterVoiceScale: CGFloat { current.characterVoiceScale }
+            static var characterRimWidth: CGFloat { current.characterRimWidth }
+            static var characterSheenWidth: CGFloat { current.characterSheenWidth }
+            static var characterTopFade: CGFloat { current.characterTopFade }
+            static var characterShadowRadius: CGFloat { current.characterShadowRadius }
+            static var characterShadowY: CGFloat { current.characterShadowY }
+            static var characterPanelMargin: CGFloat { current.characterPanelMargin }
+            static var characterPanelBottomMargin: CGFloat { current.characterPanelBottomMargin }
+            static var characterFloatingTopGap: CGFloat { current.characterFloatingTopGap }
+            static var characterFloatingCollapsedScale: CGFloat { current.characterFloatingCollapsedScale }
+            static var characterCapsuleHeight: CGFloat { current.characterCapsuleHeight }
+            static var characterCapsulePaddingH: CGFloat { current.characterCapsulePaddingH }
+            static var characterOverrideHeight: CGFloat { current.characterOverrideHeight }
+            static var characterCloseSize: CGFloat { current.characterCloseSize }
+            static var characterCloseHitSize: CGFloat { current.characterCloseHitSize }
+            static var characterTextOpacity: Double { current.characterTextOpacity }
+            static var characterTextSecondaryOpacity: Double { current.characterTextSecondaryOpacity }
+            static var characterWellOpacity: Double { current.characterWellOpacity }
+            static var characterHairlineOpacity: Double { current.characterHairlineOpacity }
+            static var characterGlassTintOpacity: Double { current.characterGlassTintOpacity }
+            static var characterBodyBottom: Color { current.characterBodyBottomRGB.color }
+            static var characterSheenSideOpacity: Double { current.characterSheenSideOpacity }
+            static var characterSheenTopOpacity: Double { current.characterSheenTopOpacity }
+            static var characterSheenLilacOpacity: Double { current.characterSheenLilacOpacity }
+            static var characterShadowOpacity: Double { current.characterShadowOpacity }
+            static var characterRestingVoiceOpacity: Double { current.characterRestingVoiceOpacity }
+            static var characterFocusedEyeOpacity: Double { current.characterFocusedEyeOpacity }
+            static var characterLowEyeOpacity: Double { current.characterLowEyeOpacity }
+            static var characterPressScale: Double { current.characterPressScale }
+            static var characterPressDuration: Double { current.characterPressDuration }
+            static var characterWinkWidth: CGFloat { current.characterWinkWidth }
+            static var characterWinkHeight: CGFloat { current.characterWinkHeight }
+            static var characterWinkRestScale: CGFloat { current.characterWinkRestScale }
+            static var characterCoreBottomOpacity: Double { current.characterCoreBottomOpacity }
         }
 
         """

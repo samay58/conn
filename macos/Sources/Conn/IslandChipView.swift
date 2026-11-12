@@ -56,14 +56,14 @@ struct IslandChipView: View {
                     GlassButtonLabel(title: "Deny", role: .secondary, ink: style.ink,
                                      settled: decision == .denied)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IslandPressStyle())
                 Button {
                     decide(.approved)
                 } label: {
                     GlassButtonLabel(title: "Approve", role: .primary, ink: style.ink,
                                      settled: decision == .approved)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IslandPressStyle())
             }
         }
     }

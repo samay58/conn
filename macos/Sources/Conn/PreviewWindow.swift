@@ -9,7 +9,8 @@ import SwiftUI
 // sample between classic and the prototype directions (IslandGlassStyles
 // .swift), and Morph keeps one island on stage so stepping through states
 // shows the transitions between them. `Conn --preview --shoot <dir>` writes
-// <style>-<state>.png for every style and state headlessly.
+// <style>-<state>.png for every style and state headlessly, plus
+// floating-<state>.png: the non-notch fallback panel's Character pill.
 
 @MainActor
 enum PreviewRunner {
@@ -69,13 +70,22 @@ enum PreviewRunner {
 
         let samples = PreviewSample.makeAll()
         let restore = DesignTokens.current.islandStyle
-        defer { DesignTokens.current.islandStyle = restore }
+        // A still frame cannot wait out the capsule's show delay, so the
+        // shooter renders the capsule as it looks once the delay has passed.
+        let restoreDelay = DesignTokens.current.toolCapsuleShowDelay
+        DesignTokens.current.toolCapsuleShowDelay = 0
+        defer {
+            DesignTokens.current.islandStyle = restore
+            DesignTokens.current.toolCapsuleShowDelay = restoreDelay
+        }
         var written = 0
-        for style in IslandStyle.allCases {
-            DesignTokens.current.islandStyle = style
+        // nil is the floating pass: the fallback panel's pill, style D.
+        let passes: [IslandStyle?] = IslandStyle.allCases.map { $0 } + [nil]
+        for pass in passes {
+            DesignTokens.current.islandStyle = pass ?? .d
             for sample in samples {
                 sample.state.level = sample.animatedLevel(from: 0.55)
-                let stage = PreviewStage(sample: sample, crosshair: false)
+                let stage = PreviewStage(sample: sample, crosshair: false, floating: pass == nil)
 
                 let size = PreviewStage.size
                 let hosting = NSHostingView(rootView: stage)
@@ -93,7 +103,7 @@ enum PreviewRunner {
                 window.contentView = nil
                 window.orderOut(nil)
 
-                let fileURL = dirURL.appendingPathComponent("\(style.rawValue)-\(sample.id).png")
+                let fileURL = dirURL.appendingPathComponent("\(pass?.rawValue ?? "floating")-\(sample.id).png")
                 guard let image,
                       let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]),
                       (try? png.write(to: fileURL)) != nil else {
@@ -104,7 +114,7 @@ enum PreviewRunner {
                 print("wrote \(fileURL.path)")
             }
         }
-        print("\(written)/\(samples.count * IslandStyle.allCases.count) states written")
+        print("\(written)/\(samples.count * passes.count) states written")
     }
 }
 
@@ -351,6 +361,8 @@ final class PreviewSample: Identifiable {
 struct PreviewStage: View {
     let sample: PreviewSample
     var crosshair: Bool
+    // The non-notch fallback: the pill floats under the menu bar.
+    var floating = false
 
     static let size = NSSize(width: 560, height: 360)
     private static let notchInset: CGFloat = 30
@@ -358,13 +370,22 @@ struct PreviewStage: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            PreviewDesktop(notchWidth: Self.notchWidth, notchHeight: Self.notchInset)
+            PreviewDesktop(notchWidth: floating ? 0 : Self.notchWidth, notchHeight: Self.notchInset)
             if sample.state.phase == "idle" {
                 Text("Idle means no Conn window.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.9))
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 18)
+            } else if floating {
+                IslandView(
+                    state: sample.state,
+                    client: sample.client,
+                    topInset: 0,
+                    reveal: sample.reveal,
+                    notchWidth: Self.notchWidth,
+                    floating: true)
+                    .padding(.top, Self.notchInset + DesignTokens.characterFloatingTopGap)
             } else if DesignTokens.islandStyle == .classic {
                 island
                     .frame(width: Self.notchWidth + 2 * DesignTokens.islandGrowWidth)

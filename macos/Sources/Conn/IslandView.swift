@@ -19,6 +19,10 @@ final class IslandReveal: ObservableObject {
     // The card tile's measured height, written by IslandView and read by
     // IslandController to grow the panel below the island. 0 with no card.
     @Published var cardHeight: CGFloat = 0
+    // A glass style's laid-out size (IslandGlassSurface measures it). The
+    // controllers size their panel to it plus shadow room; zero until the
+    // first layout.
+    @Published var surfaceSize: CGSize = .zero
 }
 
 @MainActor
@@ -28,10 +32,14 @@ struct IslandView: View {
     var topInset: CGFloat = 32
     var collapsedScale: (x: CGFloat, y: CGFloat) = (0.6, 0.35)
     @ObservedObject var reveal: IslandReveal
-    // Prototype directions (IslandGlassStyles.swift). Production passes
-    // neither, reads the token, and the token defaults to classic.
+    // The style comes from the token (default D, set live by the menu bar's
+    // Island Style); styleOverride pins one for tests. notchWidth sizes the
+    // glass styles around the real notch. floating is the non-notch panel.
     var notchWidth: CGFloat = 0
     var styleOverride: IslandStyle? = nil
+    var floating = false
+    // Observed so a live style switch re-renders the island at once.
+    @ObservedObject private var tokens = DesignTokens.current
 
     @State private var shakeOffset: CGFloat = 0
     @State private var shapeScaleX: CGFloat = 1
@@ -51,14 +59,14 @@ struct IslandView: View {
     }
 
     var body: some View {
-        let style = styleOverride ?? DesignTokens.islandStyle
-        if style == .classic {
+        let style = styleOverride ?? tokens.islandStyle
+        if style == .classic && !floating {
             classicBody
         } else {
             IslandGlassSurface(
                 style: style, state: state, client: client,
                 topInset: topInset, notchWidth: notchWidth,
-                reveal: reveal)
+                reveal: reveal, floating: floating)
         }
     }
 
@@ -170,7 +178,8 @@ struct IslandView: View {
                       let label = runningToolLabel {
                 // A read that answers inside the delay (most connector reads
                 // take 0.1 to 0.3 s) never flashes a capsule in and out.
-                if capsuleCallID == runningCallID {
+                // A zero delay shows it at once (the preview shooter's stills).
+                if capsuleCallID == runningCallID || DesignTokens.toolCapsuleShowDelay <= 0 {
                     toolCapsule(label)
                 } else if state.modelLine.isEmpty {
                     ThinkingEllipsis(phase: state.phase)

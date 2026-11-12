@@ -56,6 +56,25 @@ struct IslandGeometry {
         return frame
     }
 
+    // The panel for a glass style (D and the prototypes): the surface's
+    // measured size plus room for its shadow, centered on the notch and flush
+    // to the screen's top edge. The surface sizes itself inside; the panel
+    // only has to contain it. A zero size (nothing laid out yet) gets the
+    // widest card frame so the first layout is never clipped.
+    func surfaceFrame(for size: CGSize) -> CGRect {
+        let surface = size.width > 0 && size.height > 0 ? size : Self.surfaceEstimate(notchHeight: notchRect.height)
+        let width = surface.width + 2 * DesignTokens.characterPanelMargin
+        let height = surface.height + DesignTokens.characterPanelBottomMargin
+        return CGRect(x: notchRect.midX - width / 2,
+                      y: screenFrame.maxY - height,
+                      width: width, height: height)
+    }
+
+    static func surfaceEstimate(notchHeight: CGFloat) -> CGSize {
+        CGSize(width: DesignTokens.characterExpandedWidth,
+               height: notchHeight + DesignTokens.islandContentHeight + DesignTokens.chipRowHeight)
+    }
+
     // Scale fractions that map the expanded island back onto the bare notch
     // rect. The summon morph grows the shape from these to 1; collapse returns
     // to them, so the island visibly emerges from and retreats into the notch.

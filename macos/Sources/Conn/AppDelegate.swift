@@ -14,6 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let bridgeToken = BridgeToken.resolve()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The menu bar's Island Style choice outlives a relaunch; without one
+        // the compiled default (Character) stands.
+        if let style = IslandStylePreference.load() {
+            DesignTokens.current.islandStyle = style
+        }
         client = DaemonClient(state: state, bridgeToken: bridgeToken)
         hotkey = HotkeyMonitor()
         statusItem = StatusItemController(
