@@ -133,7 +133,7 @@ def load_mcp_fixtures() -> dict:
 
 def _fixture_tool_cfg(spec: dict) -> McpToolCfg:
     keys = ("kind", "alias", "description", "preview", "param_descriptions",
-            "timeout_s", "done_message")
+            "timeout_s", "done_message", "card")
     return McpToolCfg(**{k: spec[k] for k in keys if k in spec})
 
 

@@ -172,7 +172,7 @@ class McpServerCfg(BaseModel):
 
 class McpCfg(BaseModel):
     enabled: bool = True
-    max_tools: int = Field(default=14, ge=0, le=24)
+    max_tools: int = Field(default=18, ge=0, le=24)
     connect_timeout_s: float = Field(default=3.0, gt=0, le=15)
     call_timeout_s: float = Field(default=20.0, gt=0, le=60)
     servers: list[McpServerCfg] = Field(default_factory=list)

@@ -73,6 +73,9 @@ more.
 
 
 _PHOENIX_WRITES = ("phoenix_capture", "phoenix_remind", "phoenix_strike")
+# Tools whose results the island shows on a card (config `card = ...`).
+_CARD_TOOLS = {"phoenix_people", "phoenix_today", "phoenix_calendar", "phoenix_thread",
+               "phoenix_draft_reply"}
 
 
 def connector_section(tool_names) -> str:
@@ -103,6 +106,16 @@ def connector_section(tool_names) -> str:
         lines.append("For what was said or decided in a meeting, search both Granola and Wispr.")
     elif meeting_sources:
         lines.append(f"For what was said or decided in a meeting, search {meeting_sources[0]}.")
+    if names & _CARD_TOOLS:
+        lines.append("Lists, threads and drafts appear on his screen. Say one short sentence with"
+                     " the count or the first item; never read a list or a draft aloud.")
+    if "phoenix_draft_reply" in names:
+        lines.append("To reply to someone, call phoenix_draft_reply with his point as intent."
+                     " For an edit like shorter or warmer, call it again with the edit and the"
+                     " current draft as intent.")
+    if "phoenix_send_text" in names:
+        lines.append("Call phoenix_send_text only when he says to send, with the exact text of"
+                     " the current draft. He approves it on screen.")
     if any(w in names for w in _PHOENIX_WRITES):
         lines.append("Never capture, remind or strike unless he asked for exactly that.")
         lines.append("After a write, say only its safe_user_message.")
@@ -126,6 +139,6 @@ def instructions_for(tools) -> str:
 
 # Every rule, as if every connector were present. Tests and docs read this.
 INSTRUCTIONS = instructions_for([
-    "phoenix_people", "phoenix_capture", "superhuman_search_threads",
-    "granola_search_meetings", "wispr_search_meetings",
+    "phoenix_people", "phoenix_capture", "phoenix_draft_reply", "phoenix_send_text",
+    "superhuman_search_threads", "granola_search_meetings", "wispr_search_meetings",
 ])

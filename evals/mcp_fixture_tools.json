@@ -13,7 +13,8 @@
             "type": "object",
             "properties": {}
           },
-          "canned_result": "Must do: 1. Email the landlord (open). 2. Dentist appointment (open). 3. Send Acme invoice (done). Reminders due today: none."
+          "canned_result": "Must do: 1. Email the landlord (open). 2. Dentist appointment (open). 3. Send Acme invoice (done). Reminders due today: none.",
+          "card": "today"
         },
         "calendar": {
           "kind": "read",
@@ -35,7 +36,8 @@
           "param_descriptions": {
             "start": "first day, YYYY-MM-DD, default today",
             "end": "last day, YYYY-MM-DD, at most 13 days after start"
-          }
+          },
+          "card": "calendar"
         },
         "people": {
           "kind": "read",
@@ -46,7 +48,8 @@
             "type": "object",
             "properties": {}
           },
-          "canned_result": "Dana (email, 2 days): asks about the offsite budget. Priya (text, 5 hours): wants dinner plans. Acme recruiter (email, 1 day): asks for availability."
+          "canned_result": "Dana (email, 2 days): asks about the offsite budget. Priya (text, 5 hours): wants dinner plans. Acme recruiter (email, 1 day): asks for availability.",
+          "card": "people"
         },
         "thread": {
           "kind": "read",
@@ -71,7 +74,8 @@
           "param_descriptions": {
             "person": "the person's name as Samay said it",
             "channel": "text or whatsapp; default text"
-          }
+          },
+          "card": "thread"
         },
         "lookup": {
           "kind": "read",
@@ -174,6 +178,66 @@
           "timeout_s": 40.0,
           "param_descriptions": {
             "phrase": "a few words from the line Samay finished"
+          }
+        },
+        "draft_reply": {
+          "kind": "read",
+          "alias": "phoenix_draft_reply",
+          "description": "Draft a reply to one person in Samay's voice from the live thread. Sends nothing; the draft shows on screen.",
+          "preview": "Drafting for {person}",
+          "card": "draft",
+          "timeout_s": 30.0,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "person": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string"
+              },
+              "intent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "person"
+            ]
+          },
+          "canned_result": "{\"person\": \"Priya\", \"channel\": \"text\", \"draft\": \"Friday at 7 works. See you then.\"}",
+          "param_descriptions": {
+            "person": "the person's name as Samay said it",
+            "channel": "text or whatsapp; default text",
+            "intent": "what the reply should do, or the edit and the current draft"
+          }
+        },
+        "send_text": {
+          "kind": "write",
+          "alias": "phoenix_send_text",
+          "description": "Send one iMessage to a person. Only after Samay says to send a draft.",
+          "preview": "Text {person}: {text}",
+          "card": "send",
+          "done_message": "Sent.",
+          "timeout_s": 40.0,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "person": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "person",
+              "text"
+            ]
+          },
+          "canned_result": "",
+          "param_descriptions": {
+            "person": "the person's name as Samay said it",
+            "text": "the exact text of the current draft"
           }
         }
       }

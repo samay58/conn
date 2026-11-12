@@ -12,19 +12,20 @@ from conn.tools.risk import RiskLevel
 EXPECTED_EXPORTS = {
     "phoenix_today", "phoenix_calendar", "phoenix_people", "phoenix_thread",
     "phoenix_lookup", "phoenix_capture", "phoenix_remind", "phoenix_strike",
+    "phoenix_draft_reply", "phoenix_send_text",
     "granola_search_meetings", "granola_search_transcripts",
     "wispr_search_meetings", "wispr_get_meeting",
     "superhuman_search_threads", "superhuman_get_thread",
 }
-WRITES = {"phoenix_capture", "phoenix_remind", "phoenix_strike"}
+WRITES = {"phoenix_capture", "phoenix_remind", "phoenix_strike", "phoenix_send_text"}
 CORPUS = Path(__file__).resolve().parents[1] / "evals" / "intent_corpus.json"
 
 
-def test_fixtures_export_the_fourteen_tools():
+def test_fixtures_export_the_sixteen_tools():
     registry = intent_eval.eval_registry()
     assert set(intent_eval.fixture_exported_names()) == EXPECTED_EXPORTS
     assert EXPECTED_EXPORTS <= set(registry)
-    assert len(intent_eval.fixture_exported_names()) == 14
+    assert len(intent_eval.fixture_exported_names()) == 16
 
 
 def test_writes_confirm_and_are_never_canned_reads():
@@ -56,8 +57,7 @@ def test_corpus_tool_names_exist_among_exported_tools():
 
 def test_refusal_items_allow_no_tool_and_name_no_write_tool():
     items = {i["utterance"]: i for i in json.loads(CORPUS.read_text())["items"]}
-    for utterance in ("Move my 3pm to tomorrow.", "Send Dana a text saying I'm running late.",
-                      "Remind me to call Dana."):
+    for utterance in ("Move my 3pm to tomorrow.", "Remind me to call Dana."):
         expect = items[utterance]["expect"]
         assert expect["allow_no_tool"] is True
         assert not set(expect.get("tool_any", [])) & WRITES
@@ -70,3 +70,9 @@ def test_eval_context_pins_a_fixed_local_time():
 def test_fixtures_hold_only_neutral_sample_names():
     text = (Path(__file__).resolve().parents[1] / "evals" / "mcp_fixture_tools.json").read_text()
     assert "@" not in text
+
+
+def test_a_dictated_text_drafts_or_sends_behind_approval():
+    items = {i["utterance"]: i for i in json.loads(CORPUS.read_text())["items"]}
+    expect = items["Send Dana a text saying I'm running late."]["expect"]
+    assert set(expect["tool_any"]) == {"phoenix_send_text", "phoenix_draft_reply"}

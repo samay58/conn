@@ -3118,8 +3118,42 @@
     {
       "utterance": "Send Dana a text saying I'm running late.",
       "expect": {
-        "allow_no_tool": true,
-        "speech_max_sentences": 2
+        "tool_any": [
+          "phoenix_send_text",
+          "phoenix_draft_reply"
+        ],
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Reply to Priya.",
+      "expect": {
+        "tool_any": [
+          "phoenix_draft_reply"
+        ],
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Draft a WhatsApp to Sam saying I'll be there at eight.",
+      "expect": {
+        "tool_any": [
+          "phoenix_draft_reply"
+        ],
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
+    },
+    {
+      "utterance": "Write back to Dana that Friday works.",
+      "expect": {
+        "tool_any": [
+          "phoenix_draft_reply",
+          "phoenix_send_text"
+        ],
+        "speech_max_sentences": 1
       },
       "source": "authored"
     }
