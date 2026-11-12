@@ -153,6 +153,7 @@ class SessionStateMachine:
     _predispatch_failures: int = 0  # compile failures do not consume the replan budget
     _grounding_reads_used: int = 0
     _failed_shapes: set[str] = field(default_factory=set)
+    _turn_unheard: bool = False  # this turn's window never reached speech level
     _execution_seq: int = 0
     _transition_seq: int = 0       # bumped on every real phase transition
     _watchdog_armed_seq: int | None = None
@@ -319,6 +320,10 @@ class SessionStateMachine:
             self.phase = Phase.IDLE
             return [AckTurn(accepted=False, reason="silent_tap"),
                     CloseMic(), ClearInput()]
+        # A window that never reached speech level is accepted (a quiet
+        # speaker may still be understood) but may not act: see
+        # _tool_proposed.
+        self._turn_unheard = ev.voiced is False
         self.phase = Phase.THINKING
         self._begin_response()
         return [AckTurn(accepted=True), CloseMic(), CommitInput(),
@@ -338,6 +343,23 @@ class SessionStateMachine:
         if call.call_id in self.ledger:
             return []
         self._batch_had_calls = True
+        if self._turn_unheard and call.name != "wait_for_user":
+            # Nothing in this window reached speech level, so whatever the
+            # model proposes was not asked for. It may only stand by.
+            output = json.dumps({
+                "ok": False,
+                "error": (
+                    "nothing_heard: the user's audio held no speech; call "
+                    "wait_for_user and ask them to say it again"
+                ),
+            })
+            self.ledger[call.call_id] = LedgerEntry(
+                call, CallStatus.BLOCKED, output
+            )
+            cmds = [SendToolResult(call.call_id, False, output)]
+            cmds.extend(self._maybe_continue())
+            self._refresh_phase()
+            return cmds
         if call.name in self.grounding_reads and self._mutation_chain_closed:
             output = json.dumps({
                 "ok": False,
@@ -621,6 +643,7 @@ class SessionStateMachine:
         self._predispatch_failures = 0
         self._grounding_reads_used = 0
         self._failed_shapes.clear()
+        self._turn_unheard = False
         self.phase = Phase.LISTENING
 
     def _reset_turn(self) -> None:
@@ -630,6 +653,7 @@ class SessionStateMachine:
         self._mutation_reserved = False
         self._ptt_down_ms = None
         self._grounding_reads_used = 0
+        self._turn_unheard = False
 
     def _start_execution(self, call: ToolCall) -> ToolCall:
         self._execution_seq += 1

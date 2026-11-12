@@ -277,3 +277,56 @@ class TestSoakSessions:
             events = asyncio.run(run())
             errors = [e for e in events if e["kind"] == "upstream_error"]
             assert errors == [], f"session {session}: {errors[:2]}"
+
+
+class TestUnheardTurnCannotAct:
+    """A press long enough to pass the tap rule whose window never reached
+    speech level is accepted, but nothing in it was heard, so no tool but
+    wait_for_user may run (Nov 12 walk: a 0.5 s near-silent press opened
+    Safari)."""
+
+    @staticmethod
+    def _propose(m, name, call_id="c1"):
+        from conn.events import Gate, ToolCall, ToolProposed
+        return m.handle(ToolProposed(call=ToolCall(
+            call_id=call_id, name=name, arguments={"app": "Safari"},
+            gate=Gate.AUTO, preview="Open Safari")))
+
+    def test_unheard_window_blocks_an_action(self):
+        from conn.events import ExecTool, SendToolResult
+        m = machine()
+        m.handle(PttDown(ts_ms=1000))
+        m.handle(PttUp(ts_ms=1517, voiced=False))
+        cmds = self._propose(m, "app_open")
+        assert not any(isinstance(c, ExecTool) for c in cmds)
+        results = [c for c in cmds if isinstance(c, SendToolResult)]
+        assert results and not results[0].ok
+        assert "nothing_heard" in results[0].output
+
+    def test_unheard_window_still_allows_wait_for_user(self):
+        from conn.events import ExecTool
+        m = machine()
+        m.handle(PttDown(ts_ms=1000))
+        m.handle(PttUp(ts_ms=1517, voiced=False))
+        cmds = self._propose(m, "wait_for_user")
+        assert any(isinstance(c, ExecTool) for c in cmds)
+
+    def test_voiced_and_unknown_windows_act_normally(self):
+        from conn.events import ExecTool
+        for voiced in (True, None):
+            m = machine()
+            m.handle(PttDown(ts_ms=1000))
+            m.handle(PttUp(ts_ms=2500, voiced=voiced))
+            cmds = self._propose(m, "app_open")
+            assert any(isinstance(c, ExecTool) for c in cmds)
+
+    def test_next_turn_clears_the_unheard_mark(self):
+        from conn.events import ExecTool, ResponseDone
+        m = machine()
+        m.handle(PttDown(ts_ms=1000))
+        m.handle(PttUp(ts_ms=1517, voiced=False))
+        m.handle(ResponseDone())  # the model only spoke; the turn settles
+        m.handle(PttDown(ts_ms=5000))
+        m.handle(PttUp(ts_ms=6500, voiced=True))
+        cmds = self._propose(m, "app_open", call_id="c2")
+        assert any(isinstance(c, ExecTool) for c in cmds)
