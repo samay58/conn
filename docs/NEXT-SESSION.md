@@ -1,6 +1,6 @@
 # Next session: physical v1 acceptance
 
-Updated 2026-11-11. Read `docs/STATE-OF-PLAY.md` and
+Updated 2026-11-12. Read `docs/STATE-OF-PLAY.md` and
 `docs/NORTH-STAR.md` first.
 
 ## WHERE WE LEFT OFF
@@ -112,6 +112,16 @@ the duplicate text (Phoenix reads 55 to 65 percent smaller), and the
 connector prompt section appears only when connector tools are exported.
 One candidate for the eval run: skip the spoken preamble before Phoenix
 reads, which now answer in 0.1 to 0.3 seconds. Measure it before keeping it.
+
+## Added on 2026-11-12 (second half), live checks pending
+
+- Cost per command: every turn now leaves a `turn_cost` trace event (lengths and dollars, never the words), the receipt has `per_command` and `by_category`, and `--cost-report [trace | --days N]` prints them. The first trial cost $0.031 per command; spoken audio was 37.5 percent of it.
+- Cards: connector tools name a card template in config. Lists (who is waiting, today, calendar, a thread) and reply drafts show on a card under the island; Conn speaks one sentence. A send shows its whole text on the card while the chip waits for Approve, then settles as sent, sent-not-confirmed or not sent from the real result.
+- Replies: `phoenix_draft_reply` drafts in Samay's voice from the live thread; `phoenix_send_text` sends through Messages or WhatsApp after Approve and reads the message back from the app's own store. WhatsApp is pressed only when the open chat is that person's and its message box holds exactly the approved text; the press goes through accessibility, never a keystroke. A refusal before sending says "not sent".
+- Native: Obsidian note opens and Safari page loads now have witnesses; `computer_zoom` (no approval) and `computer_close_tabs` (approval, never the last tab) are new.
+- Island: style D (the icon's character) is being refined to become the default; classic stays selectable. New app icon.
+
+Live checks still open: Safari address read on a real page, Safari tab close buttons, zoom menu names in Safari, Obsidian and Notes, the WhatsApp send end to end, and the D island on a real desktop.
 
 ## Human gates still open
 
