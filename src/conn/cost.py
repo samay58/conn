@@ -15,10 +15,14 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .config import BudgetCfg, PricingCfg
 from .trace import write_receipt
 from .events import ModelObservation, VisualObservation
+
+if TYPE_CHECKING:
+    from .turn_ledger import TurnLedger
 
 DEFAULT_FIRST_TURN_ESTIMATE_USD = 0.03
 
@@ -32,6 +36,59 @@ class TurnCost:
     cached_in: int = 0
     image_in: int = 0
     usd: float = 0.0
+
+
+# TurnCost field -> report/trace category name. One vocabulary for the receipt,
+# the turn_cost trace event and --cost-report.
+CATEGORY_FIELDS = {
+    "text_in_uncached": "text_in",
+    "cached_in": "cached_in",
+    "audio_in_uncached": "audio_in",
+    "audio_out": "audio_out",
+    "text_out": "text_out",
+    "image_in": "image_in",
+}
+
+
+def price_usage(usage: dict, pricing: PricingCfg) -> TurnCost:
+    """Pure usage -> TurnCost. Cached input bills at the cached rate and the
+    cached split reduces the billable text/audio/image input counts. Shared by
+    the live meter and by --cost-report recomputing old traces, so both price
+    a response_done row identically."""
+    in_details = usage.get("input_token_details", {})
+    out_details = usage.get("output_token_details", {})
+    cached = in_details.get("cached_tokens", 0)
+    cached_split = in_details.get("cached_tokens_details", {})
+    cached_text = cached_split.get("text_tokens", cached)
+    cached_audio = cached_split.get("audio_tokens", 0)
+    cached_image = cached_split.get("image_tokens", 0)
+
+    turn = TurnCost(
+        text_in=max(in_details.get("text_tokens", 0) - cached_text, 0),
+        audio_in=max(in_details.get("audio_tokens", 0) - cached_audio, 0),
+        cached_in=cached,
+        image_in=max(in_details.get("image_tokens", 0) - cached_image, 0),
+        text_out=out_details.get("text_tokens", 0),
+        audio_out=out_details.get("audio_tokens", 0),
+    )
+    turn.usd = sum(category_usd(turn, pricing).values())
+    return turn
+
+
+def category_usd(turn: TurnCost, pricing: PricingCfg) -> dict[str, float]:
+    """Dollars per report category for one (possibly aggregated) TurnCost."""
+    rates = {
+        "text_in_uncached": pricing.text_in,
+        "cached_in": pricing.cached_in,
+        "audio_in_uncached": pricing.audio_in,
+        "audio_out": pricing.audio_out,
+        "text_out": pricing.text_out,
+        "image_in": pricing.image_in,
+    }
+    return {
+        name: getattr(turn, CATEGORY_FIELDS[name]) * rate / 1_000_000
+        for name, rate in rates.items()
+    }
 
 
 @dataclass
@@ -52,6 +109,8 @@ class CostMeter:
     observation_estimated_tokens: int = 0
     visual_observation_count: int = 0
     visual_observation_bytes: int = 0
+    # Per-command accounting, attached by the app; the meter never feeds it.
+    ledger: TurnLedger | None = None
 
     def count_action_outcome(self, outcome: str) -> None:
         self.action_outcomes[outcome] = self.action_outcomes.get(outcome, 0) + 1
@@ -66,34 +125,7 @@ class CostMeter:
         self.visual_observation_bytes += observation.image_bytes
 
     def ingest(self, usage: dict) -> TurnCost:
-        in_details = usage.get("input_token_details", {})
-        out_details = usage.get("output_token_details", {})
-        cached = in_details.get("cached_tokens", 0)
-        cached_split = in_details.get("cached_tokens_details", {})
-        cached_text = cached_split.get("text_tokens", cached)
-        cached_audio = cached_split.get("audio_tokens", 0)
-        cached_image = cached_split.get("image_tokens", 0)
-
-        text_in = max(in_details.get("text_tokens", 0) - cached_text, 0)
-        audio_in = max(in_details.get("audio_tokens", 0) - cached_audio, 0)
-        image_in = max(in_details.get("image_tokens", 0) - cached_image, 0)
-        turn = TurnCost(
-            text_in=text_in,
-            audio_in=audio_in,
-            cached_in=cached,
-            image_in=image_in,
-            text_out=out_details.get("text_tokens", 0),
-            audio_out=out_details.get("audio_tokens", 0),
-        )
-        p = self.pricing
-        turn.usd = (
-            turn.text_in * p.text_in
-            + turn.text_out * p.text_out
-            + turn.audio_in * p.audio_in
-            + turn.audio_out * p.audio_out
-            + turn.cached_in * p.cached_in
-            + turn.image_in * p.image_in
-        ) / 1_000_000
+        turn = price_usage(usage, self.pricing)
         self.turns.append(turn)
         return turn
 
@@ -124,7 +156,7 @@ class CostMeter:
             total.audio_out += t.audio_out
             total.cached_in += t.cached_in
             total.image_in += t.image_in
-        return {
+        receipt = {
             "duration_s": round(time.time() - self.started_at, 1),
             "user_turns": self.user_turns,
             "model_responses": len(self.turns),
@@ -152,6 +184,10 @@ class CostMeter:
             "cap_usd": self.budget.session_cap_usd,
             "per_response_usd": [round(t.usd, 4) for t in self.turns],
         }
+        if self.ledger is not None:
+            receipt["per_command"] = self.ledger.snapshot()
+            receipt["by_category"] = self.ledger.category_totals()
+        return receipt
 
     def write_receipt_snapshot(self, data_dir: Path, session_id: str, final: bool = False,
                                trace_path: Path | None = None) -> Path:

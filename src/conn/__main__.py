@@ -6,6 +6,7 @@
   python -m conn --doctor          environment and permission checks
   python -m conn --eval            run the demo eval suite, write trace artifacts
   python -m conn --latency-report [trace.jsonl]   latency spans + budget pass/fail (default: newest trace)
+  python -m conn --cost-report [trace.jsonl | --days N]   per-command unit economics (default: newest trace)
 """
 
 from __future__ import annotations
@@ -21,6 +22,31 @@ from .events import new_id
 from .tools.base import ExecutionContext
 from .tools.harness import ToolHarness
 from .tools.registry import build_registry, export_openai
+
+
+def _cost_report(args) -> int:
+    from .cost_report import days_report, session_report
+
+    cfg = load_config(args.config)
+    if args.days is not None:
+        if args.days < 1:
+            print("--days needs a positive number", file=sys.stderr)
+            return 2
+        print(days_report(cfg.data_dir, args.days, cfg.pricing))
+        return 0
+    if str(args.cost_report) == "latest":
+        traces = sorted(cfg.data_dir.glob("traces/*/*.jsonl"), key=lambda p: p.stat().st_mtime)
+        if not traces:
+            print(f"no traces found under {cfg.data_dir / 'traces'}", file=sys.stderr)
+            return 1
+        trace_path = traces[-1]
+    else:
+        trace_path = Path(args.cost_report)
+        if not trace_path.exists():
+            print(f"no such trace: {trace_path}", file=sys.stderr)
+            return 1
+    print(session_report(trace_path, cfg.pricing))
+    return 0
 
 
 def main() -> None:
@@ -43,6 +69,8 @@ def main() -> None:
         help="run a bounded hardware action probe",
     )
     parser.add_argument("--latency-report", nargs="?", const="latest", default=None, metavar="TRACE_JSONL", help="print latency spans and budget pass/fail for a trace file (no argument: newest trace)")
+    parser.add_argument("--cost-report", nargs="?", const="latest", default=None, metavar="TRACE_JSONL", help="print per-command cost, category shares and cache hit rate for a trace file (no argument: newest trace); with --days, a per-day rollup")
+    parser.add_argument("--days", type=int, default=None, metavar="N", help="with --cost-report: roll up the last N days of traces")
     parser.add_argument("--mcp-login", metavar="NAME", help="sign in to a remote MCP server in the browser and exit")
     parser.add_argument("--mcp-logout", metavar="NAME", help="forget the stored sign-in for an MCP server and exit")
     parser.add_argument("--mcp-tools", action="store_true", help="connect to configured MCP servers, print their exposed tools and exit")
@@ -69,6 +97,9 @@ def main() -> None:
             trace_path = Path(args.latency_report)
         print(format_report(spans(trace_path), distributions(trace_path)))
         return
+
+    if args.cost_report or args.days:
+        sys.exit(_cost_report(args))
 
     cfg = load_config(args.config)
 

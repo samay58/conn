@@ -1,5 +1,6 @@
 from conn.config import BudgetCfg, PricingCfg
-from conn.cost import CostMeter
+from conn.cost import CostMeter, category_usd, price_usage
+from conn.turn_ledger import TurnLedger
 from conn.trace import TraceWriter, write_receipt
 from conn.observations import parse_model_observation
 
@@ -130,3 +131,50 @@ class TestTrace:
         path = write_receipt(tmp_path, "session_x", {"estimated_usd": 0.12})
         assert path.exists()
         assert "session_x" in path.name
+
+
+class TestPriceUsage:
+    def test_matches_the_meter(self):
+        meter = make_meter()
+        priced = price_usage(USAGE_TURN, PricingCfg())
+
+        assert priced == meter.ingest(USAGE_TURN)
+
+    def test_category_dollars_sum_to_the_turn_total(self):
+        priced = price_usage(USAGE_TURN, PricingCfg())
+        by_category = category_usd(priced, PricingCfg())
+
+        assert abs(sum(by_category.values()) - priced.usd) < 1e-12
+        assert by_category["audio_out"] == 40 * 64 / 1e6
+        assert by_category["cached_in"] == 320 * 0.40 / 1e6
+
+    def test_empty_usage_prices_as_zero(self):
+        priced = price_usage({}, PricingCfg())
+
+        assert priced.usd == 0.0
+
+
+class TestReceiptPerCommand:
+    def test_receipt_without_a_ledger_keeps_its_old_shape(self):
+        meter = make_meter()
+        meter.ingest(USAGE_TURN)
+
+        assert "per_command" not in meter.receipt()
+
+    def test_receipt_carries_per_command_list_and_category_totals(self):
+        meter = make_meter()
+        meter.ledger = TurnLedger(PricingCfg())
+        events = [
+            {"kind": "turn_context", "ts": 1.0, "turn_id": "turn_a"},
+            {"kind": "response_created", "ts": 1.1, "turn_id": "turn_a", "response_id": "r1"},
+            {"kind": "response_done", "ts": 2.0, "usage": USAGE_TURN},
+        ]
+        for e in events:
+            meter.ledger.observe(e)
+        meter.ingest(USAGE_TURN)
+        r = meter.receipt()
+
+        assert len(r["per_command"]) == 1
+        assert r["per_command"][0]["responses"] == 1
+        assert abs(r["by_category"]["total_usd"] - r["estimated_usd"]) < 1e-4
+        assert r["by_category"]["tokens"]["audio_out"] == r["tokens"]["audio_out"]

@@ -22,6 +22,7 @@ from .ax_bridge import AxBridge
 from .navigation import NavigationLease
 from .config import Config
 from .cost import CostMeter
+from .turn_ledger import TurnLedger
 from .events import (
     AckTurn, ApprovalDecision, BudgetOverride, BudgetTripped, CancelResponse,
     ClearInput, CloseMic, Command, CommitInput, CreateResponse, EndSession,
@@ -81,6 +82,8 @@ class ConnApp:
         self.artifacts = ArtifactWriter(cfg.data_dir)
         self.trace.subscribe(lambda e: self.publish({"type": "trace", "event": e}))
         self.cost = CostMeter(pricing=cfg.pricing, budget=cfg.budget)
+        self.cost.ledger = TurnLedger(cfg.pricing)
+        self.cost.ledger.attach(self.trace)
         self.approvals = ApprovalManager(on_timeout=self.dispatch_soon)
         self.console_capability = os.environ.pop("CONN_CONSOLE_CAPABILITY", None)
         self.ax_bridge = AxBridge()
@@ -176,6 +179,8 @@ class ConnApp:
             self._done_reset.cancel()
         if self.adapter.connected:
             await self.adapter.close()
+        if self.cost.ledger is not None:
+            self.cost.ledger.flush()  # closes the last turn and emits its turn_cost
         receipt = self.cost.receipt()
         receipt["final"] = True
         path = self.cost.write_receipt_snapshot(self.cfg.data_dir, self.session_id, final=True,
@@ -203,6 +208,8 @@ class ConnApp:
         self.trace = TraceWriter(self.cfg.data_dir, self.session_id)
         self.trace.subscribe(lambda e: self.publish({"type": "trace", "event": e}))
         self.cost = CostMeter(pricing=self.cfg.pricing, budget=self.cfg.budget)
+        self.cost.ledger = TurnLedger(self.cfg.pricing)
+        self.cost.ledger.attach(self.trace)
         self._warned_budget = False
         self._spoke_this_response = False
         self._response_transcript.clear()
@@ -740,7 +747,7 @@ class ConnApp:
                 await self.dispatch(ToolProposed(call=call))
             case RtResponseDone(usage=usage, had_tool_calls=had_calls):
                 self._flush_model_transcript(response_id, status="completed")
-                self._ingest_usage(usage, "response_done")
+                self._ingest_usage(usage, "response_done", response_id=response_id)
                 self.cost.write_receipt_snapshot(self.cfg.data_dir, self.session_id, final=False,
                                                  trace_path=self.trace.path)
                 await self.dispatch(ResponseDone(had_tool_calls=had_calls))

@@ -96,6 +96,27 @@ class TestIncrementalReceipt:
         assert data["final"] is False
 
 
+class TestPerCommandAccounting:
+    def test_final_receipt_and_trace_carry_per_command_cost(self, cfg, ctx):
+        async def run():
+            app, _ = build_app(cfg, ctx)
+            await app.start()
+            await app.on_text("something unmatched by any scripted scenario")
+            await wait_for_phase(app, Phase.DONE)
+            await app.stop()
+            return app
+
+        app = asyncio.run(run())
+        data = json.loads(receipt_files(app)[0].read_text())
+        rows = [e for e in app.trace.read() if e["kind"] == "turn_cost"]
+
+        assert len(data["per_command"]) == 1
+        assert data["per_command"][0]["responses"] == data["model_responses"]
+        assert abs(data["by_category"]["total_usd"] - data["estimated_usd"]) < 1e-4
+        assert len(rows) == 1
+        assert rows[0]["utterance_chars"] == len("something unmatched by any scripted scenario")
+
+
 class TestAtomicReceiptWrite:
     def test_partial_write_failure_does_not_corrupt_existing_receipt(self, tmp_path, monkeypatch):
         # write_receipt is truncate-then-write onto the real receipt path, so
