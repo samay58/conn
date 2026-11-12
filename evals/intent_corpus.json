@@ -3252,6 +3252,17 @@
         "speech_max_sentences": 1
       },
       "source": "live 2026-11-12 trial"
+    },
+    {
+      "utterance": "WhatsApp Sam that I'm on my way.",
+      "expect": {
+        "tool_any": [
+          "phoenix_send_text",
+          "phoenix_draft_reply"
+        ],
+        "speech_max_sentences": 1
+      },
+      "source": "authored"
     }
   ]
 }

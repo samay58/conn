@@ -115,8 +115,8 @@ def connector_section(tool_names) -> str:
                      " For an edit like shorter or warmer, call it again with the edit and the"
                      " current draft as intent.")
     if "phoenix_send_text" in names:
-        lines.append("Call phoenix_send_text only when he says to send, with the exact text of"
-                     " the current draft. He approves it on screen.")
+        lines.append("Call phoenix_send_text only when he says to send, with the exact text and"
+                     " channel of the current draft. He approves it on screen.")
     if any(w in names for w in _PHOENIX_WRITES):
         lines.append("Never capture, remind or strike unless he asked for exactly that.")
         lines.append("After a write, say only its safe_user_message.")

@@ -214,7 +214,7 @@
         "send_text": {
           "kind": "write",
           "alias": "phoenix_send_text",
-          "description": "Send one iMessage to a person. Only after Samay says to send a draft.",
+          "description": "Send one iMessage or WhatsApp message to a person. Only after Samay says to send a draft.",
           "preview": "Text {person}: {text}",
           "card": "send",
           "done_message": "Sent.",
@@ -227,6 +227,9 @@
               },
               "text": {
                 "type": "string"
+              },
+              "channel": {
+                "type": "string"
               }
             },
             "required": [
@@ -237,7 +240,8 @@
           "canned_result": "",
           "param_descriptions": {
             "person": "the person's name as Samay said it",
-            "text": "the exact text of the current draft"
+            "text": "the exact text of the current draft",
+            "channel": "text or whatsapp, the draft's channel; default text"
           }
         }
       }
