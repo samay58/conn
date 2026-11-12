@@ -112,16 +112,13 @@ struct InspectorView: View {
     }
 
     private var derivedFooter: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Derived: width lead \(Self.short(tokens.squashWidthLead)) s, "
-                 + "width damping \(Self.short(tokens.summonWidthSpring.dampingRatio)), "
-                 + "height damping \(Self.short(tokens.summonHeightSpring.dampingRatio))")
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .monospacedDigit()
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Text("Derived: width lead \(Self.short(tokens.squashWidthLead)) s, "
+             + "width damping \(Self.short(tokens.summonWidthSpring.dampingRatio)), "
+             + "height damping \(Self.short(tokens.summonHeightSpring.dampingRatio))")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: bindings

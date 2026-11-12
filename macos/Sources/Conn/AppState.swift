@@ -193,7 +193,14 @@ final class AppState: ObservableObject {
             userLine = msg["text"] as? String ?? ""
             modelLine = ""
         case "transcript_delta":
-            modelLine += msg["text"] as? String ?? ""
+            // A turn can hold two responses ("Opening Safari now." then
+            // "Done."); the island shows the one being spoken.
+            let text = msg["text"] as? String ?? ""
+            if msg["starts_response"] as? Bool == true {
+                modelLine = text
+            } else {
+                modelLine += text
+            }
         case "level":
             meter.push(msg["value"] as? Double ?? 0, source: msg["source"] as? String ?? "")
         case "cost":

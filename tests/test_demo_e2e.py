@@ -73,6 +73,9 @@ class TestDemoLoop:
         transcript = "".join(m["text"] for m in messages if m["type"] == "transcript_delta")
         assert "Searching the vault" in transcript
         assert "Done" in transcript
+        # Three responses, so exactly three deltas open a new line on the island.
+        starts = [m for m in messages if m["type"] == "transcript_delta" and m["starts_response"]]
+        assert len(starts) == receipt["model_responses"]
 
     def test_approval_flow_approve(self, cfg, ctx):
         async def run():

@@ -50,7 +50,7 @@ cd macos && ./make-app.sh              # release build → Conn.app (script pick
 cd macos && ./make-app.sh install      # also copies to /Applications
 cd macos && swift test                 # Swift unit tests (ConnTests); bare swift may need DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 cd macos && swift test --filter NAME   # one Swift test class/method
-./Conn.app/Contents/MacOS/Conn --preview   # renders key island states for design iteration
+./Conn.app/Contents/MacOS/Conn --preview [--state reply_long]   # every island state with tuning controls, for design iteration
 ./Conn.app/Contents/MacOS/Conn --playtest-waveform <24k mono wav> <outdir> [--phase listening|speaking|thinking|idle] [--script listening@0,thinking@2.5,...] [--legacy] [--reduce-motion]
                                            # drives the voice line from real audio at the live level rate; writes filmstrip, timeline, metrics
 ```

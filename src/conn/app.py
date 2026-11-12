@@ -778,12 +778,18 @@ class ConnApp:
                     self.audio.play(pcm)
                 await self._mark_speaking("audio")
             case RtTranscriptDelta(text=text):
-                self.publish({"type": "transcript_delta", "text": text})
+                # The first delta of each response says so, so the island
+                # replaces the last response's line instead of running on.
+                self.publish({"type": "transcript_delta", "text": text,
+                              "starts_response": not self._response_transcript})
                 self._response_transcript.append(text)
                 self._response_modality = self._response_modality or "audio"
                 await self._mark_speaking("audio")
             case RtTextDelta(text=text):
-                self.publish({"type": "transcript_delta", "text": text})
+                # The first delta of each response says so, so the island
+                # replaces the last response's line instead of running on.
+                self.publish({"type": "transcript_delta", "text": text,
+                              "starts_response": not self._response_transcript})
                 self._response_transcript.append(text)
                 self._response_modality = self._response_modality or "text"
                 await self._mark_speaking("text")

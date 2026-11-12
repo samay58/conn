@@ -1,6 +1,6 @@
 # Next session: physical v1 acceptance
 
-Updated 2026-11-12. Read `docs/STATE-OF-PLAY.md` and
+Updated 2026-11-12 (afternoon). Read `docs/STATE-OF-PLAY.md` and
 `docs/NORTH-STAR.md` first.
 
 ## WHERE WE LEFT OFF
@@ -86,14 +86,20 @@ after five idle minutes and reconnect on the next push-to-talk).
 
 `docs/STATE-OF-PLAY.md` ("November 12") says what was built. The connectors
 are signed in and on, the intent eval passed its gate (271 of 276, $2.35), and
-the gate `./verify.sh` passes. None of the following has been seen on a real
-desktop yet. Each needs Samay at the Mac with the current build installed
-(`cd macos && ./make-app.sh install`, then reopen Conn).
+the gate `./verify.sh` passes. Each check needs Samay at the Mac with the
+current build installed (`cd macos && ./make-app.sh install`, then reopen
+Conn).
 
-1. The island: the glass rim picks up the real desktop; a click just outside
-   the pill reaches the window under it; cards arrive and leave without
-   clipping; a long reply scrolls inside its card and Approve stays visible
-   (`Conn --preview` shows one as "Card: long reply to send").
+The walk started on the afternoon of November 12 and paused after two of its
+fourteen steps. Passed: the glass rim picks up the real desktop and a click
+just outside the pill reaches the window under it; the long reply scrolls
+inside its card with Approve visible (`Conn --preview --state reply_long`).
+Resume at the voice line. Its first check is new: hold the key for one second
+without speaking, and Conn must say it did not catch that and open nothing
+(the fix in "Live walk, November 12" in `docs/STATE-OF-PLAY.md`). Cards
+arriving and leaving are checked live in group 4.
+
+1. The island: done, except cards arriving and leaving live (group 4).
 2. The voice line: the noise gate and gain suit his microphone, and the line
    stays in step with Conn's voice.
 3. Native actions: "go to techmeme.com" in Safari says done; "close the first

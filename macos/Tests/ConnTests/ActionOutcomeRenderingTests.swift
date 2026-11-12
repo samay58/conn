@@ -15,6 +15,18 @@ final class ActionOutcomeRenderingTests: XCTestCase {
         XCTAssertEqual(state.capUSD, 7.5)
     }
 
+    func testASecondResponseReplacesTheFirstLine() {
+        let state = AppState()
+        state.apply(["type": "transcript_delta", "text": "Opening Safari ", "starts_response": true])
+        state.apply(["type": "transcript_delta", "text": "now.", "starts_response": false])
+        XCTAssertEqual(state.modelLine, "Opening Safari now.")
+        state.apply(["type": "transcript_delta", "text": "Done.", "starts_response": true])
+        XCTAssertEqual(state.modelLine, "Done.")
+        // An older daemon without the flag still appends.
+        state.apply(["type": "transcript_delta", "text": " Safari is open."])
+        XCTAssertEqual(state.modelLine, "Done. Safari is open.")
+    }
+
     func testDispatchOnlyNeverRendersDoneOrGreenSuccess() {
         let state = AppState()
         state.modelLine = "The tab is open"

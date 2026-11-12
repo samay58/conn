@@ -39,8 +39,8 @@ of 5 with the new tools against 3 of 5 and 2 of 5 without them.
 ## November 12: connectors live, cards, replies, a face and a voice
 
 Conn now reads Samay's day and messages through connectors and can send a
-reply. This work is built and tested but has not had its live desktop checks;
-they are listed in `docs/NEXT-SESSION.md`.
+reply. This work is built and tested; its live desktop checks are under way (see
+"Live walk, November 12" below and `docs/NEXT-SESSION.md`).
 
 - Connectors are signed in and on: the Phoenix voice server (today, calendar,
   who is waiting, a thread, capture, remind, strike, draft a reply, send a
@@ -84,6 +84,29 @@ scored 43 against a bar of 90 percent. The five misses: `Open a new Safari
 window` (opened Safari instead), `Select the following note` and `Open Linear`
 (both long-standing), `Press cancel` (a transport timeout), and `Mark the
 landlord email done` (searched mail instead of striking the task).
+
+## Live walk, November 12
+
+The live desktop walk began and paused after two of fourteen steps; the rest
+is in `docs/NEXT-SESSION.md`.
+
+- Passed live: the island's glass rim picks up the real desktop, and a click
+  just outside the pill reaches the window under it. In the preview, a long
+  reply scrolls inside its card and Approve stays visible.
+- Fixed: a 0.5 second press that held no speech (peak level 111 against the
+  150 speech floor) passed the 300 ms tap rule, came back with an empty
+  transcript, and the model opened Safari. A turn whose audio never reaches
+  speech level is still answered, but every tool except `wait_for_user` now
+  returns `nothing_heard`, so it cannot act. The two other quiet turns in past
+  traces also had empty transcripts, so no real command has been that quiet.
+- Fixed: when one turn holds two responses ("Opening Safari now." then
+  "Done."), the island ran them together with no space. It now shows the
+  response being spoken.
+- The island preview window (`Conn --preview`) was rebuilt. It used to grow
+  past the screen. It now opens at a size that fits: states grouped into
+  phases, approvals and cards on the left; the stage scaled to fit in the
+  middle; tuning sliders on the right; style and playback across the top.
+  `--state <id>` opens it on one state.
 
 ## November 10 and 11 hardening
 
